@@ -1,0 +1,65 @@
+class Token (val location: Location, val kind: TokenKind, val value: String) {
+    override fun toString(): String = value
+}
+
+enum class TokenKind(val value: String, val lineContinues: Boolean) {
+    EOF           ("<End of File>", false),
+    EOL           ("<End of Line>", true),
+    INDENT        ("<Indent>", false),
+    DEDENT        ("<Dedent>", false),
+    IDENTIFIER    ("<Identifier>", false),
+    INTLITERAL    ("<Integer Literal>", false),
+    STRINGLITERAL ("<String Literal>", false),
+    CHARLITERAL   ("<Character Literal>", false),
+    REALLITERAL   ("<Real Literal>", false),
+    PLUS          ("+", true),
+    MINUS         ("-", true),
+    STAR          ("*", true),
+    SLASH         ("/", true),
+    PERCENT       ("%", true),
+    AMPERSAND     ("&", true),
+    BAR           ("|", true),
+    CARET         ("^", true),
+    EQ            ("=", true),
+    NEQ           ("!=", true),
+    LT            ("<", true),
+    LTE           ("<=", true),
+    GT            (">", true),
+    GTE           (">=", true),
+    COLON         (":", true),
+    COMMA         (",", true),
+    OPENB         ("(", true),
+    CLOSEB        (")", false),
+    OPENSQ        ("[", true),
+    CLOSESQ       ("]", false),
+    OPENCL        ("{", true),
+    CLOSECL       ("}", false),
+    DOT           (".", false),
+    AND           ("and", true),
+    OR            ("or", true),
+    NOT           ("not", true),
+    LSL           ("lsl", true),
+    LSR           ("lsr", true),
+    ASR           ("asr", true),
+    ARROW         ("->", true),
+    VAL           ("val", false),
+    VAR           ("var", false),
+    IF            ("if", false),
+    ELSE          ("else", false),
+    END           ("end", false),
+    RETURN        ("return", false),
+    WHILE         ("while", false),
+    FOR           ("for", false),
+    IN            ("in", true),
+    BREAK         ("break", false),
+    CONTINUE      ("continue", false),
+    FUN           ("fun", false),
+    EXTERN        ("extern", false),
+    ERROR         ("<error>", false);
+
+    override fun toString(): String = value
+
+    companion object {
+        val toKind = entries.associateBy{it.value}
+    }
+}
