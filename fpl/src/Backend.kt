@@ -57,7 +57,14 @@ fun Reg.isConstant() : Int? {
     return null
 }
 
+var unreachable = false
+
 fun Instr.peephole() {
+    if (this is InstrLabel)
+        unreachable = false
+    if (unreachable)
+        return changeToNop()
+
     when(this) {
         is InstrMov -> {
             // Remove an instruction that is never read
@@ -90,6 +97,8 @@ fun Instr.peephole() {
             // Remove a jump instruction that jumps to the next instruction
             if (label.index == index + 1)
                 changeToNop()
+            else
+                unreachable = true  // Mark code after a jump as unreachable until a label is encountered
         }
 
         is InstrLabel -> {
@@ -98,13 +107,40 @@ fun Instr.peephole() {
                 changeToNop()
         }
 
+        is InstrBranch -> {
+            val nextInstr = currentFunction.prog[index + 1]
+            if (label.index == index + 1) {
+                // Remove a branch instruction that jumps to the next instruction
+                changeToNop()
+            } else if (label.index == index + 2 && nextInstr is InstrJump) {
+                // Replace a branch over a jump
+                replace(InstrBranch(op.invertBranch(), src1, src2, nextInstr.label))
+                nextInstr.changeToNop()
+            } else if (src1.isConstant()==0) {
+                replace(InstrBranch(op, zeroReg, src2, label))
+            } else if (src2.isConstant()==0)
+                replace(InstrBranch(op, src1, zeroReg, label))
+        }
+
         else -> {}
     }
 }
 
+private fun BinOp.invertBranch() : BinOp = when(this) {
+    BinOp.EQ_I -> BinOp.NE_I
+    BinOp.NE_I -> BinOp.EQ_I
+    BinOp.LT_I -> BinOp.GE_I
+    BinOp.GT_I -> BinOp.LE_I
+    BinOp.LE_I -> BinOp.GT_I
+    BinOp.GE_I -> BinOp.LT_I
+    else -> error("Cannot invert branch condition $this")
+}
+
+
 
 // Run the peephole optimization pass - return true if any changes were made
 private fun runPeephole() {
+    unreachable = false
     do {
         changesMade = false
         currentFunction.rebuildIndex()

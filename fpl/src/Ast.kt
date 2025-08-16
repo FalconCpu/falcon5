@@ -7,6 +7,7 @@ sealed class Ast (val location: Location)
 // Expression nodes
 sealed class AstExpr(location: Location) : Ast(location)
 class AstIntLiteral(location: Location, val value: Int) : AstExpr(location)
+class AstCharLiteral(location: Location, val value: Int) : AstExpr(location)
 class AstStringLiteral(location: Location, val value: String) : AstExpr(location)
 class AstIdentifier(location: Location, val name: String) : AstExpr(location)
 class AstBinaryExpr(location: Location, val op: TokenKind, val lhs: AstExpr, val rhs: AstExpr) : AstExpr(location)
@@ -18,6 +19,7 @@ sealed class AstStmt(location: Location) : Ast(location)
 class AstVarDeclStmt(location: Location, val name: String, val astType:AstType?, val initializer: AstExpr?, val mutable:Boolean) : AstStmt(location)
 class AstEmptyStmt(location: Location) : AstStmt(location)
 class AstExpressionStmt(location: Location, val expr: AstExpr) : AstStmt(location)
+class AstAssignStmt(location: Location, val op:TokenKind, val lhs: AstExpr, val rhs: AstExpr) : AstStmt(location)
 
 // Statement Block nodes
 sealed class AstBlock(location: Location, val body:List<AstStmt>) : AstStmt(location) {
@@ -34,6 +36,11 @@ class AstFunctionDefStmt(
 ) : AstBlock(location, body) {
     lateinit var function : Function
 }
+
+class AstWhileStmt(location: Location, val condition: AstExpr, body: List<AstStmt>) : AstBlock(location, body)
+class AstRepeatStmt(location: Location, val condition: AstExpr, body: List<AstStmt>) : AstBlock(location, body)
+class AstIfClause(location:Location, val condition:AstExpr?, body: List<AstStmt>) : AstBlock(location, body)
+class AstIfStmt(location:Location, body:List<AstIfClause>) : AstBlock(location, body)
 
 class AstFile(location: Location, body: List<AstStmt>) : AstBlock(location, body)
 class AstTop(location: Location, body: List<AstStmt>) : AstBlock(location, body)

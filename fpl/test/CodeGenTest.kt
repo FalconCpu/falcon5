@@ -73,5 +73,45 @@ class CodeGenTest {
         runTest(prog, expected)
     }
 
+    @Test
+    fun whileLoop() {
+        val prog = """
+            extern fun print(i:Int)
+
+            fun main()
+                var i = 0
+                while (i < 10)
+                    print(i)
+                    i = i + 1
+        """.trimIndent()
+
+        val expected = """
+            Function topLevel:
+            Function main():
+            START
+            MOV t0, 0
+            MOV i, t0
+            JMP L3
+            L1:
+            MOV R1, i
+            CALL print(Int)
+            MOV t1, 1
+            ADD_I t2, i, t1
+            MOV i, t2
+            L3:
+            MOV t3, 10
+            BLT i, t3, L1
+            JMP L2
+            L2:
+            L0:
+            END
+
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+
+
 
 }

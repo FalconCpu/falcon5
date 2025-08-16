@@ -44,6 +44,16 @@ fun BinOp.isCommutative() : Boolean = when(this) {
     else -> false
 }
 
+fun BinOp.isCompare() : Boolean = when(this) {
+    BinOp.LT_I,
+    BinOp.GT_I,
+    BinOp.EQ_I,
+    BinOp.NE_I,
+    BinOp.LE_I,
+    BinOp.GE_I -> true
+    else -> false
+}
+
 fun BinOp.branchName() : String = when(this) {
     BinOp.EQ_I -> "BEQ"
     BinOp.NE_I -> "BNE"

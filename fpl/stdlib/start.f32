@@ -35,3 +35,48 @@ ret
 .cond:
     bne $1, $2, .loop           # Repeat until string pointer is at end
     ret
+
+
+# ==========================================================
+#                     printInt
+# ==========================================================
+# $1 = value to print
+
+/print(Int):
+    sub $31, 16                # Allocate 16 bytes of stack space
+    ld $7, HWREGS_BASE         # Load base address of hardware registers
+    bge $1, 0, .positive       # If value is positive, skip
+    ld  $2, '-'                # Print the '-' character
+    stw $2, $7[HWREGS_UART_TX]
+    sub $1, 0, $1              # Negate the value
+
+.positive:
+    ld $6, $31                 # $6 = pointer to work space
+
+.loop:
+    modu $2, $1, 10            # $2 = $1 % 10
+    divu $1, $1, 10            # $1 = $1 / 10
+    add $2, '0'                # Convert digit to ASCII
+    stb $2, $6[0]              # Store digit in work space
+    add $6, 1                  # Increment work space pointer
+    bne $1, 0, .loop           # Repeat until $1 is 0
+
+.print:
+    sub $6, 1                   # Decrement work space pointer
+    ldb $2, $6[0]               # Load digit from work space
+    stw $2, $7[HWREGS_UART_TX] # Print the digit
+    bne $6, $31, .print         # Repeat until work space pointer is at base
+
+.end:
+    add $31, 16
+    ret
+
+# ==========================================================
+#                     printChar
+# ==========================================================
+# $1 = character to print
+
+/print(Char):
+    ld $7, HWREGS_BASE         # Load base address of hardware registers
+    stw $1, $7[HWREGS_UART_TX] # Print the character
+    ret

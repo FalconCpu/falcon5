@@ -11,11 +11,34 @@ private fun AstExpr.typeCheckRvalue(scope: AstBlock) : TctExpr {
     }
 }
 
+private fun AstExpr.typeCheckLvalue(scope: AstBlock) : TctExpr {
+    val ret = typeCheckExpr(scope)
+    when(ret) {
+        is TctVariable -> {
+            if(!ret.sym.mutable)
+                Log.error(location, "'${ret.sym}' is not mutable")
+        }
+
+        else -> return TctErrorExpr(location,"expression  is not an Lvalue")
+    }
+    return ret
+}
+
+private fun AstExpr.typeCheckBoolExpr(scope: AstBlock) : TctExpr {
+    val ret = typeCheckExpr(scope)
+    ret.checkType(TypeBool)
+    return ret
+}
+
 
 private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
     return when(this) {
         is AstIntLiteral -> {
             TctConstant(location, IntValue(value, TypeInt))
+        }
+
+        is AstCharLiteral -> {
+            TctConstant(location, IntValue(value, TypeChar))
         }
 
         is AstStringLiteral -> {
@@ -127,6 +150,36 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt = when(this) {
     is AstFile -> TctFile(location, body.map{ it.typeCheckStmt(this) } )
 
     is AstTop -> TctTop(location, topLevelFunction, body.map{ it.typeCheckStmt(this) } )
+
+    is AstWhileStmt -> {
+        val tctCondition = condition.typeCheckBoolExpr(scope)
+        val tctBody = body.map{ it.typeCheckStmt(this) }
+        TctWhileStmt(location, tctCondition, tctBody)
+    }
+
+    is AstRepeatStmt -> {
+        val tctCondition = condition.typeCheckBoolExpr(scope)
+        val tctBody = body.map{ it.typeCheckStmt(this) }
+        TctRepeatStmt(location, tctCondition, tctBody)
+    }
+
+    is AstAssignStmt -> {
+        val rhs = rhs.typeCheckRvalue(scope)
+        val lhs = lhs.typeCheckLvalue(scope)
+        rhs.checkType(lhs.type)
+        TctAssignStmt(location, op, lhs, rhs)
+    }
+
+    is AstIfClause -> {
+        val tctCondition = condition?.typeCheckBoolExpr(scope)
+        val tctBody = body.map { it.typeCheckStmt(this) }
+        TctIfClause(location, tctCondition, tctBody)
+    }
+
+    is AstIfStmt -> {
+        val clauses = body.map { it.typeCheckStmt(this) as TctIfClause }
+        TctIfStmt(location,clauses)
+    }
 }
 
 

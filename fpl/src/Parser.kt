@@ -57,6 +57,12 @@ class Parser(val lexer: Lexer) {
         return AstStringLiteral(tok.location, tok.value)
     }
 
+    private fun parseCharLit() : AstCharLiteral {
+        val tok = expect(CHARLITERAL)
+        return AstCharLiteral(tok.location, tok.value[0].code)
+
+    }
+
     private fun parseIdentifier() : AstIdentifier {
         val tok = expect(IDENTIFIER)
         return AstIdentifier(tok.location, tok.value)
@@ -80,6 +86,7 @@ class Parser(val lexer: Lexer) {
             INTLITERAL -> parseIntLit()
             IDENTIFIER -> parseIdentifier()
             STRINGLITERAL -> parseStringLit()
+            CHARLITERAL -> parseCharLit()
             RETURN -> parseReturn()
             OPENB -> parseParentheses()
             else -> throw ParseError(currentToken.location, "Got '$currentToken' when expecting primary expression")
@@ -244,11 +251,64 @@ class Parser(val lexer: Lexer) {
         return AstFunctionDefStmt(tok.location, name.value, params, retType, body, isExtern)
     }
 
-    private fun parseExpressionStmt() : AstExpressionStmt {
+    private fun parseExpressionStmt() : AstStmt {
         val loc = currentToken.location
-        val expr = parseExpr()
+        val expr = parsePrefixExpr()
+        if (currentToken.kind==EQ) {
+            val op = nextToken()
+            val value = parseExpr()
+            expectEol()
+            return AstAssignStmt(loc, op.kind, expr, value)
+        } else {
+            expectEol()
+            return AstExpressionStmt(loc, expr)
+        }
+    }
+
+    private fun parseWhileStmt() : AstWhileStmt {
+        val tok = expect(WHILE)
+        val condition = parseExpr()
         expectEol()
-        return AstExpressionStmt(loc, expr)
+        val body = parseIndentedBlock()
+        optionalEnd(WHILE)
+        return AstWhileStmt(tok.location, condition, body)
+    }
+
+    private fun parseRepeatStmt() : AstRepeatStmt {
+        val tok = expect(REPEAT)
+        expectEol()
+        val body = parseIndentedBlock()
+        expect(UNTIL)
+        val condition = parseExpr()
+        expectEol()
+        return AstRepeatStmt(tok.location, condition, body)
+    }
+
+    private fun parseIfClause() : AstIfClause {
+        val tok = nextToken()  // Consume the IF or ELSEIF
+        val cond = parseExpr()
+        expectEol()
+        val body = parseIndentedBlock()
+        return AstIfClause(tok.location, cond, body)
+    }
+
+    private fun parseElseClause() : AstIfClause {
+        val tok = expect(ELSE)
+        expectEol()
+        val body = parseIndentedBlock()
+        return AstIfClause(tok.location, null, body)
+    }
+
+    private fun parseIfStmt() : AstIfStmt {
+        val loc = currentToken.location
+        val clauses = mutableListOf<AstIfClause>()
+        clauses.add(parseIfClause())
+        while (currentToken.kind == ELSIF)
+            clauses.add(parseIfClause())
+        if (currentToken.kind == ELSE)
+            clauses.add(parseElseClause())
+        optionalEnd(IF)
+        return AstIfStmt(loc, clauses)
     }
 
     private fun parseStmt() : AstStmt {
@@ -257,6 +317,12 @@ class Parser(val lexer: Lexer) {
             when (currentToken.kind) {
                 EXTERN, FUN -> parseFunctionDef()
                 VAL, VAR -> parseVarDecl()
+                WHILE -> parseWhileStmt()
+                REPEAT -> parseRepeatStmt()
+                IF -> parseIfStmt()
+                ELSIF -> throw ParseError(currentToken.location, "ELSIF without IF")
+                ELSE -> throw ParseError(currentToken.location, "ELSE without IF")
+                END -> throw ParseError(currentToken.location, "END without IF, WHILE, REPEAT or FUN")
                 IDENTIFIER, OPENB, RETURN, BREAK, CONTINUE -> parseExpressionStmt()
                 else -> throw ParseError(currentToken.location, "Got '$currentToken' when expecting statement")
             }

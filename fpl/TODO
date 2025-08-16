@@ -1,0 +1,29 @@
+Done:
+while loops
+repeat…until loops
+if / elseif / else statements
+
+
+Short Term:
+Arrays
+And/Or/Not operators
+break and continue statements
+String Operations
+Classes
+Constructs and destructors
+for loop (numeric range)
+for loop (iterator style)
+Function pointers
+varargs functions
+when statement
+Nullability
+Generics
+Methods and this pointer
+Inheritance
+Enums
+
+Backend:
+Constant folding
+Common subexpression elimination
+Dead Store elimination
+Loop invariant code motion

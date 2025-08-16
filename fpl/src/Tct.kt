@@ -28,12 +28,17 @@ sealed class TctStmt(location: Location) : Tct(location)
 class TctVarDeclStmt(location: Location, val sym:VarSymbol, val initializer: TctExpr?) : TctStmt(location)
 class TctEmptyStmt(location: Location) : TctStmt(location)
 class TctExpressionStmt(location: Location, val expr: TctExpr) : TctStmt(location)
+class TctAssignStmt(location: Location, val op:TokenKind, val lhs: TctExpr, val rhs: TctExpr) : TctStmt(location)
 
 // Statement Block nodes
 sealed class TctBlock(location: Location, val body:List<TctStmt>) : TctStmt(location)
 class TctFunctionDefStmt(location: Location, val name: String, val function:Function, body: List<TctStmt>) : TctBlock(location, body)
 class TctFile(location: Location, body: List<TctStmt>) : TctBlock(location, body)
 class TctTop(location: Location, val function:Function, body: List<TctStmt>) : TctBlock(location, body)
+class TctWhileStmt(location: Location, val condition: TctExpr, body: List<TctStmt>) : TctBlock(location, body)
+class TctIfClause(location:Location, val condition:TctExpr?, body: List<TctStmt>) : TctBlock(location, body)
+class TctIfStmt(location:Location, body:List<TctIfClause>) : TctBlock(location, body)
+class TctRepeatStmt(location: Location, val condition: TctExpr, body: List<TctStmt>) : TctBlock(location, body)
 
 // Type nodes
 

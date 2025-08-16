@@ -45,6 +45,8 @@ enum class TokenKind(val value: String, val lineContinues: Boolean) {
     VAL           ("val", false),
     VAR           ("var", false),
     IF            ("if", false),
+    ELSIF         ("elsif", false),
+    THEN          ("then", false),
     ELSE          ("else", false),
     END           ("end", false),
     RETURN        ("return", false),
@@ -54,6 +56,8 @@ enum class TokenKind(val value: String, val lineContinues: Boolean) {
     BREAK         ("break", false),
     CONTINUE      ("continue", false),
     FUN           ("fun", false),
+    REPEAT        ("repeat", false),
+    UNTIL         ("until", false),
     EXTERN        ("extern", false),
     ERROR         ("<error>", false);
 
