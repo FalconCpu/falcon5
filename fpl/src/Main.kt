@@ -1,4 +1,6 @@
-val debug = true
+import java.io.FileWriter
+
+val debug = false
 
 //TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or
 // click the <icon src="AllIcons.Actions.Execute"/> icon in the gutter.
@@ -16,7 +18,33 @@ fun main() {
 }
 
 
-enum class StopAt{PARSE, TYPE_CHECK, CODE_GEN, BACKEND}
+enum class StopAt{PARSE, TYPE_CHECK, CODE_GEN, BACKEND, ASSEMBLY, EXECUTE}
+
+var assemblyFiles = listOf("stdlib/start.f32")
+private var asmFileName = "asm.f32"
+private var executableFileName = "asm.hex"
+
+
+private fun runAssembler(filenames:List<String>, format:String) {
+    val process = ProcessBuilder("f32asm.exe", format,"-o",executableFileName,  *filenames.toTypedArray())
+        .redirectError(ProcessBuilder.Redirect.INHERIT)
+        .start()
+
+    val exitCode = process.waitFor()
+    if (exitCode != 0)
+        Log.error(process.inputStream.bufferedReader().readText())
+}
+
+private fun runProgram() : String {
+    val process = ProcessBuilder("f32sim", "-t", "-a" , "asm.hex")
+        .redirectError(ProcessBuilder.Redirect.INHERIT)
+        .start()
+    val exitCode = process.waitFor()
+    if (exitCode != 0)
+        Log.error("Execution failed with exit code $exitCode")
+    return process.inputStream.bufferedReader().readText().replace("\r\n", "\n")
+}
+
 
 fun compile(lexers:List<Lexer>, stopAt: StopAt) : String {
     Log.clear()
@@ -42,5 +70,18 @@ fun compile(lexers:List<Lexer>, stopAt: StopAt) : String {
     if (Log.hasErrors()) return Log.getMessages()
     if (stopAt == StopAt.BACKEND) return dumpAllFunctions()
 
-    TODO("Implement compilation logic here")
+    // Generate assembly
+    val asm = genAssembly()
+    if (Log.hasErrors()) return Log.getMessages()
+    if (stopAt == StopAt.ASSEMBLY) return asm
+
+    // Save the assembly code to a file
+    val asmFile = FileWriter(asmFileName)
+    asmFile.write(asm)
+    asmFile.close()
+
+    runAssembler(assemblyFiles + listOf(asmFileName), "-hex")
+    if (Log.hasErrors()) return Log.getMessages()
+    return runProgram()
+
 }

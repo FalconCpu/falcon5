@@ -32,6 +32,18 @@ enum class BinOp {
     OR_B
 }
 
+fun BinOp.isCommutative() : Boolean = when(this) {
+    BinOp.ADD_I,
+    BinOp.MUL_I,
+    BinOp.AND_I,
+    BinOp.OR_I,
+    BinOp.XOR_I,
+    BinOp.EQ_I,
+    BinOp.NE_I -> true
+
+    else -> false
+}
+
 fun BinOp.branchName() : String = when(this) {
     BinOp.EQ_I -> "BEQ"
     BinOp.NE_I -> "BNE"

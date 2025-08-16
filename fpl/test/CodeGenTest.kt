@@ -59,6 +59,15 @@ class CodeGenTest {
         """.trimIndent()
 
         val expected = """
+            Function topLevel:
+            Function main():
+            START
+            LEA t0, STRING0
+            MOV R1, t0
+            CALL print(String)
+            L0:
+            END
+
         """.trimIndent()
 
         runTest(prog, expected)

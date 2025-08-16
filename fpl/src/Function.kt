@@ -13,6 +13,7 @@ class Function (
     val symToReg = mutableMapOf<VarSymbol, Reg>()
     val regAllocComments = mutableListOf<String>()
     var maxRegister = 0
+    var stackVarSize = 0
 
     val endLabel = newLabel()
 
@@ -38,7 +39,11 @@ class Function (
     }
 
     fun getReg(sym: VarSymbol): Reg {
-        return symToReg.getOrPut(sym) {UserReg(sym.name)}
+        return symToReg.getOrPut(sym) {
+            val ret = UserReg(sym.name)
+            regs += ret
+            ret
+        }
     }
 
     fun addInstr(instr: Instr) {

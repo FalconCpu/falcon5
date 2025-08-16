@@ -2,10 +2,10 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import java.io.StringReader
 
-class BackendTest {
+class ExecuteTest {
     fun runTest(prog:String, expected:String) {
         val lexers = listOf(Lexer(StringReader(prog),"input.fpl"))
-        val output = compile(lexers, StopAt.BACKEND)
+        val output = compile(lexers, StopAt.EXECUTE)
         assertEquals(expected, output)
     }
 
@@ -19,17 +19,9 @@ class BackendTest {
         """.trimIndent()
 
         val expected = """
-            Function topLevel:
-            Function main():
-            START
-            LEA R1, STRING0
-            CALL print(String)
-            END
-
+            Hello, World!
         """.trimIndent()
 
         runTest(prog, expected)
     }
-
-
 }

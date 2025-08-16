@@ -11,7 +11,7 @@ class LiveMap(private val func: Function) {
         for(instr in func.prog) {
             val writes = instr.getDestReg()
             if (writes!=null)
-                kill[instr.index][writes.index]=true
+                kill[instr.index][writes.index] = true
             for(reg in instr.getSrcReg())
                 live[instr.index][reg.index]=true
         }

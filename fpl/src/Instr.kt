@@ -3,11 +3,14 @@
 // The reg class is used to represent values in the IR code
 sealed class Reg(val name: String) {
     var index = -1
+    var useCount = 0
     override fun toString(): String = name
 }
 class UserReg(name: String) : Reg(name)
 class CpuReg(name: String) : Reg(name)
-class TempReg(name: String) : Reg(name)
+class TempReg(name: String) : Reg(name) {
+    var def : Instr? = null
+}
 
 val cpuRegs = (0..31).map {
     CpuReg( when(it) {
@@ -21,6 +24,7 @@ val zeroReg = cpuRegs[0]
 
 class Label(val name: String) {
     var index = -1
+    var useCount = 0
     override fun toString(): String = name
 }
 

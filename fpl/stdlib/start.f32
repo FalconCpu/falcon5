@@ -1,0 +1,37 @@
+# Constants
+HWREGS_BASE = 0xE0000000
+HWREGS_UART_TX = 0x10
+
+
+# #######################################################################
+#                          Entry point
+# #######################################################################
+start:
+ld SP, 0x4000000
+jsr /topLevel
+jsr /main()
+
+# Do a jump to address 0 (not a valid address) to stop the simulator
+ld R30, 0
+ret
+
+
+
+# #######################################################################
+#                          Print Function
+# #######################################################################
+# $1 = string to print   (length prefix format)
+
+/print(String):
+    ld $7, HWREGS_BASE         # Load base address of hardware registers
+    ldw $2, $1[-4]             # Load length of string
+    add $2, $1                 # Pointer to just past the end of string
+    jmp .cond
+
+.loop:
+    ldb $3, $1[0]               # Load character from string
+    stw $3, $7[HWREGS_UART_TX]  # Print the character
+    add $1, 1                   # Increment string pointer
+.cond:
+    bne $1, $2, .loop           # Repeat until string pointer is at end
+    ret
