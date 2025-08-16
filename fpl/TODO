@@ -2,17 +2,19 @@ Done:
 while loops
 repeat…until loops
 if / elseif / else statements
+Arrays
+local Arrays
+for loop (numeric range)
+for loop (iterator style)
 
 
 Short Term:
-Arrays
+const arrays
 And/Or/Not operators
 break and continue statements
 String Operations
 Classes
 Constructs and destructors
-for loop (numeric range)
-for loop (iterator style)
 Function pointers
 varargs functions
 when statement
@@ -21,6 +23,12 @@ Generics
 Methods and this pointer
 Inheritance
 Enums
+Then (short form if)
+if expressions
+?. ?:
+in range test
+path dependant typing
+
 
 Backend:
 Constant folding

@@ -224,6 +224,95 @@ class TypeCheckTest {
         runTest(prog, expected)
     }
 
+    @Test
+    fun arrayInitializerLambda() {
+        val prog = """
+            extern fun print(i:Int)
+                
+            fun main()
+                val arr = new Array<Int>(5){"hi"}
+        """.trimIndent()
 
+        val expected = """
+            input.fpl:4.32-4.32:  Type mismatch got 'String' when expecting 'Int'
+        """.trimIndent()
 
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun forLoopErrors1() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+            
+            fun main()
+                for i in 'a'..4
+                    print(i)
+                print('\n')
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:5.19-5.19:  Type mismatch got 'Int' when expecting 'Char'
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun forLoopErrors2() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+            
+            fun main()
+                for i in "a".."z"
+                    print(i)
+                print('\n')
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:5.22-5.22:  Range start must be of type Int or Char, got 'String'
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun forLoopErrors3() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+            
+            fun main()
+                for i in 3
+                    print(i)
+                print('\n')
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:5.9-5.9:   Cannot iterate over type 'Int'
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun forLoopErrors4() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+            
+            fun main()
+                for i : Int in 'a'..'z'
+                    print(i)
+                print('\n')
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:5.20-5.22:  Type mismatch got 'Char' when expecting 'Int'
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
 }

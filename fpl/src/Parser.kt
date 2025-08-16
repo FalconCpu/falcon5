@@ -205,11 +205,22 @@ class Parser(val lexer: Lexer) {
         return ret
     }
 
+    private fun parseRangeExpr() : AstExpr {
+        val start = parseAdditiveExpr()
+        if (currentToken.kind == DOTDOT) {
+            nextToken() // Consume DOTDOT
+            val op = if (currentToken.kind in listOf(LT, GT, LTE, GTE)) nextToken().kind else LTE
+            val end = parseAdditiveExpr()
+            return AstRangeExpr(currentToken.location, start, end, op)
+        } else
+            return start
+    }
+
     private fun parseRelationalExpr() : AstExpr {
-        var ret = parseAdditiveExpr()
+        var ret = parseRangeExpr()
         while (currentToken.kind in listOf(LT, GT, LTE, GTE, EQ, NEQ)) {
             val tok = nextToken()
-            val right = parseAdditiveExpr()
+            val right = parseRangeExpr()
             ret = AstBinaryExpr(tok.location, tok.kind, ret, right)
         }
         return ret
@@ -359,6 +370,18 @@ class Parser(val lexer: Lexer) {
         return AstWhileStmt(tok.location, condition, body)
     }
 
+    private fun parseForStmt() : AstForStmt {
+        expect(FOR)
+        val id = expect(IDENTIFIER)
+        val type = if (canTake(COLON)) parseType() else null
+        expect(IN)
+        val range = parseExpr()
+        expectEol()
+        val body = parseIndentedBlock()
+        optionalEnd(FOR)
+        return AstForStmt(id.location, id.value, type, range, body)
+    }
+
     private fun parseRepeatStmt() : AstRepeatStmt {
         val tok = expect(REPEAT)
         expectEol()
@@ -405,6 +428,7 @@ class Parser(val lexer: Lexer) {
                 WHILE -> parseWhileStmt()
                 REPEAT -> parseRepeatStmt()
                 IF -> parseIfStmt()
+                FOR -> parseForStmt()
                 ELSIF -> throw ParseError(currentToken.location, "ELSIF without IF")
                 ELSE -> throw ParseError(currentToken.location, "ELSE without IF")
                 END -> throw ParseError(currentToken.location, "END without IF, WHILE, REPEAT or FUN")

@@ -52,6 +52,15 @@ class Function (
         }
     }
 
+    fun stackAlloc(size: Int, offset:Int): Reg {
+        // Allocate space on the stack for a variable.
+        // Return a pointer 'offset' bytes into the allocated space
+        val sizeRounded = (size+3) and -4
+        val addr = stackVarSize
+        stackVarSize += sizeRounded
+        return addAlu(BinOp.ADD_I, cpuRegs[31], addr+offset)
+    }
+
     fun addInstr(instr: Instr) {
         prog.add(instr)
     }

@@ -19,6 +19,7 @@ class AstNewExpr(location: Location, val elementType: AstType, val args:List<Ast
 class AstArrayLiteralExpr(location: Location, val elementType: AstType?, val args:List<AstExpr>, val arena:Arena) : AstExpr(location)
 class AstNegateExpr(location: Location, val expr: AstExpr) : AstExpr(location)
 class AstNotExpr(location: Location, val expr: AstExpr) : AstExpr(location)
+class AstRangeExpr(location: Location, val start: AstExpr, val end: AstExpr, val op:TokenKind) : AstExpr(location)
 
 // Statement nodes
 sealed class AstStmt(location: Location) : Ast(location)
@@ -48,6 +49,7 @@ class AstRepeatStmt(location: Location, val condition: AstExpr, body: List<AstSt
 class AstIfClause(location:Location, val condition:AstExpr?, body: List<AstStmt>) : AstBlock(location, body)
 class AstIfStmt(location:Location, body:List<AstIfClause>) : AstBlock(location, body)
 class AstLambdaExpr(location: Location, body: List<AstStmt>) : AstBlock(location, body)
+class AstForStmt(location: Location, val indexName: String, val indexType: AstType?, val range: AstExpr, body: List<AstStmt>) : AstBlock(location, body)
 
 class AstFile(location: Location, body: List<AstStmt>) : AstBlock(location, body)
 class AstTop(location: Location, body: List<AstStmt>) : AstBlock(location, body)

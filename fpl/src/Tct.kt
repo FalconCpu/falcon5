@@ -22,8 +22,9 @@ class TctNewArrayLiteralExpr(location: Location,val elements: List<TctExpr>,val 
 class TctNegateExpr(location: Location, val expr: TctExpr) : TctExpr(location, expr.type)
 class TctNotExpr(location: Location, val expr: TctExpr) : TctExpr(location, TypeBool)
 class TctLambdaExpr(location: Location, val expr: TctExpr, val itSym:VarSymbol, type:Type) : TctExpr(location, type)
+class TctRangeExpr(location: Location, val start: TctExpr, val end: TctExpr, val op: BinOp, type:Type) : TctExpr(location, type)
 
-class TctErrorExpr(location: Location, val message: String = "") : TctExpr(location, TypeNothing) {
+class TctErrorExpr(location: Location, val message: String = "") : TctExpr(location, TypeError) {
     init {
         if (message != "")
             Log.error(location, message)
@@ -46,6 +47,8 @@ class TctWhileStmt(location: Location, val condition: TctExpr, body: List<TctStm
 class TctIfClause(location:Location, val condition:TctExpr?, body: List<TctStmt>) : TctBlock(location, body)
 class TctIfStmt(location:Location, body:List<TctIfClause>) : TctBlock(location, body)
 class TctRepeatStmt(location: Location, val condition: TctExpr, body: List<TctStmt>) : TctBlock(location, body)
+class TctForRangeStmt(location: Location, val index:VarSymbol, val range:TctRangeExpr, body: List<TctStmt>) : TctBlock(location, body)
+class TctForArrayStmt(location: Location, val index:VarSymbol, val array:TctExpr, body: List<TctStmt>) : TctBlock(location, body)
 
 fun Tct.dump(sb:StringBuilder, indent: Int) {
 

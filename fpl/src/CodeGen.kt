@@ -68,7 +68,7 @@ fun TctExpr.codeGenRvalue() : Reg {
             val elementType = (type as TypeArray).elementType
             val sizeExpr = TctConstant(location, IntValue(elements.size, TypeInt))
             val ret = allocateArray(sizeExpr, elementType, arena, false, null)
-            val elementSize = type.getSize()
+            val elementSize = elementType.getSize()
             for(index in elements.indices)
                 currentFunc.addStore(elementSize, elements[index].codeGenRvalue(), ret, index*elementSize)
             ret
@@ -77,6 +77,7 @@ fun TctExpr.codeGenRvalue() : Reg {
         is TctNegateExpr -> TODO()
         is TctNotExpr -> TODO()
         is TctLambdaExpr -> TODO()
+        is TctRangeExpr -> TODO()
     }
 }
 
@@ -91,7 +92,15 @@ private fun allocateArray(sizeExpr:TctExpr, elementType:Type, arena:Arena, initi
             currentFunc.addCall(Stdlib.mallocArray)
             currentFunc.addCopy(resultReg)
         }
-        Arena.STACK -> TODO()
+        Arena.STACK -> {
+            require(sizeExpr is TctConstant && sizeExpr.value is IntValue) {
+                "Stack allocation requires a constant size"
+            }
+            val sizeInt = sizeExpr.value.value
+            val ret = currentFunc.stackAlloc(sizeInt*elementSize+4, 4) // +4 for the length field
+            currentFunc.addStore(sizeReg, ret, lengthSymbol)
+            ret
+        }
         Arena.CONST -> TODO()
     }
 
@@ -300,6 +309,54 @@ fun TctStmt.codeGenStmt() {
                 currentFunc.addJump(endLabel)
             }
             currentFunc.addLabel(endLabel)
+        }
+
+        is TctForRangeStmt -> {
+            val labelStart = currentFunc.newLabel()
+            val labelEnd = currentFunc.newLabel()
+            val labelCond = currentFunc.newLabel()
+            val endReg = range.end.codeGenRvalue()
+            val symReg = currentFunc.getReg(index)
+            val startReg = range.start.codeGenRvalue()
+            currentFunc.addMov(symReg, startReg)
+            currentFunc.addJump(labelCond)
+            currentFunc.addLabel(labelStart)
+            for (stmt in body)
+                stmt.codeGenStmt()
+            val inc = when (range.op) {
+                BinOp.LT_I, BinOp.LE_I  -> 1
+                else -> -1
+            }
+            val nextReg = currentFunc.addAlu(BinOp.ADD_I, symReg, inc)
+            currentFunc.addMov(symReg, nextReg)
+            currentFunc.addLabel(labelCond)
+            currentFunc.addBranch(range.op, symReg, endReg, labelStart)
+            currentFunc.addLabel(labelEnd)
+        }
+
+        is TctForArrayStmt -> {
+            val labelStart = currentFunc.newLabel()
+            val labelEnd = currentFunc.newLabel()
+            val labelCond = currentFunc.newLabel()
+            val arrayStart = array.codeGenRvalue()
+            val arraySize = currentFunc.addLoad(arrayStart,lengthSymbol)
+            val elementSize = (array.type as TypeArray).elementType.getSize()
+            val sizeInBytes = currentFunc.addAlu(BinOp.MUL_I, arraySize, elementSize)
+            val endReg = currentFunc.addAlu(BinOp.ADD_I, arrayStart, sizeInBytes)
+            val ptrReg = currentFunc.newUserTemp()
+            currentFunc.addMov(ptrReg, arrayStart)
+            val symReg = currentFunc.getReg(index)
+            currentFunc.addJump(labelCond)
+            currentFunc.addLabel(labelStart)
+            val v = currentFunc.addLoad(elementSize, ptrReg, 0)
+            currentFunc.addMov(symReg, v)
+            for (stmt in body)
+                stmt.codeGenStmt()
+            val nextPtr = currentFunc.addAlu(BinOp.ADD_I, ptrReg, elementSize)
+            currentFunc.addMov(ptrReg, nextPtr)
+            currentFunc.addLabel(labelCond)
+            currentFunc.addBranch(BinOp.LT_I, ptrReg, endReg, labelStart)
+            currentFunc.addLabel(labelEnd)
         }
     }
 }

@@ -92,6 +92,8 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
         is AstCallExpr -> {
             val tctFunc = func.typeCheckRvalue(scope)
             val tctArgs = args.map{ it.typeCheckRvalue(scope) }
+            if (tctArgs.any { it.type is TypeError })
+                return TctErrorExpr(location, "")
             when(tctFunc) {
                 is TctErrorExpr -> return tctFunc
                 is TctFunctionName -> {
@@ -142,6 +144,8 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
                         return TctErrorExpr(location, "Array constructor requires exactly one argument")
                     val size = tcArgs[0]
                     size.checkType(TypeInt)
+                    if (arena==Arena.STACK && size !is TctConstant)
+                        return TctErrorExpr(location, "Local arrays must have a constant size")
                     if (size is TctConstant && size.value is IntValue && size.value.value < 0)
                         return TctErrorExpr(location, "Cannot create array of negative size")
                     tcLambda?.checkType(type.elementType)
@@ -179,6 +183,24 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
             if (tcExpr is TctConstant && tcExpr.value is IntValue)
                 return TctConstant(location, IntValue(-tcExpr.value.value, TypeInt))
             return TctNegateExpr(location, tcExpr)
+        }
+
+        is AstRangeExpr -> {
+            val tcStart = start.typeCheckRvalue(scope)
+            val tcEnd = end.typeCheckRvalue(scope)
+            if (tcStart.type is TypeError || tcEnd.type is TypeError)
+                return TctErrorExpr(location, "")
+            if (tcStart.type!=TypeInt && tcStart.type!=TypeChar)
+                return TctErrorExpr(location, "Range start must be of type Int or Char, got '${tcStart.type}'")
+            tcEnd.checkType(tcStart.type)
+            val op = when(op) {
+                TokenKind.LT -> BinOp.LT_I
+                TokenKind.LTE -> BinOp.LE_I
+                TokenKind.GT -> BinOp.GT_I
+                TokenKind.GTE -> BinOp.GE_I
+                else -> return TctErrorExpr(location, "Invalid range operator '${op}'")
+            }
+            TctRangeExpr(location, tcStart, tcEnd, op, TypeRange.create(tcStart.type))
         }
 
         is AstNotExpr -> TODO()
@@ -277,7 +299,34 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt = when(this) {
         TctIfStmt(location,clauses)
     }
 
-    is AstLambdaExpr -> TODO()
+    is AstForStmt -> {
+        val tcRange = range.typeCheckRvalue(scope)
+        val type = indexType?.resolveType(scope) ?:
+            when(tcRange.type) {
+            is TypeError -> TypeError
+            is TypeRange -> tcRange.type.elementType
+            is TypeArray -> tcRange.type.elementType
+            else -> reportTypeError(location, " Cannot iterate over type '${tcRange.type}'")
+        }
+
+        val sym = VarSymbol(location, indexName, type, false)
+        addSymbol(sym)
+        val tcBody = body.map { it.typeCheckStmt(this) }
+
+        if (type==TypeError)
+            TctEmptyStmt(location) // Error already reported
+        else if (tcRange is TctRangeExpr) {
+            tcRange.start.checkType(type)
+            TctForRangeStmt(location, sym, tcRange, tcBody)
+        } else if (tcRange.type is TypeArray) {
+            if (!tcRange.type.elementType.isAssignableTo(type))
+                reportTypeError(location, "Cannot iterate over array of type '${tcRange.type}' with index type '${type}'")
+            TctForArrayStmt(location, sym, tcRange, tcBody)
+        } else
+            TODO()
+    }
+
+    is AstLambdaExpr -> error("Lambda expressions should not be type checked here, they should be handled in the expression type checking phase")
 }
 
 

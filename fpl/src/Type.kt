@@ -23,6 +23,17 @@ class TypeArray private constructor(val elementType:Type) : Type("Array<$element
     }
 }
 
+class TypeRange private constructor(val elementType:Type) : Type("Range<$elementType>") {
+    companion object {
+        val allRangeTypes = mutableMapOf<Type, TypeRange>()
+        fun create(elementType: Type) = allRangeTypes.getOrPut(elementType) {
+            TypeRange(elementType)
+        }
+    }
+}
+
+
+
 
 // Type checking
 fun Type.isAssignableTo(other: Type): Boolean {
@@ -55,6 +66,7 @@ fun Type.getSize(): Int = when (this) {
     TypeInt, TypeReal -> 4
     TypeString -> 4
     is TypeArray -> 4
+    is TypeRange -> 4
     TypeAny -> 0
     TypeError -> 0
     TypeNothing -> 0

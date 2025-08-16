@@ -134,7 +134,7 @@ jsr malloc                # Call malloc to allocate memory
 beq $8, 0, .end           # Check if malloc failed
 add $8, 4                 # Update pointer to point to first element
 stw $9, $8[-4]            # Store number of elements at the start of
-.end
+.end:
 ldw $30, $sp[4]           # Teardown stack frame
 ldw $9, $sp[0]
 add $sp, 8              # Restore stack pointer

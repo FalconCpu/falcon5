@@ -198,11 +198,153 @@ class ExecuteTest {
         """.trimIndent()
 
         val expected = """
-            30
+            20
         """.trimIndent()
 
         runTest(prog, expected)
     }
+
+    @Test
+    fun localArrayLambda() {
+        val prog = """
+            extern fun print(i:Int)
+            
+            fun sum(a:Array<Int>) -> Int
+                var total = 0
+                var index = 0
+                while index < a.length
+                    total = total + a[index]
+                    index = index + 1
+                return total
+                
+            fun main()
+                val arr = local Array<Int>(5){it*2}
+                var result = sum(arr)
+                print(result)
+        """.trimIndent()
+
+        val expected = """
+            20
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun forLoop() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+            
+            fun main()
+                for i in 1..5
+                    print(i)
+                    print('\n')
+        """.trimIndent()
+
+        val expected = """
+            1
+            2
+            3
+            4
+            5
+            
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+
+    @Test
+    fun forLoopDownto() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+            
+            fun main()
+                for i in 10..>5
+                    print(i)
+                    print('\n')
+        """.trimIndent()
+
+        val expected = """
+            10
+            9
+            8
+            7
+            6
+
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun forLoopChars() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+            
+            fun main()
+                for i in 'a'..'z'
+                    print(i)
+                print('\n')
+        """.trimIndent()
+
+        val expected = """
+            abcdefghijklmnopqrstuvwxyz
+
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun forLoopEmptyRange() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+            extern fun print(s:String)
+            
+            fun main()
+                for i in 'z'..'a'
+                    print(i)
+                print('\n')
+                print("Done")
+        """.trimIndent()
+
+        val expected = """
+            
+            Done
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+
+    @Test
+    fun forLoopArray() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+            extern fun print(s:String)
+            
+            fun main()
+                val arr = new ['a', 'b', 'c', 'd', 'e']
+                for i in arr
+                    print(i)
+                print('\n')
+                print("Done")
+        """.trimIndent()
+
+        val expected = """
+            abcde
+            Done
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
 
 
 
