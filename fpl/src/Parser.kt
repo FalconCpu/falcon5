@@ -81,6 +81,26 @@ class Parser(val lexer: Lexer) {
         return AstReturnExpr(loc.location, expr)
     }
 
+    private fun parseNew() : AstExpr {
+        val arenaTok = nextToken() // Consume NEW / LOCAL / CONST
+        val type = if (currentToken.kind!=OPENSQ) parseType() else null
+        val initializer = if (currentToken.kind==OPENSQ) parseInitializerList() else null
+        val args = if (currentToken.kind == OPENB) parseArgList() else emptyList()
+        val lambda = if (currentToken.kind==OPENCL) parseLambdaExpr() else null
+        val arena = when (arenaTok.kind) {
+            NEW -> Arena.HEAP
+            LOCAL -> Arena.STACK
+            CONST -> Arena.CONST
+            else -> throw ParseError(arenaTok.location, "Got '$arenaTok' when expecting 'new', 'local' or 'const'")
+        }
+        return if (type!=null && initializer==null )
+            AstNewExpr(arenaTok.location, type, args, lambda, arena)
+        else if (initializer!=null && args.isEmpty() && lambda==null)
+            AstArrayLiteralExpr(arenaTok.location, type, initializer, arena)
+        else
+            throw ParseError(arenaTok.location, "Malformed constructor expression")
+    }
+
     private fun parsePrimaryExpr() : AstExpr {
         return when (currentToken.kind) {
             INTLITERAL -> parseIntLit()
@@ -89,6 +109,7 @@ class Parser(val lexer: Lexer) {
             CHARLITERAL -> parseCharLit()
             RETURN -> parseReturn()
             OPENB -> parseParentheses()
+            NEW, LOCAL, CONST -> parseNew()
             else -> throw ParseError(currentToken.location, "Got '$currentToken' when expecting primary expression")
         }
     }
@@ -104,10 +125,35 @@ class Parser(val lexer: Lexer) {
         return args
     }
 
+    private fun parseInitializerList() : List<AstExpr> {
+        val args = mutableListOf<AstExpr>()
+        expect(OPENSQ) // Consume OPENB
+        if (currentToken.kind != CLOSESQ)
+            do {
+                args.add(parseExpr())
+            } while (canTake(COMMA))
+        expect(CLOSESQ) // Consume CLOSEB
+        return args
+    }
+
+
     private fun parseFuncCall(lhs:AstExpr) : AstExpr {
         val loc = currentToken.location
         val args = parseArgList()
         return AstCallExpr(loc, lhs, args)
+    }
+
+    private fun parseIndexExpr(array: AstExpr) : AstExpr {
+        expect(OPENSQ) // Consume OPENSQ
+        val index = parseExpr()
+        expect(CLOSESQ) // Consume CLOSESQ
+        return AstIndexExpr(currentToken.location, array, index)
+    }
+
+    private fun parseMemberExpr(objectExpr: AstExpr) : AstExpr {
+        expect(DOT) // Consume DOT
+        val memberName = expect(IDENTIFIER)
+        return AstMemberExpr(currentToken.location, objectExpr, memberName.value)
     }
 
     private fun parsePostfixExpr() : AstExpr {
@@ -115,15 +161,28 @@ class Parser(val lexer: Lexer) {
         while(true)
             ret = when (currentToken.kind) {
                 OPENB -> parseFuncCall(ret)
-                OPENSQ -> TODO()
-                DOT -> TODO()
+                OPENSQ -> parseIndexExpr(ret)
+                DOT -> parseMemberExpr(ret)
                 else -> return ret
             }
     }
 
     private fun parsePrefixExpr() : AstExpr {
-        var ret = parsePostfixExpr()
-        return ret
+        return when (currentToken.kind) {
+            NOT -> {
+                val tok = nextToken() // Consume NOT
+                val expr = parsePrefixExpr()
+                AstNotExpr(tok.location, expr)
+            }
+
+            MINUS -> {
+                val tok = nextToken() // Consume MINUS
+                val expr = parsePrefixExpr()
+                AstNegateExpr(tok.location, expr)
+            }
+
+            else ->  parsePostfixExpr()
+        }
     }
 
     private fun parseMultiplicativeExpr() : AstExpr {
@@ -180,6 +239,14 @@ class Parser(val lexer: Lexer) {
         return parseOrExpr()
     }
 
+    private fun parseLambdaExpr() : AstLambdaExpr {
+        val tok = expect(OPENCL)
+        val expr = parseExpr()
+        expect(CLOSECL) // Consume CLOSECL
+        val body = listOf( AstExpressionStmt(tok.location, expr) )
+        return AstLambdaExpr(tok.location, body)
+    }
+
     // =====================================================================================
     //                                 Types
     // =====================================================================================
@@ -189,8 +256,26 @@ class Parser(val lexer: Lexer) {
         return AstTypeIdentifier(tok.location, tok.value)
     }
 
+    private fun parseTypeArray() : AstArrayType {
+        expect(ARRAY) // Consume ARRAY
+        expect(LT)
+        val elementType = parseType()
+        expect(GT) // Consume GT
+        return AstArrayType(currentToken.location, elementType)
+    }
+
     private fun parseType() : AstType {
-        return parseTypeIdentifier()
+        when(currentToken.kind) {
+            IDENTIFIER -> return parseTypeIdentifier()
+            ARRAY -> return parseTypeArray()
+            OPENB -> {
+                nextToken() // Consume OPENB
+                val type = parseType()
+                expect(CLOSEB) // Consume CLOSEB
+                return type
+            }
+            else -> throw ParseError(currentToken.location, "Got '$currentToken' when expecting type")
+        }
     }
 
 

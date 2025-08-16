@@ -93,5 +93,137 @@ class TypeCheckTest {
         runTest(prog, expected)
     }
 
+    @Test
+    fun arraysTest() {
+        val prog = """
+            fun sum(a:Array<Int>) -> Int
+                var total = 0
+                var index = 0
+                while index < a.length
+                    total = total + a[index]
+                    index = index + 1
+                return total
+        """.trimIndent()
+
+        val expected = """
+            TctTop function=topLevel
+            . TctFile
+            . . TctFunctionDefStmt function=sum(Array<Int>) name=sum
+            . . . TctVarDeclStmt sym=total
+            . . . . TctConstant type=Int value=IntValue:0
+            . . . TctVarDeclStmt sym=index
+            . . . . TctConstant type=Int value=IntValue:0
+            . . . TctWhileStmt
+            . . . . TctAssignStmt op==
+            . . . . . TctVariable sym=total type=Int
+            . . . . . TctBinaryExpr op=ADD_I type=Int
+            . . . . . . TctVariable sym=total type=Int
+            . . . . . . TctIndexExpr type=Int
+            . . . . . . . TctVariable sym=a type=Array<Int>
+            . . . . . . . TctVariable sym=index type=Int
+            . . . . TctAssignStmt op==
+            . . . . . TctVariable sym=index type=Int
+            . . . . . TctBinaryExpr op=ADD_I type=Int
+            . . . . . . TctVariable sym=index type=Int
+            . . . . . . TctConstant type=Int value=IntValue:1
+            . . . . TctBinaryExpr op=LT_I type=Bool
+            . . . . . TctVariable sym=index type=Int
+            . . . . . TctMemberExpr member=length type=Int
+            . . . . . . TctVariable sym=a type=Array<Int>
+            . . . TctExpressionStmt
+            . . . . TctReturnExpr type=Nothing
+            . . . . . TctVariable sym=total type=Int
+
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun arrayTypeError1() {
+        val prog = """
+            fun main()
+                val a = new [1, 2, "three", 4]   # ERROR: String mixed with Int
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:2.24-2.30:  Type mismatch got 'String' when expecting 'Int'
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun arrayTypeError2() {
+        val prog = """
+            fun main()
+                val a: Array<Int> = new ["a", "b", "c"]  # ERROR: String not compatible with Array<Int>
+
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:2.25-2.27:  Type mismatch got 'Array<String>' when expecting 'Array<Int>'
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun arrayTypeError3() {
+        val prog = """
+            fun main()
+                val a = new Array<Int>()(1, 2)  # ERROR: Array expects exactly one size argument
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:2.13-2.15:  Array constructor requires exactly one argument
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun arrayTypeError4() {
+        val prog = """
+            fun main()
+                val a = new Array<Int>(-5)       # ERROR: negative array size
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:2.13-2.15:  Cannot create array of negative size
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun arrayTypeError5() {
+        val prog = """
+            fun main()
+                val a = new Array<Int>("five")    # ERROR: Non integer size
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:2.28-2.33:  Type mismatch got 'String' when expecting 'Int'
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun arrayTypeError6() {
+        val prog = """
+            fun main(x:Int)
+                val a = const [1,2,x]     # ERROR: Non constant in array literal
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:2.24-2.24:  Cannot create constant array literal with non-constant element
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+
 
 }

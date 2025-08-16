@@ -100,6 +100,11 @@ private fun Instr.genAssembly() = when(this) {
     is InstrStart -> ""
     is InstrMovLit -> "ld $dest, $lit"
     is InstrLea -> "ld $dest, $src"
+    is InstrLoad -> "${loadOp(size)} $dest, $addr[$offset]"
+    is InstrStore -> "${storeOp(size)} $src, $addr[$offset]"
+    is InstrLoadField -> "${loadOp(size)} $dest, $addr[${offset.offset}]"
+    is InstrStoreField -> "${storeOp(size)} $src, $addr[${offset.offset}]"
+    is InstrIndex -> "idx$size $dest, $src, $bounds"
 }
 
 fun Function.genAssembly(sb:StringBuilder) {

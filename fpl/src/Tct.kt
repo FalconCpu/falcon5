@@ -15,6 +15,13 @@ class TctTypeName(location: Location, val sym: TypeNameSymbol) : TctExpr(locatio
 class TctBinaryExpr(location: Location, val op: BinOp, val lhs: TctExpr, val rhs: TctExpr, type:Type) : TctExpr(location, type)
 class TctReturnExpr(location: Location, val expr: TctExpr?) : TctExpr(location, TypeNothing)
 class TctCallExpr(location: Location, val func:Function, val args: List<TctExpr>) : TctExpr(location, func.returnType)
+class TctIndexExpr(location: Location, val array: TctExpr, val index: TctExpr, type:Type) : TctExpr(location, type)
+class TctMemberExpr(location: Location, val objectExpr: TctExpr, val member:FieldSymbol, type:Type) : TctExpr(location, type)
+class TctNewArrayExpr(location: Location, val elementType: Type, val size:TctExpr, val arena: Arena, val lambda:TctLambdaExpr?, type:Type) : TctExpr(location, type)
+class TctNewArrayLiteralExpr(location: Location,val elements: List<TctExpr>,val arena: Arena,type:Type) : TctExpr(location, type)
+class TctNegateExpr(location: Location, val expr: TctExpr) : TctExpr(location, expr.type)
+class TctNotExpr(location: Location, val expr: TctExpr) : TctExpr(location, TypeBool)
+class TctLambdaExpr(location: Location, val expr: TctExpr, val itSym:VarSymbol, type:Type) : TctExpr(location, type)
 
 class TctErrorExpr(location: Location, val message: String = "") : TctExpr(location, TypeNothing) {
     init {
@@ -39,9 +46,6 @@ class TctWhileStmt(location: Location, val condition: TctExpr, body: List<TctStm
 class TctIfClause(location:Location, val condition:TctExpr?, body: List<TctStmt>) : TctBlock(location, body)
 class TctIfStmt(location:Location, body:List<TctIfClause>) : TctBlock(location, body)
 class TctRepeatStmt(location: Location, val condition: TctExpr, body: List<TctStmt>) : TctBlock(location, body)
-
-// Type nodes
-
 
 fun Tct.dump(sb:StringBuilder, indent: Int) {
 

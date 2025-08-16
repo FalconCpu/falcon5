@@ -58,6 +58,10 @@ enum class TokenKind(val value: String, val lineContinues: Boolean) {
     FUN           ("fun", false),
     REPEAT        ("repeat", false),
     UNTIL         ("until", false),
+    NEW           ("new", false),
+    LOCAL         ("local", false),
+    CONST         ("const", false),
+    ARRAY         ("Array", false),
     EXTERN        ("extern", false),
     ERROR         ("<error>", false);
 

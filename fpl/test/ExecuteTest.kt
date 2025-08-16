@@ -121,6 +121,90 @@ class ExecuteTest {
         runTest(prog, expected)
     }
 
+    @Test
+    fun arraysTest() {
+        val prog = """
+            extern fun print(i:Int)
+            
+            fun sum(a:Array<Int>) -> Int
+                var total = 0
+                var index = 0
+                while index < a.length
+                    total = total + a[index]
+                    index = index + 1
+                return total
+                
+            fun main()
+                val arr = new Array<Int>(5)
+                arr[0] = 1
+                arr[1] = 2
+                arr[2] = 3
+                arr[3] = 4
+                arr[4] = 5
+                var result = sum(arr)
+                print(result)
+        """.trimIndent()
+
+        val expected = """
+            15
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun arrayInitializerTest() {
+        val prog = """
+            extern fun print(i:Int)
+            
+            fun sum(a:Array<Int>) -> Int
+                var total = 0
+                var index = 0
+                while index < a.length
+                    total = total + a[index]
+                    index = index + 1
+                return total
+                
+            fun main()
+                val arr = new [1,2,3,4,5]
+                var result = sum(arr)
+                print(result)
+        """.trimIndent()
+
+        val expected = """
+            15
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun arrayInitializerLambda() {
+        val prog = """
+            extern fun print(i:Int)
+            
+            fun sum(a:Array<Int>) -> Int
+                var total = 0
+                var index = 0
+                while index < a.length
+                    total = total + a[index]
+                    index = index + 1
+                return total
+                
+            fun main()
+                val arr = new Array<Int>(5){it*2}
+                var result = sum(arr)
+                print(result)
+        """.trimIndent()
+
+        val expected = """
+            30
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+
 
 
 }

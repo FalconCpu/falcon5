@@ -14,6 +14,16 @@ object TypeError  : Type("Error")
 object TypeAny    : Type("Any")
 object TypeNothing: Type("Nothing")
 
+class TypeArray private constructor(val elementType:Type) : Type("Array<$elementType>") {
+    companion object {
+        val allArrayTypes = mutableMapOf<Type, TypeArray>()
+        fun create(elementType: Type) = allArrayTypes.getOrPut(elementType) {
+            TypeArray(elementType)
+        }
+    }
+}
+
+
 // Type checking
 fun Type.isAssignableTo(other: Type): Boolean {
     if (this == other) return true
@@ -38,4 +48,14 @@ fun TctExpr.checkType(expectedType:Type) {
 fun reportTypeError(location: Location, message: String) : TypeError {
     Log.error(location, message)
     return TypeError
+}
+
+fun Type.getSize(): Int = when (this) {
+    TypeUnit, TypeBool, TypeChar -> 1
+    TypeInt, TypeReal -> 4
+    TypeString -> 4
+    is TypeArray -> 4
+    TypeAny -> 0
+    TypeError -> 0
+    TypeNothing -> 0
 }

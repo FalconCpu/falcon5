@@ -13,6 +13,12 @@ class AstIdentifier(location: Location, val name: String) : AstExpr(location)
 class AstBinaryExpr(location: Location, val op: TokenKind, val lhs: AstExpr, val rhs: AstExpr) : AstExpr(location)
 class AstReturnExpr(location: Location, val expr: AstExpr?) : AstExpr(location)
 class AstCallExpr(location: Location, val func: AstExpr, val args: List<AstExpr>) : AstExpr(location)
+class AstIndexExpr(location: Location, val array: AstExpr, val index: AstExpr) : AstExpr(location)
+class AstMemberExpr(location: Location, val objectExpr: AstExpr, val memberName:String) : AstExpr(location)
+class AstNewExpr(location: Location, val elementType: AstType, val args:List<AstExpr>, val lambda:AstLambdaExpr?, val arena:Arena) : AstExpr(location)
+class AstArrayLiteralExpr(location: Location, val elementType: AstType?, val args:List<AstExpr>, val arena:Arena) : AstExpr(location)
+class AstNegateExpr(location: Location, val expr: AstExpr) : AstExpr(location)
+class AstNotExpr(location: Location, val expr: AstExpr) : AstExpr(location)
 
 // Statement nodes
 sealed class AstStmt(location: Location) : Ast(location)
@@ -41,16 +47,22 @@ class AstWhileStmt(location: Location, val condition: AstExpr, body: List<AstStm
 class AstRepeatStmt(location: Location, val condition: AstExpr, body: List<AstStmt>) : AstBlock(location, body)
 class AstIfClause(location:Location, val condition:AstExpr?, body: List<AstStmt>) : AstBlock(location, body)
 class AstIfStmt(location:Location, body:List<AstIfClause>) : AstBlock(location, body)
+class AstLambdaExpr(location: Location, body: List<AstStmt>) : AstBlock(location, body)
 
 class AstFile(location: Location, body: List<AstStmt>) : AstBlock(location, body)
 class AstTop(location: Location, body: List<AstStmt>) : AstBlock(location, body)
 
 // Type nodes
 sealed class AstType(location:Location) : Ast(location)
+class AstArrayType(location: Location, val elementType: AstType) : AstType(location)
 class AstTypeIdentifier(location: Location, val name: String) : AstType(location)
 
 // Other nodes
 class AstParameter(location: Location, val name: String, val type: AstType) : Ast(location)
+
+enum class Arena {
+    STACK, HEAP, CONST
+}
 
 
 

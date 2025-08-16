@@ -32,6 +32,12 @@ class Function (
         return ret
     }
 
+    fun newUserTemp() : UserReg {
+        val ret = UserReg("t${tempCount++}")
+        regs += ret
+        return ret
+    }
+
     fun newLabel() : Label {
         val ret = Label("L${labels.size}")
         labels += ret
@@ -69,6 +75,45 @@ class Function (
     fun addLdImm(value:Int): TempReg {
         val dest = newTemp()
         prog += InstrMovLit(dest, value)
+        return dest
+    }
+
+    fun addLdImm(dest:CpuReg, value:Int) {
+        prog += InstrMovLit(dest, value)
+    }
+
+
+
+    fun addLoad(size: Int, addr: Reg, offset: Int): TempReg {
+        assert(size in listOf(1, 2, 4))
+        val dest = newTemp()
+        prog += InstrLoad(size, dest, addr, offset)
+        return dest
+    }
+
+    fun addStore(size: Int, src: Reg, addr: Reg, offset: Int) {
+        assert(size in listOf(1, 2, 4))
+        prog += InstrStore(size, src, addr, offset)
+    }
+
+    fun addLoad(addr: Reg, field: FieldSymbol): TempReg {
+        val size = field.type.getSize()
+        assert(size in listOf(1, 2, 4))
+        val dest = newTemp()
+        prog += InstrLoadField(size, dest, addr, field)
+        return dest
+    }
+
+    fun addStore(src: Reg, addr: Reg, field: FieldSymbol) {
+        val size = field.type.getSize()
+        assert(size in listOf(1, 2, 4))
+        prog += InstrStoreField(size, src, addr, field)
+    }
+
+    fun addIndex(size: Int, src: Reg, bounds: Reg): TempReg {
+        assert(size in listOf(1, 2, 4))
+        val dest = newTemp()
+        prog += InstrIndex(size, dest, src, bounds)
         return dest
     }
 

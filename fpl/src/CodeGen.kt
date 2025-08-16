@@ -39,8 +39,92 @@ fun TctExpr.codeGenRvalue() : Reg {
         }
 
         is TctTypeName -> error("Type name found when expecting rvalue")
+
+        is TctIndexExpr -> {
+            val arrayReg = array.codeGenRvalue()
+            val indexReg = index.codeGenRvalue()
+            val size = array.type.getSize()
+            if (size == 0)
+                Log.error(location, "Cannot index into type '${array.type}'")
+            val bounds = currentFunc.addLoad(arrayReg, lengthSymbol)
+            val scaled = currentFunc.addIndex(size, indexReg, bounds)
+            val addr = currentFunc.addAlu(BinOp.ADD_I, arrayReg, scaled)
+            currentFunc.addLoad(size, addr, 0)
+        }
+
+        is TctMemberExpr -> {
+            val objectReg = objectExpr.codeGenRvalue()
+            val size = member.type.getSize()
+            if (size == 0)
+                Log.error(location, "Cannot access member '${member.name}' of type '${objectExpr.type}'")
+            currentFunc.addLoad(objectReg, member)
+        }
+
+        is TctNewArrayExpr -> {
+            allocateArray(size, elementType, arena, lambda==null, lambda)
+        }
+
+        is TctNewArrayLiteralExpr -> {
+            val elementType = (type as TypeArray).elementType
+            val sizeExpr = TctConstant(location, IntValue(elements.size, TypeInt))
+            val ret = allocateArray(sizeExpr, elementType, arena, false, null)
+            val elementSize = type.getSize()
+            for(index in elements.indices)
+                currentFunc.addStore(elementSize, elements[index].codeGenRvalue(), ret, index*elementSize)
+            ret
+        }
+
+        is TctNegateExpr -> TODO()
+        is TctNotExpr -> TODO()
+        is TctLambdaExpr -> TODO()
     }
 }
+
+private fun allocateArray(sizeExpr:TctExpr, elementType:Type, arena:Arena, initialize:Boolean, lambda:TctLambdaExpr?) : Reg {
+    val elementSize = elementType.getSize()
+    val sizeReg = sizeExpr.codeGenRvalue()
+
+    val ret = when(arena) {
+        Arena.HEAP -> {
+            currentFunc.addMov(cpuRegs[1], sizeReg)
+            currentFunc.addLdImm(cpuRegs[2], elementSize)
+            currentFunc.addCall(Stdlib.mallocArray)
+            currentFunc.addCopy(resultReg)
+        }
+        Arena.STACK -> TODO()
+        Arena.CONST -> TODO()
+    }
+
+    if (initialize) {
+        val sizeInBytes = currentFunc.addAlu(BinOp.MUL_I, sizeReg, elementSize)
+        currentFunc.addMov(cpuRegs[1], ret)
+        currentFunc.addMov(cpuRegs[2], sizeInBytes)
+        currentFunc.addCall(Stdlib.bzero)
+    }
+
+    if (lambda != null) {
+        val itReg = currentFunc.getReg(lambda.itSym)
+        val ptrReg = currentFunc.newUserTemp()
+        val startLabel = currentFunc.newLabel()
+        val condLabel = currentFunc.newLabel()
+        currentFunc.addMov(ptrReg, ret)
+        currentFunc.addMov(itReg, zeroReg)
+        currentFunc.addJump(condLabel)
+        currentFunc.addLabel(startLabel)
+        val v = lambda.expr.codeGenRvalue()
+        currentFunc.addStore(elementSize, v, ptrReg, 0)
+        val ptrNext = currentFunc.addAlu(BinOp.ADD_I, ptrReg, elementSize)
+        currentFunc.addMov(ptrReg, ptrNext)
+        val itNext = currentFunc.addAlu(BinOp.ADD_I, itReg, 1)
+        currentFunc.addMov(itReg, itNext)
+        currentFunc.addLabel(condLabel)
+        currentFunc.addBranch(BinOp.LT_I, itReg, sizeReg, startLabel)
+    }
+    return ret
+}
+
+
+
 
 fun TctExpr.codeGenBool(trueLabel: Label, falseLabel: Label) {
     when (this) {
@@ -69,6 +153,28 @@ fun TctExpr.codeGenLvalue(value:Reg) {
         is TctVariable -> {
             currentFunc.addMov(currentFunc.getReg(sym), value)
         }
+
+        is TctIndexExpr -> {
+            val arrayReg = array.codeGenRvalue()
+            val indexReg = index.codeGenRvalue()
+            val size = array.type.getSize()
+            if (size == 0)
+                Log.error(location, "Cannot index into type '${array.type}'")
+            val bounds = currentFunc.addLoad(arrayReg, lengthSymbol)
+            val scaled = currentFunc.addIndex(size, indexReg, bounds)
+            val addr = currentFunc.addAlu(BinOp.ADD_I, arrayReg, scaled)
+            currentFunc.addStore(size, value, addr, 0)
+        }
+
+        is TctMemberExpr -> {
+            val objectReg = objectExpr.codeGenRvalue()
+            val size = member.type.getSize()
+            if (size == 0)
+                Log.error(location, "Cannot access member '${member.name}' of type '${objectExpr.type}'")
+            currentFunc.addStore(value,objectReg, member)
+        }
+
+
 
         else ->
             error("Not an lvalue ${this.javaClass}")

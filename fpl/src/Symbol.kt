@@ -9,8 +9,10 @@ class FunctionSymbol(location: Location, name: String) : Symbol(location, name, 
     val overloads = mutableListOf<Function>()
 }
 class TypeNameSymbol(location: Location, name: String, type:Type) : Symbol(location, name, type, false)
+class FieldSymbol(location: Location, name: String, type: Type, mutable:Boolean, var offset:Int=-1) : Symbol(location, name, type, mutable)
 
 val predefinedSymbols : Map<String, Symbol> = genPredefinedSymbols()
+val lengthSymbol = FieldSymbol(nullLocation, "length", TypeInt, false, -4)
 
 private fun genPredefinedSymbols(): Map<String, Symbol> {
     val symbols = mutableMapOf<String, Symbol>()
@@ -26,6 +28,8 @@ private fun genPredefinedSymbols(): Map<String, Symbol> {
 
     return symbols
 }
+
+
 
 fun AstBlock.lookupSymbol(name: String): Symbol? {
     return predefinedSymbols[name] ?:
@@ -67,4 +71,5 @@ fun Symbol.getDescription() : String = when (this) {
     is GlobalVarSymbol -> "global variable"
     is TypeNameSymbol -> "type name"
     is VarSymbol -> "variable"
+    is FieldSymbol -> "field"
 }
