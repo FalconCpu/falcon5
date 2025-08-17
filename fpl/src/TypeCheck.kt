@@ -128,6 +128,13 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
                     else
                         TctMemberExpr(location, tctExpr, lengthSymbol, TypeInt)
                 }
+                is TypeString -> {
+                    if (memberName != "length")
+                        TctErrorExpr(location, "String has no member '${memberName}'")
+                    else
+                        TctMemberExpr(location, tctExpr, lengthSymbol, TypeInt)
+                }
+
 
                 else -> TctErrorExpr(location, "Cannot access member '${memberName}' of type '${tctExpr.type}'")
             }
@@ -170,9 +177,11 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
                 val e = tcArgs.find {it !is TctConstant}
                 if (e != null)
                     return TctErrorExpr(e.location, "Cannot create constant array literal with non-constant element")
-                TODO("Constant array literals not implemented yet")
-            }
-            return TctNewArrayLiteralExpr(location, tcArgs, arena, type)
+                val values = tcArgs.map { (it as TctConstant).value }
+                val arrayValue = ArrayValue.create(values, type)
+                return TctConstant(location, arrayValue)
+            } else
+                return TctNewArrayLiteralExpr(location, tcArgs, arena, type)
         }
 
         is AstNegateExpr -> {
@@ -238,9 +247,49 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
                 Log.error(location, "Continue statement outside of a loop")
             TctContinueExpr(location)
         }
+
+        is AstEqualityExpr -> {
+            val tcLhs = lhs.typeCheckRvalue(scope)
+            val tcRhs = rhs.typeCheckRvalue(scope)
+            if (tcLhs.type is TypeError || tcRhs.type is TypeError)
+                return TctErrorExpr(location, "")
+            if (tcLhs.type != tcRhs.type)
+                return TctErrorExpr(location, "Cannot compare types '${tcLhs.type}' and '${tcRhs.type}'")
+            val aluOp = op.toCompareOp()
+            when(tcLhs.type) {
+                TypeInt, TypeChar, TypeBool -> TctIntCompareExpr(location, aluOp, tcLhs, tcRhs)
+                TypeString -> TctStringCompareExpr(location, aluOp, tcLhs, tcRhs)
+                else -> TctErrorExpr(location, "Cannot compare type '${tcLhs.type}' with operator '${op}'")
+            }
+        }
+
+        is AstCompareExpr -> {
+            val tcLhs = lhs.typeCheckRvalue(scope)
+            val tcRhs = rhs.typeCheckRvalue(scope)
+            if (tcLhs.type is TypeError || tcRhs.type is TypeError)
+                return TctErrorExpr(location, "")
+            if (tcLhs.type != tcRhs.type)
+                return TctErrorExpr(location, "Cannot compare types '${tcLhs.type}' and '${tcRhs.type}'")
+            val aluOp = op.toCompareOp()
+            when(tcLhs.type) {
+                TypeInt, TypeChar, TypeBool -> TctIntCompareExpr(location, aluOp, tcLhs, tcRhs)
+                TypeString -> TctStringCompareExpr(location, aluOp, tcLhs, tcRhs)
+                else -> TctErrorExpr(location, "Cannot compare type '${tcLhs.type}' with operator '${op}'")
+            }
+        }
     }
 }
 
+
+fun TokenKind.toCompareOp() = when(this) {
+    TokenKind.LT  -> BinOp.LT_I
+    TokenKind.GT  -> BinOp.GT_I
+    TokenKind.EQ  -> BinOp.EQ_I
+    TokenKind.NEQ -> BinOp.NE_I
+    TokenKind.LTE -> BinOp.LE_I
+    TokenKind.GTE -> BinOp.GE_I
+    else -> error("Invalid binary operator $this")
+}
 
 fun Function.isCallableWithArgs(args: List<TctExpr>) : Boolean {
     if (parameters.size!= args.size) return false
@@ -252,7 +301,9 @@ fun Function.isCallableWithArgs(args: List<TctExpr>) : Boolean {
 fun FunctionSymbol.resolveOverload(location:Location, args: List<TctExpr>) : Function? {
     val resolvedFunc = overloads.filter { it.isCallableWithArgs(args) }
     if (resolvedFunc.isEmpty()) {
-        Log.error(location, "No matching function found for call")
+        val longName = name + args.joinToString(separator = ",", prefix = "(", postfix = ")") { it.type.name }
+        val candidates = overloads.joinToString(separator = "\n") { it.name }
+        Log.error(location, "No function found for $longName candidates are:-\n$candidates")
         return null
     } else if (resolvedFunc.size>1) {
         Log.error(location, "Ambiguous function call: multiple matching overloads found")

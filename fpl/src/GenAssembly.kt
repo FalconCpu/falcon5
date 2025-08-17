@@ -25,15 +25,6 @@ private fun InstrAlu.genAssembly() : String = when(op) {
     BinOp.LSR_I -> "lsr $dest, $src1, $src2"
     BinOp.ASR_I -> "asr $dest, $src1, $src2"
     BinOp.LTU_I -> "cltu $dest, $src1, $src2"
-    BinOp.EQ_S,
-    BinOp.NE_S,
-    BinOp.LT_S,
-    BinOp.GT_S,
-    BinOp.LE_S,
-    BinOp.GE_S,
-    BinOp.AND_B,
-    BinOp.OR_B -> error("Should have been lowered before genAssembly")
-
 }
 
 private fun InstrAluLit.genAssembly() : String = when(op) {
@@ -55,14 +46,6 @@ private fun InstrAluLit.genAssembly() : String = when(op) {
     BinOp.LSR_I -> "lsr $dest, $src, $lit"
     BinOp.ASR_I -> "asr $dest, $src, $lit"
     BinOp.LTU_I -> "cltu $dest, $src, $lit"
-    BinOp.EQ_S,
-    BinOp.NE_S,
-    BinOp.LT_S,
-    BinOp.GT_S,
-    BinOp.LE_S,
-    BinOp.GE_S,
-    BinOp.AND_B,
-    BinOp.OR_B  -> error("Should have been lowered before genAssembly")
 }
 
 private fun InstrBranch.genAssembly() : String = when (op) {

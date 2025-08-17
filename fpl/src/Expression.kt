@@ -19,18 +19,6 @@ enum class BinOp {
     LSR_I,
     ASR_I,
     LTU_I,    // Less than unsigned
-
-    // String Operations
-    LT_S,
-    GT_S,
-    EQ_S,
-    NE_S,
-    LE_S,
-    GE_S,
-
-    // Boolean Operations
-    AND_B,
-    OR_B
 }
 
 fun BinOp.isCommutative() : Boolean = when(this) {
@@ -78,21 +66,5 @@ val operatorTable = listOf(
     Operator(TokenKind.CARET,   TypeInt,   TypeInt, BinOp.XOR_I,  TypeInt),
     Operator(TokenKind.LSL,     TypeInt,   TypeInt, BinOp.LSL_I,  TypeInt),
     Operator(TokenKind.LSR,     TypeInt,   TypeInt, BinOp.LSR_I,  TypeInt),
-    Operator(TokenKind.ASR,     TypeInt,   TypeInt, BinOp.ASR_I,  TypeInt),
-    Operator(TokenKind.EQ,      TypeInt,   TypeInt, BinOp.EQ_I,   TypeBool),
-    Operator(TokenKind.NEQ,     TypeInt,   TypeInt, BinOp.NE_I,   TypeBool),
-    Operator(TokenKind.LT,      TypeInt,   TypeInt, BinOp.LT_I,   TypeBool),
-    Operator(TokenKind.GT,      TypeInt,   TypeInt, BinOp.GT_I,   TypeBool),
-    Operator(TokenKind.LTE,     TypeInt,   TypeInt, BinOp.LE_I,   TypeBool),
-    Operator(TokenKind.GTE,     TypeInt,   TypeInt, BinOp.GE_I,   TypeBool),
-
-    Operator(TokenKind.EQ,      TypeString, TypeString, BinOp.EQ_S,  TypeBool),
-    Operator(TokenKind.NEQ,     TypeString, TypeString, BinOp.NE_S,  TypeBool),
-    Operator(TokenKind.LT,      TypeString, TypeString, BinOp.LT_S,  TypeBool),
-    Operator(TokenKind.GT,      TypeString, TypeString, BinOp.GT_S,  TypeBool),
-    Operator(TokenKind.LTE,     TypeString, TypeString, BinOp.LE_S,  TypeBool),
-    Operator(TokenKind.GTE,     TypeString, TypeString, BinOp.GE_S,  TypeBool),
-
-    Operator(TokenKind.AND,     TypeBool,  TypeBool, BinOp.AND_B,  TypeBool),
-    Operator(TokenKind.OR,      TypeBool,  TypeBool, BinOp.OR_B,   TypeBool)
+    Operator(TokenKind.ASR,     TypeInt,   TypeInt, BinOp.ASR_I,  TypeInt)
 )

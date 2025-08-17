@@ -518,5 +518,375 @@ class ExecuteTest {
         runTest(prog, expected)
     }
 
+    @Test
+    fun constArrayBasic() {
+        val prog = """
+        extern fun print(i:Int)
+        extern fun print(c:Char)
+        extern fun print(s:String)
+
+        fun main()
+            val arr = const ["apple", "banana", "cherry"]
+            for i in arr
+                print(i)
+                print('\n')
+        """.trimIndent()
+
+        val expected = """
+            apple
+            banana
+            cherry
+
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun constArrayIndexing() {
+        val prog = """
+            extern fun print(i:String)
+            extern fun print(c:Char)
+            
+            fun main()
+                val arr = const ["apple", "banana", "cherry"]
+                print(arr[0])   # apple
+                print('\n')
+                print(arr[2])   # cherry
+                print('\n')
+        """.trimIndent()
+
+        val expected = """
+            apple
+            cherry
+            
+        """.trimIndent()
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun nestedConstArray() {
+        val prog = """
+            extern fun print(i:String)
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+            
+            fun main()
+                val nested = const [
+                    const [1, 2],
+                    const [3, 4] ]
+                for inner in nested
+                    for x in inner
+                        print(x)
+                        print(' ')
+                    print('\n')
+        """.trimIndent()
+
+        val expected = """
+            1 2 
+            3 4 
+
+        """.trimIndent()
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun mixedConstAndNewArrays() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+
+            fun main()
+                val a = const [10, 20, 30]
+                val b = new [40, 50, 60]
+                val combined = new [a[1], b[2]]
+                for x in combined
+                    print(x)
+                    print(' ')
+
+        """.trimIndent()
+
+        val expected = """
+            20 60 
+        """.trimIndent()
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun emptyConstArray() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(s:String)
+
+            fun main()
+                val empty = const Array<Int> []
+                print("size: ")
+                print(empty.length)   # assuming `.length` or equivalent property
+
+        """.trimIndent()
+
+        val expected = """
+            size: 0
+        """.trimIndent()
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun stringCompareIf() {
+        val prog = """
+            extern fun print(s:String)
+            
+            fun main()
+                val fruits = const ["apple", "banana", "cherry"]
+                if fruits[1] = "banana"
+                    print("Yes\n")
+                else
+                    print("No\n")
+        """.trimIndent()
+
+        val expected = """
+            Yes
+            
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun stringCompareBasic() {
+        val prog = """
+            extern fun print(s:String)
+    
+            fun main()
+                val s1 = "apple"
+                val s2 = "banana"
+                if s1 = "apple"
+                    print("Eq1\n")
+                if s2 != "apple"
+                    print("Ne1\n")
+        """.trimIndent()
+
+        val expected = """
+            Eq1
+            Ne1
+            
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun stringCompareOrdering() {
+        val prog = """
+            extern fun print(s:String)
+    
+            fun main()
+                val a = "apple"
+                val b = "banana"
+                if a < b
+                    print("a<b\n")
+                if b > a
+                    print("b>a\n")
+                if a <= "apple"
+                    print("a<=apple\n")
+                if b >= "banana"
+                    print("b>=banana\n")
+        """.trimIndent()
+
+        val expected = """
+            a<b
+            b>a
+            a<=apple
+            b>=banana
+            
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun stringCompareInArrayLoop() {
+        val prog = """
+            extern fun print(s:String)
+    
+            fun main()
+                val fruits = const ["apple", "banana", "cherry"]
+                for f in fruits
+                    if f = "banana"
+                        print("Found banana\n")
+                    else
+                        print("Not banana\n")
+        """.trimIndent()
+
+        val expected = """
+            Not banana
+            Found banana
+            Not banana
+            
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun nestedStringArrayCompare() {
+        val prog = """
+            extern fun print(s:String)
+    
+            fun main()
+                val nested = const [
+                    const ["a", "b"],
+                    const ["c", "d"] ]
+                for inner in nested
+                    for s in inner
+                        if s = "b"
+                            print("b found\n")
+                        else
+                            print(s)
+                            print(" ")
+                    print("\n")
+        """.trimIndent()
+
+        val expected = """
+            a b found
+            
+            c d 
+            
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun stringLengthCompare() {
+        val prog = """
+            extern fun print(s:String)
+            extern fun print(i:Int)
+    
+            fun main()
+                val s1 = "abc"
+                val s2 = "abcd"
+                if s1 < s2
+                    print("Shorter comes first\n")
+                print("Length s1: ")
+                print(s1.length)
+                print("\n")
+                print("Length s2: ")
+                print(s2.length)
+                print("\n")
+        """.trimIndent()
+
+        val expected = """
+            Shorter comes first
+            Length s1: 3
+            Length s2: 4
+            
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun stringCompareEmptyStrings() {
+        val prog = """
+            extern fun print(s:String)
+            
+            fun main()
+                val s1 = ""
+                val s2 = ""
+                val s3 = "a"
+                
+                if s1 = s2
+                    print("Empty equal\n")
+                if s1 != s3
+                    print("Empty not equal to non-empty\n")
+        """.trimIndent()
+
+        val expected = """
+            Empty equal
+            Empty not equal to non-empty
+            
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun stringCompareSpecialChars() {
+        val prog = """
+            extern fun print(s:String)
+            
+            fun main()
+                val s1 = "a\nb"
+                val s2 = "a\nb"
+                val s3 = "a\tb"
+                
+                if s1 = s2
+                    print("Newline match\n")
+                if s1 != s3
+                    print("Different special char\n")
+        """.trimIndent()
+
+        val expected = """
+            Newline match
+            Different special char
+            
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun stringCompareDifferentLengths() {
+        val prog = """
+            extern fun print(s:String)
+            
+            fun main()
+                val s1 = "apple"
+                val s2 = "applesauce"
+                
+                if s1 < s2
+                    print("Shorter prefix comes first\n")
+                if s2 > s1
+                    print("Longer string is greater\n")
+        """.trimIndent()
+
+        val expected = """
+            Shorter prefix comes first
+            Longer string is greater
+            
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun stringCompareArrayEdgeCases() {
+        val prog = """
+            extern fun print(s:String)
+            
+            fun main()
+                val arr = const ["", "a", "ab", "abc", ""]
+                for s in arr
+                    if s = ""
+                        print("Empty string\n")
+                    else
+                        print(s)
+                        print("\n")
+        """.trimIndent()
+
+        val expected = """
+            Empty string
+            a
+            ab
+            abc
+            Empty string
+            
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+
 
 }

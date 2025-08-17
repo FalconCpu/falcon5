@@ -233,7 +233,10 @@ class Parser(val lexer: Lexer) {
         while (currentToken.kind in listOf(LT, GT, LTE, GTE, EQ, NEQ)) {
             val tok = nextToken()
             val right = parseRangeExpr()
-            ret = AstBinaryExpr(tok.location, tok.kind, ret, right)
+            ret = if (tok.kind==EQ || tok.kind==NEQ)
+                AstEqualityExpr(tok.location, tok.kind, ret, right)
+            else
+                AstCompareExpr(tok.location, tok.kind, ret, right)
         }
         return ret
     }

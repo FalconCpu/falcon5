@@ -1,9 +1,18 @@
 import kotlin.math.min
 
-sealed class Value (val type:Type)
+sealed class Value (val type:Type) {
+    abstract fun emitRef(sb:StringBuilder)
+}
 
 class IntValue(val value: Int, type:Type) : Value(type) {
     override fun toString(): String = "IntValue:$value"
+
+    override fun emitRef(sb:StringBuilder) {
+        if (type is TypeChar)
+            sb.append("dcb $value\n")
+        else
+            sb.append("dcw $value\n")
+    }
 }
 
 
@@ -25,6 +34,9 @@ class StringValue private constructor(val value: String, val index:Int) : Value(
         sb.append("\n")
     }
 
+    override fun emitRef(sb: StringBuilder) {
+        sb.append("dcw STRING$index\n")
+    }
 
     companion object {
         val allStrings = mutableMapOf<String, StringValue>()
@@ -39,9 +51,38 @@ class StringValue private constructor(val value: String, val index:Int) : Value(
     }
 }
 
+class ArrayValue private constructor (val elements: List<Value>, val index:Int, type:Type) : Value(type) {
+    override fun toString(): String = "ARRAY$index"
+
+    override fun emitRef(sb: StringBuilder) {
+        sb.append("dcw ARRAY$index\n")
+    }
+
+    fun emit(sb: StringBuilder) {
+        sb.append("dcw ${elements.size}\n")  // Size of the array
+        sb.append("ARRAY$index:\n")
+        for (element in elements)
+            element.emitRef(sb)
+        sb.append("\n")
+    }
+
+    companion object {
+        val allArrays = mutableMapOf<List<Value>, ArrayValue>()
+
+        fun create(elements:List<Value>, type:Type): ArrayValue = allArrays.getOrPut(elements) {
+            ArrayValue(elements, allArrays.size, type)
+        }
+
+        fun clear() {
+            allArrays.clear()
+        }
+    }
+}
+
 
 fun emitAllValues(sb: StringBuilder) {
-    for (str in StringValue.allStrings.values) {
+    for (str in StringValue.allStrings.values)
         str.emit(sb)
-    }
+    for (arr in ArrayValue.allArrays.values)
+        arr.emit(sb)
 }

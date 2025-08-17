@@ -36,11 +36,11 @@ class TypeCheckTest {
             . . . . . . TctConstant type=Bool value=IntValue:1
             . . . . . TctConstant type=Bool value=IntValue:0
             . . . TctVarDeclStmt sym=e
-            . . . . TctBinaryExpr op=LT_I type=Bool
+            . . . . TctIntCompareExpr op=LT_I type=Bool
             . . . . . TctVariable sym=a type=Int
             . . . . . TctConstant type=Int value=IntValue:10
             . . . TctVarDeclStmt sym=f
-            . . . . TctBinaryExpr op=GT_S type=Bool
+            . . . . TctStringCompareExpr op=GT_I type=Bool
             . . . . . TctVariable sym=s type=String
             . . . . . TctConstant type=String value=STRING0
 
@@ -58,7 +58,7 @@ class TypeCheckTest {
 
         val expected = """
             input.fpl:2.15-2.15:  Invalid operator '+' for types 'Int' and 'String'
-            input.fpl:3.15-3.15:  Invalid operator '>' for types 'String' and 'Int'
+            input.fpl:3.15-3.15:  Cannot compare types 'String' and 'Int'
         """.trimIndent()
         runTest(prog, expected)
     }
@@ -126,7 +126,7 @@ class TypeCheckTest {
             . . . . . TctBinaryExpr op=ADD_I type=Int
             . . . . . . TctVariable sym=index type=Int
             . . . . . . TctConstant type=Int value=IntValue:1
-            . . . . TctBinaryExpr op=LT_I type=Bool
+            . . . . TctIntCompareExpr op=LT_I type=Bool
             . . . . . TctVariable sym=index type=Int
             . . . . . TctMemberExpr member=length type=Int
             . . . . . . TctVariable sym=a type=Array<Int>

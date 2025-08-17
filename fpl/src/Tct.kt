@@ -13,6 +13,8 @@ class TctVariable(location: Location, val sym:VarSymbol, type:Type) : TctExpr(lo
 class TctFunctionName(location: Location, val sym: FunctionSymbol) : TctExpr(location, TypeNothing)
 class TctTypeName(location: Location, val sym: TypeNameSymbol) : TctExpr(location, sym.type)
 class TctBinaryExpr(location: Location, val op: BinOp, val lhs: TctExpr, val rhs: TctExpr, type:Type) : TctExpr(location, type)
+class TctIntCompareExpr(location: Location, val op: BinOp, val lhs: TctExpr, val rhs: TctExpr) : TctExpr(location, TypeBool)
+class TctStringCompareExpr(location: Location, val op: BinOp, val lhs: TctExpr, val rhs: TctExpr) : TctExpr(location, TypeBool)
 class TctAndExpr(location: Location, val lhs: TctExpr, val rhs: TctExpr) : TctExpr(location, TypeBool)
 class TctOrExpr(location: Location, val lhs: TctExpr, val rhs: TctExpr) : TctExpr(location, TypeBool)
 class TctReturnExpr(location: Location, val expr: TctExpr?) : TctExpr(location, TypeNothing)

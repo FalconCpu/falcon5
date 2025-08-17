@@ -14,6 +14,7 @@ fun TctExpr.codeGenRvalue() : Reg {
             when (value) {
                 is IntValue -> currentFunc.addLdImm(value.value)
                 is StringValue -> currentFunc.addLea(value)
+                is ArrayValue -> currentFunc.addLea(value)
             }
         }
 
@@ -117,9 +118,38 @@ fun TctExpr.codeGenRvalue() : Reg {
             currentFunc.addJump(continueStack.last())
             zeroReg
         }
+
+        is TctIntCompareExpr -> {
+            val lhsReg = lhs.codeGenRvalue()
+            val rhsReg = rhs.codeGenRvalue()
+            currentFunc.addAlu(op, lhsReg, rhsReg)
+        }
+
         is TctNegateExpr -> TODO()
         is TctLambdaExpr -> TODO()
         is TctRangeExpr -> TODO()
+
+        is TctStringCompareExpr -> {
+            val lhsReg = lhs.codeGenRvalue()
+            val rhsReg = rhs.codeGenRvalue()
+            currentFunc.addMov(cpuRegs[1], lhsReg)
+            currentFunc.addMov(cpuRegs[2], rhsReg)
+            when(op) {
+                BinOp.EQ_I -> {
+                    currentFunc.addCall(Stdlib.strequal)
+                    currentFunc.addCopy(cpuRegs[8])
+                }
+                BinOp.NE_I -> {
+                    currentFunc.addCall(Stdlib.strequal)
+                    currentFunc.addAlu(BinOp.LTU_I, cpuRegs[8], 1) // Not equal if result is 0
+                }
+                BinOp.LT_I, BinOp.LE_I, BinOp.GT_I, BinOp.GE_I -> {
+                    currentFunc.addCall(Stdlib.strcmp)
+                    currentFunc.addAlu(op, cpuRegs[8], zeroReg) // Compare result with 0
+                }
+                else -> error("Invalid string comparison operator '$op'")
+            }
+        }
     }
 }
 
@@ -179,16 +209,35 @@ private fun allocateArray(sizeExpr:TctExpr, elementType:Type, arena:Arena, initi
 
 fun TctExpr.codeGenBool(trueLabel: Label, falseLabel: Label) {
     when (this) {
-        is TctBinaryExpr -> {
-            if (op.isCompare()) {
-                val lhsReg = lhs.codeGenRvalue()
-                val rhsReg = rhs.codeGenRvalue()
-                currentFunc.addBranch(op, lhsReg, rhsReg, trueLabel)
-                currentFunc.addJump(falseLabel)
-            } else {
-                val reg = codeGenRvalue()
-                currentFunc.addBranch(BinOp.EQ_I, reg, zeroReg, falseLabel)
-                currentFunc.addJump(trueLabel)
+        is TctIntCompareExpr -> {
+            val lhsReg = lhs.codeGenRvalue()
+            val rhsReg = rhs.codeGenRvalue()
+            currentFunc.addBranch(op, lhsReg, rhsReg, trueLabel)
+            currentFunc.addJump(falseLabel)
+        }
+
+        is TctStringCompareExpr -> {
+            val lhsReg = lhs.codeGenRvalue()
+            val rhsReg = rhs.codeGenRvalue()
+            currentFunc.addMov(cpuRegs[1], lhsReg)
+            currentFunc.addMov(cpuRegs[2], rhsReg)
+            when(op) {
+                BinOp.EQ_I -> {
+                    currentFunc.addCall(Stdlib.strequal)
+                    currentFunc.addBranch(BinOp.NE_I, cpuRegs[8], zeroReg, trueLabel)
+                    currentFunc.addJump(falseLabel)
+                }
+                BinOp.NE_I -> {
+                    currentFunc.addCall(Stdlib.strequal)
+                    currentFunc.addBranch(BinOp.EQ_I, cpuRegs[8], zeroReg, trueLabel)
+                    currentFunc.addJump(falseLabel)
+                }
+                BinOp.LT_I, BinOp.LE_I, BinOp.GT_I, BinOp.GE_I -> {
+                    currentFunc.addCall(Stdlib.strcmp)
+                    currentFunc.addBranch(op, cpuRegs[8], zeroReg, trueLabel)
+                    currentFunc.addJump(falseLabel)
+                }
+                else -> Log.error(location, "Invalid string comparison operator '$op'")
             }
         }
 
@@ -215,7 +264,6 @@ fun TctExpr.codeGenBool(trueLabel: Label, falseLabel: Label) {
             currentFunc.addBranch(BinOp.EQ_I, reg, zeroReg, falseLabel)
             currentFunc.addJump(trueLabel)
         }
-
     }
 }
 
