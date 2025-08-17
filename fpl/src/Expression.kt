@@ -18,6 +18,7 @@ enum class BinOp {
     LSL_I,
     LSR_I,
     ASR_I,
+    LTU_I,    // Less than unsigned
 
     // String Operations
     LT_S,

@@ -30,8 +30,8 @@ class TypeCheckTest {
             . . . . . . TctVariable sym=a type=Int
             . . . . . . TctConstant type=Int value=IntValue:2
             . . . TctVarDeclStmt sym=d
-            . . . . TctBinaryExpr op=OR_B type=Bool
-            . . . . . TctBinaryExpr op=AND_B type=Bool
+            . . . . TctOrExpr type=Bool
+            . . . . . TctAndExpr type=Bool
             . . . . . . TctVariable sym=flag type=Bool
             . . . . . . TctConstant type=Bool value=IntValue:1
             . . . . . TctConstant type=Bool value=IntValue:0
@@ -315,4 +315,84 @@ class TypeCheckTest {
 
         runTest(prog, expected)
     }
+
+    @Test
+    fun andTypeError() {
+        val prog = """
+        fun main()
+            if "foo" and true
+                return
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:2.8-2.12:  Type mismatch got 'String' when expecting 'Bool'
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun orTypeError() {
+        val prog = """
+            fun main()
+                if 1 or 'a'
+                    return
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:2.8-2.8:  Type mismatch got 'Int' when expecting 'Bool'
+            input.fpl:2.13-2.15:  Type mismatch got 'Char' when expecting 'Bool'
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun notTypeError() {
+        val prog = """
+            fun main()
+                if not 123
+                    return
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:2.12-2.14:  Type mismatch got 'Int' when expecting 'Bool'
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun breakOutsideLoop() {
+        val prog = """
+            extern fun print(i:Int)
+    
+            fun main()
+                break
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:4.5-4.9:  Break statement outside of a loop
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun continueOutsideLoop() {
+        val prog = """
+            extern fun print(i:Int)
+    
+            fun main()
+                continue
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:4.5-4.12:  Continue statement outside of a loop
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+
 }

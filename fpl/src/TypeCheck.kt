@@ -1,4 +1,5 @@
 private lateinit var topLevelFunction : Function
+private var currentLoop : AstBlock? = null
 
 // ===========================================================================
 //                          Expressions
@@ -203,7 +204,40 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
             TctRangeExpr(location, tcStart, tcEnd, op, TypeRange.create(tcStart.type))
         }
 
-        is AstNotExpr -> TODO()
+        is AstAndExpr -> {
+            val tctLhs = lhs.typeCheckBoolExpr(scope)
+            val tctRhs = rhs.typeCheckBoolExpr(scope)
+            if (tctLhs.type==TypeError || tctRhs.type==TypeError)
+                return TctErrorExpr(location, "")
+            TctAndExpr(location, tctLhs, tctRhs)
+        }
+
+        is AstNotExpr -> {
+            val tctExpr = expr.typeCheckBoolExpr(scope)
+            if (tctExpr.type is TypeError)
+                return TctErrorExpr(location, "")
+            TctNotExpr(location, tctExpr)
+        }
+
+        is AstOrExpr -> {
+            val tctLhs = lhs.typeCheckBoolExpr(scope)
+            val tctRhs = rhs.typeCheckBoolExpr(scope)
+            if (tctLhs.type==TypeError || tctRhs.type==TypeError)
+                return TctErrorExpr(location, "")
+            TctOrExpr(location, tctLhs, tctRhs)
+        }
+
+        is AstBreakExpr -> {
+            if (currentLoop == null)
+                Log.error(location, "Break statement outside of a loop")
+            TctBreakExpr(location)
+        }
+
+        is AstContinueExpr -> {
+            if (currentLoop == null)
+                Log.error(location, "Continue statement outside of a loop")
+            TctContinueExpr(location)
+        }
     }
 }
 
@@ -270,14 +304,20 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt = when(this) {
     is AstTop -> TctTop(location, topLevelFunction, body.map{ it.typeCheckStmt(this) } )
 
     is AstWhileStmt -> {
+        val oldLoop = currentLoop
+        currentLoop = this
         val tctCondition = condition.typeCheckBoolExpr(scope)
         val tctBody = body.map{ it.typeCheckStmt(this) }
+        currentLoop = oldLoop
         TctWhileStmt(location, tctCondition, tctBody)
     }
 
     is AstRepeatStmt -> {
+        val oldLoop = currentLoop
+        currentLoop = this
         val tctCondition = condition.typeCheckBoolExpr(scope)
         val tctBody = body.map{ it.typeCheckStmt(this) }
+        currentLoop = oldLoop
         TctRepeatStmt(location, tctCondition, tctBody)
     }
 
@@ -300,6 +340,8 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt = when(this) {
     }
 
     is AstForStmt -> {
+        val oldLoop = currentLoop
+        currentLoop = this
         val tcRange = range.typeCheckRvalue(scope)
         val type = indexType?.resolveType(scope) ?:
             when(tcRange.type) {
@@ -313,6 +355,7 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt = when(this) {
         addSymbol(sym)
         val tcBody = body.map { it.typeCheckStmt(this) }
 
+        currentLoop = oldLoop
         if (type==TypeError)
             TctEmptyStmt(location) // Error already reported
         else if (tcRange is TctRangeExpr) {

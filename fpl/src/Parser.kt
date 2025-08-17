@@ -81,6 +81,16 @@ class Parser(val lexer: Lexer) {
         return AstReturnExpr(loc.location, expr)
     }
 
+    private fun parseBreak() : AstBreakExpr {
+        val loc = expect(BREAK)
+        return AstBreakExpr(loc.location)
+    }
+
+    private fun parseContinue() : AstContinueExpr {
+        val loc = expect(CONTINUE)
+        return AstContinueExpr(loc.location)
+    }
+
     private fun parseNew() : AstExpr {
         val arenaTok = nextToken() // Consume NEW / LOCAL / CONST
         val type = if (currentToken.kind!=OPENSQ) parseType() else null
@@ -108,6 +118,8 @@ class Parser(val lexer: Lexer) {
             STRINGLITERAL -> parseStringLit()
             CHARLITERAL -> parseCharLit()
             RETURN -> parseReturn()
+            BREAK -> parseBreak()
+            CONTINUE -> parseContinue()
             OPENB -> parseParentheses()
             NEW, LOCAL, CONST -> parseNew()
             else -> throw ParseError(currentToken.location, "Got '$currentToken' when expecting primary expression")
@@ -231,7 +243,7 @@ class Parser(val lexer: Lexer) {
         while (currentToken.kind == AND) {
             val tok = nextToken()
             val right = parseRelationalExpr()
-            ret = AstBinaryExpr(tok.location, tok.kind, ret, right)
+            ret = AstAndExpr(tok.location, ret, right)
         }
         return ret
     }
@@ -241,7 +253,7 @@ class Parser(val lexer: Lexer) {
         while (currentToken.kind == OR) {
             val tok = nextToken()
             val right = parseAndExpr()
-            ret = AstBinaryExpr(tok.location, tok.kind, ret, right)
+            ret = AstOrExpr(tok.location, ret, right)
         }
         return ret
     }

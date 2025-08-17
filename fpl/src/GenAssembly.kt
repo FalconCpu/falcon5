@@ -24,6 +24,7 @@ private fun InstrAlu.genAssembly() : String = when(op) {
     BinOp.LSL_I -> "lsl $dest, $src1, $src2"
     BinOp.LSR_I -> "lsr $dest, $src1, $src2"
     BinOp.ASR_I -> "asr $dest, $src1, $src2"
+    BinOp.LTU_I -> "cltu $dest, $src1, $src2"
     BinOp.EQ_S,
     BinOp.NE_S,
     BinOp.LT_S,
@@ -53,6 +54,7 @@ private fun InstrAluLit.genAssembly() : String = when(op) {
     BinOp.LSL_I -> "lsl $dest, $src, $lit"
     BinOp.LSR_I -> "lsr $dest, $src, $lit"
     BinOp.ASR_I -> "asr $dest, $src, $lit"
+    BinOp.LTU_I -> "cltu $dest, $src, $lit"
     BinOp.EQ_S,
     BinOp.NE_S,
     BinOp.LT_S,

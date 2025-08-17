@@ -346,7 +346,177 @@ class ExecuteTest {
     }
 
 
+    @Test
+    fun andOrTest() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+            extern fun print(s:String)
+            
+            fun main()
+                for x in 0.. 10
+                    print(x)
+                    print(' ')
+                    if x >= 5 and x <= 8
+                        print("middle\n")
+                    elsif x=4 or x=9
+                        print("edge\n")
+                    else
+                        print("out\n")
+        """.trimIndent()
 
+        val expected = """
+            0 out
+            1 out
+            2 out
+            3 out
+            4 edge
+            5 middle
+            6 middle
+            7 middle
+            8 middle
+            9 edge
+            10 out
+
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun breakContinueTest() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+            extern fun print(s:String)
+            
+            fun main()
+                for i in 0..10
+                    if i = 2
+                        continue
+                    if i = 8
+                        break
+                    print(i)
+                    print(' ')            
+        """.trimIndent()
+
+        val expected = """
+            0 1 3 4 5 6 7 
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun whileBreakContinue() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+    
+            fun main()
+                var x = 0
+                while x < 10
+                    x = x + 1
+                    if x = 3
+                        continue
+                    if x = 5
+                        break
+                    print(x)
+                    print('\n')
+        """.trimIndent()
+
+        val expected = """
+            1
+            2
+            4
+            
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun repeatBreakContinue() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+    
+            fun main()
+                var x = 0
+                repeat
+                    x = x + 1
+                    if x = 2
+                        continue
+                    if x = 4
+                        break
+                    print(x)
+                    print('\n')
+                until x >= 5
+        """.trimIndent()
+
+        val expected = """
+            1
+            3
+            
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun forArrayBreakContinue() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+    
+            fun main()
+                val arr = new [1,2,3,4,5]
+                for x in arr
+                    if x = 2
+                        continue
+                    if x = 4
+                        break
+                    print(x)
+                    print('\n')
+        """.trimIndent()
+
+        val expected = """
+            1
+            3
+            
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun nestedLoopBreakContinue() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+    
+            fun main()
+                for i in 1..3
+                    for j in 1..3
+                        if j = 2
+                            continue
+                        if j = 3
+                            break
+                        print(i)
+                        print(' ')
+                        print(j)
+                        print('\n')
+        """.trimIndent()
+
+        val expected = """
+            1 1
+            2 1
+            3 1
+            
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
 
 
 }

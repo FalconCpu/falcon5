@@ -1,4 +1,6 @@
 lateinit var currentFunc : Function
+private var breakStack = mutableListOf<Label>()
+private var continueStack = mutableListOf<Label>()
 
 // ======================================================================
 //                         Expressions
@@ -74,8 +76,48 @@ fun TctExpr.codeGenRvalue() : Reg {
             ret
         }
 
+        is TctAndExpr -> {
+            val result = currentFunc.newUserTemp()
+            val labelEnd = currentFunc.newLabel()
+
+            val lhsReg = lhs.codeGenRvalue()
+            currentFunc.addMov(result, lhsReg)
+            currentFunc.addBranch(BinOp.EQ_I, result, zeroReg, labelEnd)
+
+            val rhsReg = rhs.codeGenRvalue()
+            currentFunc.addMov(result, rhsReg)
+            currentFunc.addLabel(labelEnd)
+            result
+        }
+
+        is TctOrExpr -> {
+            val result = currentFunc.newUserTemp()
+            val labelEnd = currentFunc.newLabel()
+
+            val lhsReg = lhs.codeGenRvalue()
+            currentFunc.addMov(result, lhsReg)
+            currentFunc.addBranch(BinOp.NE_I, result, zeroReg, labelEnd)
+
+            val rhsReg = rhs.codeGenRvalue()
+            currentFunc.addMov(result, rhsReg)
+            currentFunc.addLabel(labelEnd)
+            result
+        }
+
+        is TctNotExpr -> {
+            val reg = expr.codeGenRvalue()
+            currentFunc.addAlu(BinOp.LTU_I, reg, 1) // Unsigned less than 1 gives 0 for false, 1 for true
+        }
+
+        is TctBreakExpr -> {
+            currentFunc.addJump(breakStack.last())
+            zeroReg  // Dummy return value
+        }
+        is TctContinueExpr -> {
+            currentFunc.addJump(continueStack.last())
+            zeroReg
+        }
         is TctNegateExpr -> TODO()
-        is TctNotExpr -> TODO()
         is TctLambdaExpr -> TODO()
         is TctRangeExpr -> TODO()
     }
@@ -149,11 +191,31 @@ fun TctExpr.codeGenBool(trueLabel: Label, falseLabel: Label) {
                 currentFunc.addJump(trueLabel)
             }
         }
+
+        is TctNotExpr -> {
+            expr.codeGenBool(falseLabel, trueLabel)
+        }
+
+        is TctAndExpr -> {
+            val labelMid = currentFunc.newLabel()
+            lhs.codeGenBool(labelMid, falseLabel)
+            currentFunc.addLabel(labelMid)
+            rhs.codeGenBool(trueLabel, falseLabel)
+        }
+
+        is TctOrExpr -> {
+            val labelMid = currentFunc.newLabel()
+            lhs.codeGenBool(trueLabel, labelMid)
+            currentFunc.addLabel(labelMid)
+            rhs.codeGenBool(trueLabel, falseLabel)
+        }
+
         else -> {
             val reg = codeGenRvalue()
             currentFunc.addBranch(BinOp.EQ_I, reg, zeroReg, falseLabel)
             currentFunc.addJump(trueLabel)
         }
+
     }
 }
 
@@ -258,6 +320,8 @@ fun TctStmt.codeGenStmt() {
             val startLabel = currentFunc.newLabel()
             val endLabel = currentFunc.newLabel()
             val condLabel = currentFunc.newLabel()
+            continueStack.add(condLabel)
+            breakStack.add(endLabel)
             currentFunc.addJump(condLabel)
             currentFunc.addLabel(startLabel)
             for(stmt in body)
@@ -265,18 +329,24 @@ fun TctStmt.codeGenStmt() {
             currentFunc.addLabel(condLabel)
             condition.codeGenBool(startLabel, endLabel)
             currentFunc.addLabel(endLabel)
+            continueStack.removeAt(continueStack.lastIndex)
+            breakStack.removeAt(breakStack.lastIndex)
         }
 
         is TctRepeatStmt -> {
             val startLabel = currentFunc.newLabel()
             val endLabel = currentFunc.newLabel()
             val condLabel = currentFunc.newLabel()
+            continueStack.add(startLabel)
+            breakStack.add(endLabel)
             currentFunc.addLabel(startLabel)
             for(stmt in body)
                 stmt.codeGenStmt()
             currentFunc.addLabel(condLabel)
             condition.codeGenBool(endLabel, startLabel)
             currentFunc.addLabel(endLabel)
+            continueStack.removeAt(continueStack.lastIndex)
+            breakStack.removeAt(breakStack.lastIndex)
         }
 
         is TctAssignStmt -> {
@@ -315,14 +385,18 @@ fun TctStmt.codeGenStmt() {
             val labelStart = currentFunc.newLabel()
             val labelEnd = currentFunc.newLabel()
             val labelCond = currentFunc.newLabel()
+            val labelCont = currentFunc.newLabel()
             val endReg = range.end.codeGenRvalue()
             val symReg = currentFunc.getReg(index)
             val startReg = range.start.codeGenRvalue()
+            continueStack.add(labelCont)
+            breakStack.add(labelEnd)
             currentFunc.addMov(symReg, startReg)
             currentFunc.addJump(labelCond)
             currentFunc.addLabel(labelStart)
             for (stmt in body)
                 stmt.codeGenStmt()
+            currentFunc.addLabel(labelCont)
             val inc = when (range.op) {
                 BinOp.LT_I, BinOp.LE_I  -> 1
                 else -> -1
@@ -332,12 +406,15 @@ fun TctStmt.codeGenStmt() {
             currentFunc.addLabel(labelCond)
             currentFunc.addBranch(range.op, symReg, endReg, labelStart)
             currentFunc.addLabel(labelEnd)
+            continueStack.removeAt(continueStack.lastIndex)
+            breakStack.removeAt(breakStack.lastIndex)
         }
 
         is TctForArrayStmt -> {
             val labelStart = currentFunc.newLabel()
             val labelEnd = currentFunc.newLabel()
             val labelCond = currentFunc.newLabel()
+            val labelCont = currentFunc.newLabel()
             val arrayStart = array.codeGenRvalue()
             val arraySize = currentFunc.addLoad(arrayStart,lengthSymbol)
             val elementSize = (array.type as TypeArray).elementType.getSize()
@@ -346,17 +423,22 @@ fun TctStmt.codeGenStmt() {
             val ptrReg = currentFunc.newUserTemp()
             currentFunc.addMov(ptrReg, arrayStart)
             val symReg = currentFunc.getReg(index)
+            continueStack.add(labelCont)
+            breakStack.add(labelEnd)
             currentFunc.addJump(labelCond)
             currentFunc.addLabel(labelStart)
             val v = currentFunc.addLoad(elementSize, ptrReg, 0)
             currentFunc.addMov(symReg, v)
             for (stmt in body)
                 stmt.codeGenStmt()
+            currentFunc.addLabel(labelCont)
             val nextPtr = currentFunc.addAlu(BinOp.ADD_I, ptrReg, elementSize)
             currentFunc.addMov(ptrReg, nextPtr)
             currentFunc.addLabel(labelCond)
             currentFunc.addBranch(BinOp.LT_I, ptrReg, endReg, labelStart)
             currentFunc.addLabel(labelEnd)
+            continueStack.removeAt(continueStack.lastIndex)
+            breakStack.removeAt(breakStack.lastIndex)
         }
     }
 }
