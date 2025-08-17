@@ -10,11 +10,13 @@ And/Or/Not operators
 break and continue statements
 const arrays
 String Operations
+Classes
 
 
 Short Term:
-Classes
-Constructs and destructors
+Null pointer
+Methods
+Destructors
 Function pointers
 varargs functions
 when statement

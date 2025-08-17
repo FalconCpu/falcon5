@@ -2,6 +2,14 @@ import kotlin.math.min
 
 sealed class Value (val type:Type) {
     abstract fun emitRef(sb:StringBuilder)
+
+    companion object {
+        fun clear() {
+            StringValue.clear()
+            ArrayValue.clear()
+            ClassValue.allClasses.clear()
+        }
+    }
 }
 
 class IntValue(val value: Int, type:Type) : Value(type) {
@@ -79,10 +87,38 @@ class ArrayValue private constructor (val elements: List<Value>, val index:Int, 
     }
 }
 
+class ClassValue private constructor(val klass: TypeClass) : Value(klass) {
+    override fun toString(): String = "${klass.name}/DESCRIPTOR"
+
+    override fun emitRef(sb: StringBuilder) {
+        sb.append("dcw ${klass.instanceSize}\n")  // Size of the class instance
+        sb.append("dcb ${klass.name}\n")          // Class name
+    }
+
+    fun emit(sb: StringBuilder) {
+        sb.append("$klass/DESCRIPTOR:\n")
+        sb.append("dcw ${klass.instanceSize}\n")  // Size of the class instance
+        sb.append("\n")
+    }
+
+    companion object {
+        val allClasses = mutableListOf<ClassValue>()
+
+        fun create(klass: TypeClass): ClassValue {
+            val ret = ClassValue(klass)
+            allClasses += ret
+            return ret
+        }
+    }
+}
+
+
 
 fun emitAllValues(sb: StringBuilder) {
     for (str in StringValue.allStrings.values)
         str.emit(sb)
     for (arr in ArrayValue.allArrays.values)
         arr.emit(sb)
+    for (cls in ClassValue.allClasses)
+        cls.emit(sb)
 }

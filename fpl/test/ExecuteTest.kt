@@ -887,6 +887,155 @@ class ExecuteTest {
         runTest(prog, expected)
     }
 
+    @Test
+    fun basicClass() {
+        val prog = """
+            extern fun print(s:String)
+            extern fun print(i:Int)
+            
+            class Cat(val name:String, val age:Int)
+            
+            fun main()
+                val kitty = new Cat("Whiskers", 3)
+                print("Cat name: ")
+                print(kitty.name)
+                print("\n")
+                print("Cat age: ")
+                print(kitty.age)
+                print("\n")
+        """.trimIndent()
 
+        val expected = """
+            Cat name: Whiskers
+            Cat age: 3
+
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun classWithMixedFields() {
+        val prog = """
+            extern fun print(s:String)
+            extern fun print(i:Int)
+            extern fun print(b:Bool)
+    
+            class Dog(val name:String, val age:Int, val vaccinated:Bool)
+    
+            fun main()
+                val d = new Dog("Fido", 5, true)
+                print(d.name)
+                print("\n")
+                print(d.age)
+                print("\n")
+                print(d.vaccinated)
+                print("\n")
+        """.trimIndent()
+
+        val expected = """
+            Fido
+            5
+            true
+        
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun classWithNoFields() {
+        val prog = """
+        extern fun print(s:String)
+
+        class Empty()
+
+        fun main()
+            val e = new Empty()
+            print("Made an empty class\n")
+    """.trimIndent()
+
+        val expected = """
+        Made an empty class
+        
+    """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun classWithBodyDeclaredFields() {
+        val prog = """
+        extern fun print(s:String)
+        extern fun print(i:Int)
+
+        class Point
+            val x = 1
+            val y = 2
+
+        fun main()
+            val p = new Point()
+            print(p.x)
+            print(",")
+            print(p.y)
+            print("\n")
+    """.trimIndent()
+
+        val expected = """
+        1,2
+        
+    """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun fieldInitializerRefersToConstructorParam() {
+        val prog = """
+            extern fun print(s:String)
+            extern fun print(i:Int)
+    
+            class Person(ageInYears:Int)
+                val ageInMonths = ageInYears * 12
+    
+            fun main()
+                val p = new Person(5)
+                print(p.ageInMonths)
+                print("\n")
+        """.trimIndent()
+
+        val expected = """
+            60
+        
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun multipleObjects() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(s:String)
+    
+            class Counter(val start:Int)
+                var value = start
+    
+            fun main()
+                val c1 = new Counter(10)
+                val c2 = new Counter(20)
+                print(c1.value)
+                print(" ")
+                print(c2.value)
+                print("\n")
+        """.trimIndent()
+
+        val expected = """
+            10 20
+            
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
 
 }

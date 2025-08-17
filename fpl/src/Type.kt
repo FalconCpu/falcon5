@@ -32,6 +32,26 @@ class TypeRange private constructor(val elementType:Type) : Type("Range<$element
     }
 }
 
+val allClasses = mutableListOf<TypeClass>()
+class TypeClass(name:String) : Type(name) {
+    val fields = mutableListOf<FieldSymbol>()
+    lateinit var constructor : Function
+    var instanceSize = 0
+    val descriptor = ClassValue.create(this)
+
+    fun addField(field: FieldSymbol) {
+        // TODO - think about padding
+        field.offset = instanceSize
+        instanceSize += field.type.getSize()
+        fields += field
+    }
+
+    fun lookup(name:String) : FieldSymbol? {
+        return fields.firstOrNull { it.name == name }
+    }
+
+}
+
 
 
 
@@ -70,4 +90,5 @@ fun Type.getSize(): Int = when (this) {
     TypeAny -> 0
     TypeError -> 0
     TypeNothing -> 0
+    is TypeClass -> 4
 }

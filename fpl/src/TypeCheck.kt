@@ -128,6 +128,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
                     else
                         TctMemberExpr(location, tctExpr, lengthSymbol, TypeInt)
                 }
+
                 is TypeString -> {
                     if (memberName != "length")
                         TctErrorExpr(location, "String has no member '${memberName}'")
@@ -135,6 +136,13 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
                         TctMemberExpr(location, tctExpr, lengthSymbol, TypeInt)
                 }
 
+                is TypeClass -> {
+                    val field = tctExpr.type.lookup(memberName)
+                    if (field != null) {
+                        TctMemberExpr(location, tctExpr, field, field.type)
+                    } else
+                        TctErrorExpr(location, "Class '${tctExpr.type.name}' has no member '${memberName}'")
+                }
 
                 else -> TctErrorExpr(location, "Cannot access member '${memberName}' of type '${tctExpr.type}'")
             }
@@ -159,6 +167,15 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
                     tcLambda?.checkType(type.elementType)
                     val arrayType = TypeArray.create(type.elementType)
                     return TctNewArrayExpr(location, type, size, arena, tcLambda, arrayType)
+                }
+
+                is TypeClass -> {
+                    if (!type.constructor.isCallableWithArgs(tcArgs)) {
+                        val argsStr = tcArgs.joinToString(",") { it.type.name }
+                        val paramStr = type.constructor.parameters.joinToString(",") { it.type.name }
+                        return TctErrorExpr(location,"Constructor '$type' called with ($argsStr) when expecting ($paramStr)")
+                    }
+                    TctNewClassExpr(location, type, tcArgs, arena, type)
                 }
 
                 else -> return TctErrorExpr(location, "Cannot create new instance of type '${type.name}'")
@@ -420,6 +437,10 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt = when(this) {
             TODO()
     }
 
+    is AstClassDefStmt -> {
+        TctClassDefStmt(location, klass, initializers)
+    }
+
     is AstLambdaExpr -> error("Lambda expressions should not be type checked here, they should be handled in the expression type checking phase")
 }
 
@@ -452,6 +473,10 @@ private fun AstType.resolveType(scope:AstBlock) : Type {
 
 private fun AstBlock.setParent(parent: AstBlock?) {
     this.parent = parent
+
+    if (this is AstClassDefStmt)
+        constructorScope.parent = this
+
     for(blk in body.filterIsInstance<AstBlock>())
         blk.setParent(this)
 }
@@ -462,33 +487,110 @@ private fun AstParameter.createSymbol(scope:AstBlock) : VarSymbol {
 }
 
 
+// Find class definitions
+private fun AstBlock.findClassDefinitions(scope:AstBlock) {
+    if (this is AstClassDefStmt) {
+        klass = TypeClass(name)
+        val sym = TypeNameSymbol(location, name, klass)
+        scope.addSymbol(sym)
+    }
+
+    // Walk the tree
+    for (stmt in body.filterIsInstance<AstBlock>())
+        stmt.findClassDefinitions(this)
+}
+
 // Build the Function Nodes
 private fun AstBlock.findFunctionDefinitions(scope:AstBlock) {
-    if (this is AstFunctionDefStmt) {
-        val paramsSymbols = params.map { it.createSymbol(this) }
-        val returnType = retType?.resolveType(this) ?: TypeUnit
-        val longName = name + paramsSymbols.joinToString(separator = ",", prefix = "(", postfix = ")") { it.type.name }
-        function = Function(location, longName, paramsSymbols, returnType, isExtern)
-        for(sym in paramsSymbols)
-            addSymbol(sym)
-        scope.addFunctionOverload(location, name, function)
+    when (this) {
+        is AstFunctionDefStmt -> {
+            val paramsSymbols = params.map { it.createSymbol(this) }
+            val returnType = retType?.resolveType(this) ?: TypeUnit
+            val longName =
+                name + paramsSymbols.joinToString(separator = ",", prefix = "(", postfix = ")") { it.type.name }
+            val thisSym = if (scope is AstClassDefStmt) VarSymbol(location, "this", scope.klass, false) else null
+            function = Function(location, longName, thisSym, paramsSymbols, returnType, isExtern)
+            for (sym in paramsSymbols)
+                addSymbol(sym)
+            if (thisSym != null)
+                addSymbol(thisSym)
+            scope.addFunctionOverload(location, name, function)
+        }
 
-    } else {
-        for(blk in body.filterIsInstance<AstBlock>())
-            blk.findFunctionDefinitions(this)
+        is AstClassDefStmt -> {
+            // Create the constructor function
+            val paramsSymbols = constructorParams.map { it.createSymbol(this) }
+            val longName = "$name/constructor"
+            val thisSym = VarSymbol(location, "this", klass, false)
+            klass.constructor = Function(location, longName, thisSym, paramsSymbols, TypeUnit, false)
+            for (sym in paramsSymbols)
+                constructorScope.addSymbol(sym)
+        }
+
+        else -> {}
     }
+    for (blk in body.filterIsInstance<AstBlock>())
+        blk.findFunctionDefinitions(this)
+}
+
+private fun AstBlock.findClassFields(scope:AstBlock) {
+    if (this is AstClassDefStmt) {
+        // Constructor parameters could be marked val or var -> in which case they are fields as well
+        for((index,param) in constructorParams.withIndex()) {
+            if (param.kind != TokenKind.EOF) {
+                val mutable = param.kind == TokenKind.VAR
+                val paramSym = klass.constructor.parameters[index]
+                val sym = FieldSymbol(param.location, param.name, paramSym.type, mutable)
+                addSymbol(sym)
+                klass.addField(sym)
+
+                // Create an initializer for the field
+                val paramExpr = TctVariable(param.location, paramSym, paramSym.type)
+                paramExpr.checkType(sym.type)
+                initializers += TctFieldInitializer(sym, paramExpr)
+            }
+        }
+
+        // Find all the fields in the class body
+        for (stmt in body.filterIsInstance<AstVarDeclStmt>()) {
+            val init = stmt.initializer?.typeCheckRvalue(constructorScope)
+            val type = stmt.astType?.resolveType(this) ?:
+                       init?.type ?:
+                       reportTypeError(stmt.location, "Cannot determine type for '${stmt.name}'")
+            val sym = FieldSymbol(stmt.location, stmt.name, type, stmt.mutable)
+            addSymbol(sym)
+            klass.addField(sym)
+            if (init!=null) {
+                init.checkType(type)
+                initializers += TctFieldInitializer(sym, init)
+            }
+        }
+    }
+
+    // Walk the tree
+    for (blk in body.filterIsInstance<AstBlock>())
+        blk.findClassFields(this)
 }
 
 
 fun AstTop.typeCheck() : TctTop {
-    topLevelFunction = Function(location, "topLevel", emptyList(), TypeUnit, false)
+    topLevelFunction = Function(location, "topLevel", null, emptyList(), TypeUnit, false)
 
-    // Walk the AST, setting each node's parent
+    // Make multiple passes over the AST to resolve types and symbols
+
+    // First Walk the AST, setting each node's parent
     setParent(null)
 
-    // Find all function declarations
+    // Then again to Find all the class definitions
+    findClassDefinitions(this)
+
+    // And find all function declarations
     findFunctionDefinitions(this)
 
+    // find all Class fields
+    findClassFields(this)
+
+    // And finally, type check all the statements
     val ret = typeCheckStmt(this)
     return ret as TctTop
 }

@@ -3,6 +3,7 @@ val allFunctions = mutableListOf<Function>()
 class Function (
     val location: Location,
     val name: String,
+    val thisSymbol : VarSymbol?,      // This is null for static functions
     val parameters: List<VarSymbol>,
     val returnType : Type,
     val isExtern: Boolean

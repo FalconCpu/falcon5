@@ -50,6 +50,20 @@ class AstFunctionDefStmt(
     lateinit var function : Function
 }
 
+class AstClassDefStmt(
+    location: Location,
+    val name: String,
+    val parentClass: AstTypeIdentifier?,
+    val constructorParams: List<AstParameter>,
+    body: List<AstStmt>
+) : AstBlock(location, body) {
+    lateinit var klass: TypeClass
+    // Create a dummy AstFunction, to store constructor parameters separately from the class body
+    val constructorScope = AstFunctionDefStmt(location,name,emptyList(),null, emptyList(), false)
+    // Initializers get identified before the main class body is type checked - so we need to store them separately
+    val initializers = mutableListOf<TctFieldInitializer>()
+}
+
 class AstWhileStmt(location: Location, val condition: AstExpr, body: List<AstStmt>) : AstBlock(location, body)
 class AstRepeatStmt(location: Location, val condition: AstExpr, body: List<AstStmt>) : AstBlock(location, body)
 class AstIfClause(location:Location, val condition:AstExpr?, body: List<AstStmt>) : AstBlock(location, body)
@@ -66,7 +80,7 @@ class AstArrayType(location: Location, val elementType: AstType) : AstType(locat
 class AstTypeIdentifier(location: Location, val name: String) : AstType(location)
 
 // Other nodes
-class AstParameter(location: Location, val name: String, val type: AstType) : Ast(location)
+class AstParameter(location: Location, val kind:TokenKind, val name: String, val type: AstType) : Ast(location)
 
 enum class Arena {
     STACK, HEAP, CONST

@@ -85,6 +85,35 @@ ret
     stw $1, $7[HWREGS_UART_TX] # Print the character
     ret
 
+# ==========================================================
+#                     printBoolean
+# ==========================================================
+# $1 = value to print
+
+/print(Bool):
+    ld $7, HWREGS_BASE         # Load base address of hardware registers
+    beq $1, 0, .false          # If value is 0, print "false"
+    ld $2, 't'                # Print the 't' character
+    stw $2, $7[HWREGS_UART_TX]
+    ld $2, 'r'                # Print the 'r' character
+    stw $2, $7[HWREGS_UART_TX]
+    ld $2, 'u'                # Print the 'u' character
+    stw $2, $7[HWREGS_UART_TX]
+    ld $2, 'e'                # Print the 'e' character
+    stw $2, $7[HWREGS_UART_TX]
+    ret
+.false:
+    ld $2, 'f'                # Print the 'f' character
+    stw $2, $7[HWREGS_UART_TX]
+    ld $2, 'a'                # Print the 'a' character
+    stw $2, $7[HWREGS_UART_TX]
+    ld $2, 'l'                # Print the 'l' character
+    stw $2, $7[HWREGS_UART_TX]
+    ld $2, 's'                # Print the 's' character
+    stw $2, $7[HWREGS_UART_TX]
+    ld $2, 'e'                # Print the 'e' character
+    stw $2, $7[HWREGS_UART_TX]
+    ret
 
 # ==========================================================
 #                     initializeMem
@@ -139,6 +168,30 @@ ldw $30, $sp[4]           # Teardown stack frame
 ldw $9, $sp[0]
 add $sp, 8              # Restore stack pointer
 ret
+
+# ==========================================================
+#                     malloc Object
+# ==========================================================
+# $1 = class descriptor
+
+/mallocObject:
+sub $sp, 8                # Allocate space on stack for two variables
+stw $9, $sp[0]
+stw $30, $sp[4]
+ld $9, $1                 # $9 = Class descriptor
+ldw $2, $9[0]             # Load size of class from descriptor
+add $2, 4                 # Add space for header (length prefix)
+jsr malloc                # Call malloc to allocate memory
+beq $8, 0, .end           # Check if malloc failed
+add $8, 4                 # Update pointer to point to first field
+stw $9, $8[-4]            # Store class descriptor at the start of object
+.end:
+ldw $30, $sp[4]           # Teardown stack frame
+ldw $9, $sp[0]
+add $sp, 8              # Restore stack pointer
+ret
+
+
 
 
 # ==========================================================

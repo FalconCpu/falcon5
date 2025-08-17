@@ -394,5 +394,82 @@ class TypeCheckTest {
         runTest(prog, expected)
     }
 
+    @Test
+    fun newWithWrongNumberOfArgs() {
+        val prog = """
+            class Cat(val name:String, val age:Int)
+    
+            fun main()
+                val c = new Cat("Whiskers")   # Missing age argument
+        """.trimIndent()
 
+        val expectedError = """
+            input.fpl:4.13-4.15:  Constructor 'Cat' called with (String) when expecting (String,Int)
+        """.trimIndent()
+
+        runTest(prog, expectedError)
+    }
+
+    @Test
+    fun newWithWrongArgType() {
+        val prog = """
+            class Cat(val name:String, val age:Int)
+    
+            fun main()
+                val c = new Cat(42, 3)   # First argument should be String
+        """.trimIndent()
+
+        val expectedError = """
+            input.fpl:4.13-4.15:  Constructor 'Cat' called with (Int,Int) when expecting (String,Int)
+        """.trimIndent()
+
+        runTest(prog, expectedError)
+    }
+
+    @Test
+    fun accessUnknownField() {
+        val prog = """
+            extern fun print(s:String)
+    
+            class Dog(val name:String)
+    
+            fun main()
+                val d = new Dog("Fido")
+                print(d.age)    # No such field
+        """.trimIndent()
+
+        val expectedError = """
+            input.fpl:7.16-7.16:  Class 'Dog' has no member 'age'
+        """.trimIndent()
+
+        runTest(prog, expectedError)
+    }
+
+    @Test
+    fun fieldInitializerUsesUnknownName() {
+        val prog = """
+            class Person(val name:String)
+                val greeting = "Hello " + fullname   # fullname not declared
+        """.trimIndent()
+
+        val expectedError = """
+            input.fpl:2.31-2.38:  'fullname' is not defined
+        """.trimIndent()
+
+        runTest(prog, expectedError)
+    }
+
+    @Test
+    fun duplicateFieldNames() {
+        val prog = """
+            class Point(val x:Int)
+                val x = 42
+        """.trimIndent()
+
+        val expectedError = """
+            input.fpl:2.5-2.7:  Duplicate symbol: x
+        """.trimIndent()
+
+        runTest(prog, expectedError)
+    }
 }

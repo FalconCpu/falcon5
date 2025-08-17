@@ -49,8 +49,7 @@ private fun runProgram() : String {
 fun compile(lexers:List<Lexer>, stopAt: StopAt) : String {
     Log.clear()
     allFunctions.clear()
-    StringValue.clear()
-    ArrayValue.clear()
+    Value.clear()
 
     // Run the parsing
     val astTop = Parser.parseAll(lexers)

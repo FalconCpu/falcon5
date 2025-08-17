@@ -15,6 +15,7 @@ fun TctExpr.codeGenRvalue() : Reg {
                 is IntValue -> currentFunc.addLdImm(value.value)
                 is StringValue -> currentFunc.addLea(value)
                 is ArrayValue -> currentFunc.addLea(value)
+                is ClassValue -> currentFunc.addLea(value)
             }
         }
 
@@ -149,6 +150,28 @@ fun TctExpr.codeGenRvalue() : Reg {
                 }
                 else -> error("Invalid string comparison operator '$op'")
             }
+        }
+
+        is TctNewClassExpr -> {
+            // Allocate memory for the new object
+            val ret = when(arena) {
+                Arena.HEAP -> {
+                    val desc = currentFunc.addLea(klass.descriptor)
+                    currentFunc.addMov(cpuRegs[1], desc)
+                    currentFunc.addCall(Stdlib.mallocObject)
+                    currentFunc.addCopy(resultReg)
+                }
+                else -> TODO()
+            }
+
+            // Initialize the object with the constructor
+            val argRegs = args.map { it.codeGenRvalue() }
+            var index = 1
+            currentFunc.addMov(cpuRegs[index++], ret) // 'this' pointer
+            for (arg in argRegs)
+                currentFunc.addMov(cpuRegs[index++], arg)
+            currentFunc.addCall(klass.constructor)
+            ret
         }
     }
 }
@@ -487,6 +510,29 @@ fun TctStmt.codeGenStmt() {
             currentFunc.addLabel(labelEnd)
             continueStack.removeAt(continueStack.lastIndex)
             breakStack.removeAt(breakStack.lastIndex)
+        }
+
+        is TctClassDefStmt -> {
+            // Create a new function and save the old one
+            val oldFunc = currentFunc
+            currentFunc = klass.constructor
+            currentFunc.addInstr(InstrStart())
+            // copy parameters from cpu regs into UserRegs
+            val thisReg = currentFunc.getReg(currentFunc.thisSymbol!!)
+            var index = 1
+            currentFunc.addMov(thisReg, cpuRegs[index++]) // 'this' pointer
+            for(param in currentFunc.parameters)
+                currentFunc.addMov( currentFunc.getReg(param), cpuRegs[index++])
+            // Generate code for the function body
+            for(init in this.initializers) {
+                val reg = init.value.codeGenRvalue()
+                val fieldReg = init.field
+                currentFunc.addStore(reg, thisReg, fieldReg)
+            }
+            // Finish the function and restore the old one
+            currentFunc.addLabel(currentFunc.endLabel)
+            currentFunc.addInstr(InstrEnd())
+            currentFunc = oldFunc
         }
     }
 }

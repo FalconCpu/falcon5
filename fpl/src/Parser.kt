@@ -309,19 +309,25 @@ class Parser(val lexer: Lexer) {
     //                                 Parameters
     // =====================================================================================
 
-    private fun parseParameter() : AstParameter {
+    private fun parseParameter(allowVal:Boolean) : AstParameter {
+        val kindLoc = currentToken.location
+        val kind = if (canTake(VAL)) VAL else
+                   if (canTake(VAR)) VAR else
+                                     EOL
+        if (kind != EOL && !allowVal)
+            Log.error(kindLoc, "'val' or 'var' not allowed on function parameters ")
         val id = parseIdentifier()
         expect(COLON)
         val type = parseType()
-        return AstParameter(id.location, id.name, type)
+        return AstParameter(id.location, kind, id.name, type)
     }
 
-    private fun parseParameterList() : List<AstParameter> {
+    private fun parseParameterList(allowVal:Boolean) : List<AstParameter> {
         val params = mutableListOf<AstParameter>()
         expect(OPENB)
         if (currentToken.kind!= CLOSEB)
             do {
-                params.add(parseParameter())
+                params.add(parseParameter(allowVal))
             } while( canTake(COMMA))
         expect(CLOSEB)
         return params
@@ -354,12 +360,23 @@ class Parser(val lexer: Lexer) {
         val isExtern = canTake(EXTERN)
         val tok = expect(FUN)
         val name = expect(IDENTIFIER)
-        val params = parseParameterList()
+        val params = parseParameterList(false)
         val retType = if (canTake(ARROW)) parseType() else null
         expectEol()
         val body = if (!isExtern) parseIndentedBlock() else emptyList()
         optionalEnd(FUN)
         return AstFunctionDefStmt(tok.location, name.value, params, retType, body, isExtern)
+    }
+
+    private fun parseClassDef() : AstClassDefStmt {
+        val tok = expect(CLASS)
+        val name = expect(IDENTIFIER)
+        val constructorArgs = if (currentToken.kind==OPENB) parseParameterList(true) else emptyList()
+        val parentClass = if (canTake(COLON)) parseTypeIdentifier() else null
+        expectEol()
+        val body = if (currentToken.kind== INDENT) parseIndentedBlock() else emptyList()
+        optionalEnd(CLASS)
+        return AstClassDefStmt(tok.location, name.value, parentClass, constructorArgs, body)
     }
 
     private fun parseExpressionStmt() : AstStmt {
@@ -444,6 +461,7 @@ class Parser(val lexer: Lexer) {
                 REPEAT -> parseRepeatStmt()
                 IF -> parseIfStmt()
                 FOR -> parseForStmt()
+                CLASS -> parseClassDef()
                 ELSIF -> throw ParseError(currentToken.location, "ELSIF without IF")
                 ELSE -> throw ParseError(currentToken.location, "ELSE without IF")
                 END -> throw ParseError(currentToken.location, "END without IF, WHILE, REPEAT or FUN")

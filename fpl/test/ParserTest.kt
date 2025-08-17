@@ -22,7 +22,7 @@ class ParserTest {
             . . AstFunctionDefStmt isExtern=false name=main parent=null retType=null symbols={}
             . . . AstVarDeclStmt astType=null mutable=true name=b
             . . . . AstIdentifier name=a
-            . . . AstParameter name=a
+            . . . AstParameter kind=<End of Line> name=a
             . . . . AstTypeIdentifier name=Int
 
         """.trimIndent()
