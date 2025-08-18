@@ -1,23 +1,54 @@
 private lateinit var topLevelFunction : Function
 private var currentLoop : AstBlock? = null
+private var pathContext = emptyPathContext
+
+// keep track of the path context for break statements
+private var breakContext = mutableListOf<PathContext>()
+private var continueContext = mutableListOf<PathContext>()
+
+// Only report the first unreachable statement
+private var firstUnreachableStatement = true
+
+// For loops we need to make at least two passes through the type checker to get the pathContext right
+// On the second pass disable reporting duplicate variable declarations (as they were allocated in the first pass)
+var secondTypecheckPass = false
+
+
 
 // ===========================================================================
 //                          Expressions
 // ===========================================================================
 
 private fun AstExpr.typeCheckRvalue(scope: AstBlock) : TctExpr {
-    return when(val ret = typeCheckExpr(scope)) {
-        is TctTypeName -> TctErrorExpr(location,"'${ret.type}' is a type name, not a value")
-        else -> ret
+    val ret = typeCheckExpr(scope)
+
+    when(ret) {
+        is TctVariable -> {
+            if (ret.sym in pathContext.uninitializedVariables)
+                Log.error(location, "'${ret.sym.name}' is uninitialized")
+            else if (ret.sym in pathContext.maybeUninitializedVariables)
+                Log.error(location, "'${ret.sym.name}' may be uninitialized")
+            val refinedType = pathContext.refinedTypes[ret.sym]
+            if (refinedType!=null)
+                return TctVariable(location, ret.sym, refinedType)
+        }
+
+        is  TctTypeName->
+            return TctErrorExpr(location,"'${ret.type}' is a type name, not a value")
+
+        else -> {}
     }
+
+    return ret
 }
 
 private fun AstExpr.typeCheckLvalue(scope: AstBlock) : TctExpr {
     val ret = typeCheckExpr(scope)
     when(ret) {
         is TctVariable -> {
-            if(!ret.sym.mutable)
+            if(!ret.sym.mutable && ret.sym !in pathContext.uninitializedVariables)
                 Log.error(location, "'${ret.sym}' is not mutable")
+            pathContext = pathContext.initialize(ret.sym)
         }
 
         is TctIndexExpr -> {
@@ -28,10 +59,70 @@ private fun AstExpr.typeCheckLvalue(scope: AstBlock) : TctExpr {
     return ret
 }
 
-private fun AstExpr.typeCheckBoolExpr(scope: AstBlock) : TctExpr {
-    val ret = typeCheckExpr(scope)
-    ret.checkType(TypeBool)
-    return ret
+private fun AstExpr.typeCheckBoolExpr(scope: AstBlock) : BranchPathContext {
+    return when (this) {
+        is AstCompareExpr -> {
+            val expr = typeCheckExpr(scope)
+            BranchPathContext(pathContext, pathContext, expr)
+        }
+
+        is AstEqualityExpr -> {
+            val tcExpr = typeCheckExpr(scope)
+            var truePath = pathContext
+            var falsePath = pathContext
+            if (tcExpr is TctIntCompareExpr) {
+                val lhs = tcExpr.lhs
+                val rhs = tcExpr.rhs
+
+                // Handle types of form a=null
+                if (lhs.type is TypeNullable && rhs.type is TypeNull) {
+                    truePath = pathContext.refineType(lhs, TypeNull)
+                    falsePath = pathContext.refineType(lhs, lhs.type.elementType)
+                }
+                if (rhs.type is TypeNullable && lhs.type is TypeNull) {
+                    truePath = pathContext.refineType(rhs, TypeNull)
+                    falsePath = pathContext.refineType(rhs, rhs.type.elementType)
+                }
+                // handle checks of form a? = b
+                if (lhs.type is TypeNullable && rhs.type==lhs.type.elementType)
+                    truePath = pathContext.refineType(lhs, rhs.type)
+                if (rhs.type is TypeNullable && lhs.type==rhs.type.elementType)
+                    truePath = pathContext.refineType(rhs, lhs.type)
+            }
+            if (op==TokenKind.EQ)
+                BranchPathContext(truePath, falsePath, tcExpr)
+            else
+                BranchPathContext(falsePath, truePath, tcExpr)
+        }
+
+        is AstAndExpr -> {
+            val tcLhs = lhs.typeCheckBoolExpr(scope)
+            pathContext = tcLhs.trueBranch
+            val tcRhs = rhs.typeCheckBoolExpr(scope)
+            val expr = TctAndExpr(location, tcLhs.expr, tcRhs.expr)
+            BranchPathContext(tcRhs.trueBranch,
+                              listOf(tcLhs.falseBranch, tcRhs.falseBranch).merge(),
+                              expr)
+        }
+
+        is AstOrExpr -> {
+            val tcLhs = lhs.typeCheckBoolExpr(scope)
+            pathContext = tcLhs.falseBranch
+            val tcRhs = rhs.typeCheckBoolExpr(scope)
+            val expr = TctOrExpr(location, tcLhs.expr, tcRhs.expr)
+            BranchPathContext(listOf(tcLhs.trueBranch, tcRhs.trueBranch).merge(),
+                              tcRhs.falseBranch,
+                              expr)
+        }
+
+        else -> {
+            // For all other expressions, we type check them as rvalues
+            // and then check if they are boolean expressions.
+            val expr = typeCheckRvalue(scope)
+            expr.checkType(TypeBool)
+            BranchPathContext(pathContext, pathContext, expr)
+        }
+    }
 }
 
 
@@ -87,6 +178,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
             } else {
                 tctExpr.checkType(enclosingFunc.returnType)
             }
+            pathContext = unreachablePathContext
             TctReturnExpr(location, tctExpr)
         }
 
@@ -143,6 +235,9 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
                     } else
                         TctErrorExpr(location, "Class '${tctExpr.type.name}' has no member '${memberName}'")
                 }
+
+                is TypeNullable ->
+                    TctErrorExpr(location, "Cannot access member as expression may be null")
 
                 else -> TctErrorExpr(location, "Cannot access member '${memberName}' of type '${tctExpr.type}'")
             }
@@ -233,35 +328,39 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
         is AstAndExpr -> {
             val tctLhs = lhs.typeCheckBoolExpr(scope)
             val tctRhs = rhs.typeCheckBoolExpr(scope)
-            if (tctLhs.type==TypeError || tctRhs.type==TypeError)
+            if (tctLhs.expr.type==TypeError || tctRhs.expr.type==TypeError)
                 return TctErrorExpr(location, "")
-            TctAndExpr(location, tctLhs, tctRhs)
+            TctAndExpr(location, tctLhs.expr, tctRhs.expr)
         }
 
         is AstNotExpr -> {
             val tctExpr = expr.typeCheckBoolExpr(scope)
-            if (tctExpr.type is TypeError)
+            if (tctExpr.expr.type is TypeError)
                 return TctErrorExpr(location, "")
-            TctNotExpr(location, tctExpr)
+            TctNotExpr(location, tctExpr.expr)
         }
 
         is AstOrExpr -> {
             val tctLhs = lhs.typeCheckBoolExpr(scope)
             val tctRhs = rhs.typeCheckBoolExpr(scope)
-            if (tctLhs.type==TypeError || tctRhs.type==TypeError)
+            if (tctLhs.expr.type==TypeError || tctRhs.expr.type==TypeError)
                 return TctErrorExpr(location, "")
-            TctOrExpr(location, tctLhs, tctRhs)
+            TctOrExpr(location, tctLhs.expr, tctRhs.expr)
         }
 
         is AstBreakExpr -> {
             if (currentLoop == null)
                 Log.error(location, "Break statement outside of a loop")
+            breakContext += pathContext
+            pathContext = unreachablePathContext
             TctBreakExpr(location)
         }
 
         is AstContinueExpr -> {
             if (currentLoop == null)
                 Log.error(location, "Continue statement outside of a loop")
+            continueContext += pathContext
+            pathContext = unreachablePathContext
             TctContinueExpr(location)
         }
 
@@ -270,13 +369,12 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
             val tcRhs = rhs.typeCheckRvalue(scope)
             if (tcLhs.type is TypeError || tcRhs.type is TypeError)
                 return TctErrorExpr(location, "")
-            if (tcLhs.type != tcRhs.type)
+            if (!tcLhs.type.isAssignableTo(tcRhs.type) && !tcRhs.type.isAssignableTo(tcLhs.type))
                 return TctErrorExpr(location, "Cannot compare types '${tcLhs.type}' and '${tcRhs.type}'")
             val aluOp = op.toCompareOp()
             when(tcLhs.type) {
-                TypeInt, TypeChar, TypeBool -> TctIntCompareExpr(location, aluOp, tcLhs, tcRhs)
                 TypeString -> TctStringCompareExpr(location, aluOp, tcLhs, tcRhs)
-                else -> TctErrorExpr(location, "Cannot compare type '${tcLhs.type}' with operator '${op}'")
+                else -> TctIntCompareExpr(location, aluOp, tcLhs, tcRhs)
             }
         }
 
@@ -293,6 +391,16 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
                 TypeString -> TctStringCompareExpr(location, aluOp, tcLhs, tcRhs)
                 else -> TctErrorExpr(location, "Cannot compare type '${tcLhs.type}' with operator '${op}'")
             }
+        }
+
+        is AstNullAssertExpr -> {
+            val tctExpr = expr.typeCheckRvalue(scope)
+            if (tctExpr.type is TypeError)
+                return TctErrorExpr(location, "")
+            return if (tctExpr.type is TypeNullable)
+                TctNullAssertExpr(location, tctExpr, tctExpr.type.elementType)
+            else
+                TctErrorExpr(location, "Cannot assert non-null on type '${tctExpr.type}'")
         }
     }
 }
@@ -345,103 +453,192 @@ fun AstLambdaExpr.typeCheckLambda(scope:AstBlock, itSym:VarSymbol) : TctLambdaEx
 //                          Statements
 // ===========================================================================
 
-private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt = when(this) {
-    is AstExpressionStmt -> {
-        val tctExpr = expr.typeCheckRvalue(scope)
-        TctExpressionStmt(location, tctExpr)
+private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
+    if (pathContext.unreachable && firstUnreachableStatement && this !is AstFunctionDefStmt && this !is AstClassDefStmt && this !is AstFile) {
+        Log.error(location, "Statement is unreachable")
+        firstUnreachableStatement = false
     }
 
-    is AstVarDeclStmt -> {
-        val tctInitializer = initializer?.typeCheckRvalue(scope)
-        val type = astType?.resolveType(scope) ?: tctInitializer?.type ?: reportTypeError(location, "Cannot infer type for variable '${name}'")
-        val sym = VarSymbol(location, name, type, mutable)
-        scope.addSymbol(sym)
-        tctInitializer?.checkType(type)
-        TctVarDeclStmt(location, sym, tctInitializer)
-    }
-
-    is AstFunctionDefStmt -> {
-        val tctBody = body.map{ it.typeCheckStmt(this) }
-        TctFunctionDefStmt(location, name, function, tctBody)
-    }
-
-    is AstEmptyStmt -> TctEmptyStmt(location)
-
-    is AstFile -> TctFile(location, body.map{ it.typeCheckStmt(this) } )
-
-    is AstTop -> TctTop(location, topLevelFunction, body.map{ it.typeCheckStmt(this) } )
-
-    is AstWhileStmt -> {
-        val oldLoop = currentLoop
-        currentLoop = this
-        val tctCondition = condition.typeCheckBoolExpr(scope)
-        val tctBody = body.map{ it.typeCheckStmt(this) }
-        currentLoop = oldLoop
-        TctWhileStmt(location, tctCondition, tctBody)
-    }
-
-    is AstRepeatStmt -> {
-        val oldLoop = currentLoop
-        currentLoop = this
-        val tctCondition = condition.typeCheckBoolExpr(scope)
-        val tctBody = body.map{ it.typeCheckStmt(this) }
-        currentLoop = oldLoop
-        TctRepeatStmt(location, tctCondition, tctBody)
-    }
-
-    is AstAssignStmt -> {
-        val rhs = rhs.typeCheckRvalue(scope)
-        val lhs = lhs.typeCheckLvalue(scope)
-        rhs.checkType(lhs.type)
-        TctAssignStmt(location, op, lhs, rhs)
-    }
-
-    is AstIfClause -> {
-        val tctCondition = condition?.typeCheckBoolExpr(scope)
-        val tctBody = body.map { it.typeCheckStmt(this) }
-        TctIfClause(location, tctCondition, tctBody)
-    }
-
-    is AstIfStmt -> {
-        val clauses = body.map { it.typeCheckStmt(this) as TctIfClause }
-        TctIfStmt(location,clauses)
-    }
-
-    is AstForStmt -> {
-        val oldLoop = currentLoop
-        currentLoop = this
-        val tcRange = range.typeCheckRvalue(scope)
-        val type = indexType?.resolveType(scope) ?:
-            when(tcRange.type) {
-            is TypeError -> TypeError
-            is TypeRange -> tcRange.type.elementType
-            is TypeArray -> tcRange.type.elementType
-            else -> reportTypeError(location, " Cannot iterate over type '${tcRange.type}'")
+    return when (this) {
+        is AstExpressionStmt -> {
+            val tctExpr = expr.typeCheckRvalue(scope)
+            TctExpressionStmt(location, tctExpr)
         }
 
-        val sym = VarSymbol(location, indexName, type, false)
-        addSymbol(sym)
-        val tcBody = body.map { it.typeCheckStmt(this) }
+        is AstVarDeclStmt -> {
+            val tctInitializer = initializer?.typeCheckRvalue(scope)
+            val type = astType?.resolveType(scope) ?: tctInitializer?.type ?: reportTypeError(
+                location,
+                "Cannot infer type for variable '${name}'"
+            )
+            val sym = VarSymbol(location, name, type, mutable)
+            scope.addSymbol(sym)
+            tctInitializer?.checkType(type)
+            if (tctInitializer == null)
+                pathContext = pathContext.addUninitialized(sym)
+            TctVarDeclStmt(location, sym, tctInitializer)
+        }
 
-        currentLoop = oldLoop
-        if (type==TypeError)
-            TctEmptyStmt(location) // Error already reported
-        else if (tcRange is TctRangeExpr) {
-            tcRange.start.checkType(type)
-            TctForRangeStmt(location, sym, tcRange, tcBody)
-        } else if (tcRange.type is TypeArray) {
-            if (!tcRange.type.elementType.isAssignableTo(type))
-                reportTypeError(location, "Cannot iterate over array of type '${tcRange.type}' with index type '${type}'")
-            TctForArrayStmt(location, sym, tcRange, tcBody)
-        } else
-            TODO()
+        is AstFunctionDefStmt -> {
+            pathContext = emptyPathContext
+            firstUnreachableStatement = true
+            val tctBody = body.map { it.typeCheckStmt(this) }
+            if (!pathContext.unreachable && function.returnType!=TypeUnit)
+                Log.error(location, "Function '${name}' must return a value along all paths")
+            TctFunctionDefStmt(location, name, function, tctBody)
+        }
+
+        is AstEmptyStmt -> TctEmptyStmt(location)
+
+        is AstFile -> TctFile(location, body.map { it.typeCheckStmt(this) })
+
+        is AstTop -> TctTop(location, topLevelFunction, body.map { it.typeCheckStmt(this) })
+
+        is AstWhileStmt -> {
+            val oldLoop = currentLoop
+            val oldBreakContext = breakContext
+            val oldContinueContext = continueContext
+            val oldSecondTypeCheckPass = secondTypecheckPass
+            currentLoop = this
+            val tctCondition = condition.typeCheckBoolExpr(scope)
+            pathContext = tctCondition.trueBranch
+            // make a first pass through the body to get the pathContext for the loop path
+            body.map { it.typeCheckStmt(this) }
+            secondTypecheckPass = true
+            pathContext = (listOf(pathContext, tctCondition.trueBranch)+continueContext).merge()
+            breakContext = mutableListOf()
+            continueContext = mutableListOf()
+            val tctBody = body.map { it.typeCheckStmt(this) }
+
+            // determine the pathContext for after the loop
+            val mergePaths = if (tctCondition.expr.isAlwaysTrue())
+                breakContext
+            else
+                breakContext + pathContext + tctCondition.falseBranch
+            pathContext = mergePaths.merge()
+            breakContext = oldBreakContext
+            continueContext = oldContinueContext
+            secondTypecheckPass = oldSecondTypeCheckPass
+            currentLoop = oldLoop
+            TctWhileStmt(location, tctCondition.expr, tctBody)
+        }
+
+        is AstRepeatStmt -> {
+            val oldLoop = currentLoop
+            val oldBreakContext = breakContext
+            val oldContinueContext = continueContext
+            val oldSecondTypeCheckPass = secondTypecheckPass
+            currentLoop = this
+            breakContext = mutableListOf()
+            continueContext = mutableListOf()
+            val entryPathContext = pathContext
+            body.map { it.typeCheckStmt(this) }   // dummy pass to get the pathContext for the loop body
+            val tctCondition = condition.typeCheckBoolExpr(scope)
+            secondTypecheckPass = true
+            pathContext = (listOf(entryPathContext, tctCondition.falseBranch)+continueContext).merge()
+            breakContext = mutableListOf()
+            continueContext = mutableListOf()
+            val tctBody = body.map { it.typeCheckStmt(this) }
+            val mergePaths = if (tctCondition.expr.isAlwaysFalse())
+                breakContext
+            else
+                breakContext + pathContext + tctCondition.trueBranch
+            pathContext = mergePaths.merge()
+            breakContext = oldBreakContext
+            continueContext = oldContinueContext
+            secondTypecheckPass = oldSecondTypeCheckPass
+            currentLoop = oldLoop
+            TctRepeatStmt(location, tctCondition.expr, tctBody)
+        }
+
+        is AstForStmt -> {
+            val oldLoop = currentLoop
+            val oldBreakContext = breakContext
+            val oldContinueContext = continueContext
+            val oldSecondTypeCheckPass = secondTypecheckPass
+            val entryPathContext = pathContext
+            currentLoop = this
+
+            val tcRange = range.typeCheckRvalue(scope)
+            val type = indexType?.resolveType(scope) ?: when (tcRange.type) {
+                is TypeError -> TypeError
+                is TypeRange -> tcRange.type.elementType
+                is TypeArray -> tcRange.type.elementType
+                else -> reportTypeError(location, " Cannot iterate over type '${tcRange.type}'")
+            }
+
+            val sym = VarSymbol(location, indexName, type, false)
+            addSymbol(sym)
+
+            breakContext = mutableListOf()
+            continueContext = mutableListOf()
+            body.map { it.typeCheckStmt(this) }
+
+            secondTypecheckPass = true
+            breakContext = mutableListOf()
+            continueContext = mutableListOf()
+            pathContext = (listOf(entryPathContext, pathContext)+continueContext).merge()
+            val tcBody = body.map { it.typeCheckStmt(this) }
+
+            currentLoop = oldLoop
+            val ret = if (type == TypeError)
+                TctEmptyStmt(location) // Error already reported
+            else if (tcRange is TctRangeExpr) {
+                tcRange.start.checkType(type)
+                TctForRangeStmt(location, sym, tcRange, tcBody)
+            } else if (tcRange.type is TypeArray) {
+                if (!tcRange.type.elementType.isAssignableTo(type))
+                    reportTypeError(
+                        location,
+                        "Cannot iterate over array of type '${tcRange.type}' with index type '${type}'"
+                    )
+                TctForArrayStmt(location, sym, tcRange, tcBody)
+            } else
+                TODO()
+            pathContext = (breakContext+pathContext).merge()
+            breakContext = oldBreakContext
+            continueContext = oldContinueContext
+            secondTypecheckPass = oldSecondTypeCheckPass
+            currentLoop = oldLoop
+            ret
+        }
+
+
+        is AstAssignStmt -> {
+            val rhs = rhs.typeCheckRvalue(scope)
+            val lhs = lhs.typeCheckLvalue(scope)
+            rhs.checkType(lhs.type)
+            if (rhs.type != lhs.type)
+                pathContext = pathContext.refineType(lhs, rhs.type)
+            TctAssignStmt(location, op, lhs, rhs)
+        }
+
+        is AstIfClause -> error("Should not be type checking AstIfClause directly, it should be part of AstIfStmt")
+
+        is AstIfStmt -> {
+            val clauses = mutableListOf<TctIfClause>()
+            val mergeContexts = mutableListOf<PathContext>()
+            for (clause in body.filterIsInstance<AstIfClause>()) {
+                val tctCondition = clause.condition?.typeCheckBoolExpr(scope)
+                pathContext = tctCondition?.trueBranch ?: pathContext
+                val tctBody = clause.body.map { it.typeCheckStmt(this) }
+                mergeContexts += pathContext
+                clauses += TctIfClause(location, tctCondition?.expr, tctBody)
+                pathContext = tctCondition?.falseBranch ?: pathContext
+            }
+            if (clauses.none { it.condition == null })
+                mergeContexts += pathContext // Allow for fall-through if there is no else clause
+            pathContext = mergeContexts.merge()
+            TctIfStmt(location, clauses)
+        }
+
+
+        is AstClassDefStmt -> {
+            TctClassDefStmt(location, klass, initializers)
+        }
+
+        is AstLambdaExpr -> error("Lambda expressions should not be type checked here, they should be handled in the expression type checking phase")
     }
-
-    is AstClassDefStmt -> {
-        TctClassDefStmt(location, klass, initializers)
-    }
-
-    is AstLambdaExpr -> error("Lambda expressions should not be type checked here, they should be handled in the expression type checking phase")
 }
 
 
@@ -462,7 +659,10 @@ private fun AstType.resolveType(scope:AstBlock) : Type {
             val elementType = elementType.resolveType(scope)
             return TypeArray.create(elementType)
         }
-
+        is AstNullableType -> {
+            val elementType = elementType.resolveType(scope)
+            return TypeNullable.create(elementType)
+        }
     }
 }
 
@@ -574,6 +774,7 @@ private fun AstBlock.findClassFields(scope:AstBlock) {
 
 
 fun AstTop.typeCheck() : TctTop {
+    pathContext = emptyPathContext
     topLevelFunction = Function(location, "topLevel", null, emptyList(), TypeUnit, false)
 
     // Make multiple passes over the AST to resolve types and symbols

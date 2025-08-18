@@ -16,15 +16,17 @@ val lengthSymbol = FieldSymbol(nullLocation, "length", TypeInt, false, -4)
 
 private fun genPredefinedSymbols(): Map<String, Symbol> {
     val symbols = mutableMapOf<String, Symbol>()
-    for (type in listOf(TypeUnit, TypeBool, TypeChar, TypeInt, TypeReal, TypeString, TypeAny, TypeNothing)) {
+    for (type in listOf(TypeUnit, TypeBool, TypeChar, TypeInt, TypeReal, TypeString, TypeAny, TypeNothing, TypeNull)) {
         val sym = TypeNameSymbol(nullLocation, type.name, type)
         symbols[type.name] = sym
     }
 
     val trueSym = ConstSymbol(nullLocation, "true", TypeBool, IntValue(1, TypeBool))
     val falseSym = ConstSymbol(nullLocation, "false", TypeBool, IntValue(0, TypeBool))
+    val nullSym = ConstSymbol(nullLocation, "null", TypeNull, IntValue(0, TypeNull))
     symbols[trueSym.name] = trueSym
     symbols[falseSym.name] = falseSym
+    symbols[nullSym.name] = nullSym
 
     return symbols
 }
@@ -39,7 +41,7 @@ fun AstBlock.lookupSymbol(name: String): Symbol? {
 
 fun AstBlock.addSymbol(symbol: Symbol) {
     val duplicate = symbols[symbol.name]
-    if (duplicate!= null)
+    if (duplicate!= null && !secondTypecheckPass)
         Log.error(symbol.location, "Duplicate symbol: ${symbol.name}")
     symbols[symbol.name] = symbol
 }
@@ -54,7 +56,7 @@ fun AstBlock.addFunctionOverload(location: Location, name: String, function:Func
 
         is FunctionSymbol -> {
             val dup = sym.overloads.find { it.hasSameSignature(function) }
-            if (dup!= null)
+            if (dup!= null && !secondTypecheckPass)
                 Log.error(location, "Duplicate function overload: ${function.name}")
             sym.overloads.add(function)
         }

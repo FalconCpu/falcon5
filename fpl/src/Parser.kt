@@ -1,4 +1,5 @@
 import TokenKind.*
+import javax.management.Query
 
 class Parser(val lexer: Lexer) {
     private var currentToken = lexer.nextToken()
@@ -168,6 +169,11 @@ class Parser(val lexer: Lexer) {
         return AstMemberExpr(currentToken.location, objectExpr, memberName.value)
     }
 
+    private fun parseNullAssertExpr(expr: AstExpr) : AstExpr {
+        expect(QMARKQMARK) // Consume QMARKQMARK
+        return AstNullAssertExpr(currentToken.location, expr)
+    }
+
     private fun parsePostfixExpr() : AstExpr {
         var ret = parsePrimaryExpr()
         while(true)
@@ -175,6 +181,7 @@ class Parser(val lexer: Lexer) {
                 OPENB -> parseFuncCall(ret)
                 OPENSQ -> parseIndexExpr(ret)
                 DOT -> parseMemberExpr(ret)
+                QMARKQMARK -> parseNullAssertExpr(ret)
                 else -> return ret
             }
     }
@@ -291,17 +298,22 @@ class Parser(val lexer: Lexer) {
     }
 
     private fun parseType() : AstType {
-        when(currentToken.kind) {
-            IDENTIFIER -> return parseTypeIdentifier()
-            ARRAY -> return parseTypeArray()
+        var ret = when(currentToken.kind) {
+            IDENTIFIER -> parseTypeIdentifier()
+            ARRAY -> parseTypeArray()
             OPENB -> {
                 nextToken() // Consume OPENB
                 val type = parseType()
                 expect(CLOSEB) // Consume CLOSEB
-                return type
+                type
             }
             else -> throw ParseError(currentToken.location, "Got '$currentToken' when expecting type")
         }
+
+        if (canTake(QMARK))
+            ret = AstNullableType(currentToken.location, ret)
+
+        return ret
     }
 
 
@@ -469,7 +481,7 @@ class Parser(val lexer: Lexer) {
                 else -> throw ParseError(currentToken.location, "Got '$currentToken' when expecting statement")
             }
         } catch (e: ParseError) {
-            Log.error(e.message!!)
+            Log.error(e.location, e.message!!)
             skipToEol()
             return AstEmptyStmt(loc)
         }
@@ -510,4 +522,4 @@ class Parser(val lexer: Lexer) {
     }
 }
 
-class ParseError(location: Location, message: String) : Exception("$location $message")
+class ParseError(val location: Location, message: String) : Exception("$location $message")

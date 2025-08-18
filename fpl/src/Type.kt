@@ -13,6 +13,7 @@ object TypeReal   : Type("Float")
 object TypeError  : Type("Error")
 object TypeAny    : Type("Any")
 object TypeNothing: Type("Nothing")
+object TypeNull   : Type("Null")
 
 class TypeArray private constructor(val elementType:Type) : Type("Array<$elementType>") {
     companion object {
@@ -32,7 +33,6 @@ class TypeRange private constructor(val elementType:Type) : Type("Range<$element
     }
 }
 
-val allClasses = mutableListOf<TypeClass>()
 class TypeClass(name:String) : Type(name) {
     val fields = mutableListOf<FieldSymbol>()
     lateinit var constructor : Function
@@ -52,8 +52,14 @@ class TypeClass(name:String) : Type(name) {
 
 }
 
-
-
+class TypeNullable private constructor (val elementType: Type) : Type("$elementType?") {
+    companion object {
+        val allNullableTypes = mutableMapOf<Type, TypeNullable>()
+        fun create(elementType: Type) = allNullableTypes.getOrPut(elementType) {
+            TypeNullable(elementType)
+        }
+    }
+}
 
 // Type checking
 fun Type.isAssignableTo(other: Type): Boolean {
@@ -67,6 +73,9 @@ fun Type.isAssignableTo(other: Type): Boolean {
 
     // any type can be assigned to TypeAny
     if (other == TypeAny) return true
+
+    if (other is TypeNullable && (this == other.elementType || this == TypeNull))
+        return true
 
     return false
 }
@@ -91,4 +100,6 @@ fun Type.getSize(): Int = when (this) {
     TypeError -> 0
     TypeNothing -> 0
     is TypeClass -> 4
+    TypeNull -> 4
+    is TypeNullable -> 4
 }

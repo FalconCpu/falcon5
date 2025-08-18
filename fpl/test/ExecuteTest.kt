@@ -1038,4 +1038,44 @@ class ExecuteTest {
         runTest(prog, expected)
     }
 
+    @Test
+    fun nullAssignmentAndCompare() {
+        val prog = """
+            extern fun print(s:String)
+    
+            class Cat(val name:String)
+    
+            fun main()
+                val c:Cat? = null
+                if c = null
+                    print("Null OK\n")
+        """.trimIndent()
+
+        val expected = """
+            Null OK
+            
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun nullableAccess() {
+        val prog = """
+            extern fun print(s:String)
+    
+            class Cat(val name:String)
+    
+            fun main()
+                val c:Cat? = new Cat("Whiskers")
+                print(c??.name)
+        """.trimIndent()
+
+        val expected = """
+            Whiskers
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
 }

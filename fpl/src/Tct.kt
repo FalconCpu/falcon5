@@ -30,6 +30,7 @@ class TctNotExpr(location: Location, val expr: TctExpr) : TctExpr(location, Type
 class TctLambdaExpr(location: Location, val expr: TctExpr, val itSym:VarSymbol, type:Type) : TctExpr(location, type)
 class TctRangeExpr(location: Location, val start: TctExpr, val end: TctExpr, val op: BinOp, type:Type) : TctExpr(location, type)
 class TctNewClassExpr(location: Location, val klass: TypeClass, val args: List<TctExpr>, val arena: Arena, type:Type) : TctExpr(location, type)
+class TctNullAssertExpr(location: Location, val expr: TctExpr, type:Type) : TctExpr(location, type)
 
 class TctErrorExpr(location: Location, val message: String = "") : TctExpr(location, TypeError) {
     init {
@@ -59,6 +60,16 @@ class TctForRangeStmt(location: Location, val index:VarSymbol, val range:TctRang
 class TctForArrayStmt(location: Location, val index:VarSymbol, val array:TctExpr, body: List<TctStmt>) : TctBlock(location, body)
 
 class TctFieldInitializer(val field: FieldSymbol, val value: TctExpr)
+
+
+
+fun TctExpr.isAlwaysTrue() : Boolean {
+    return this is TctConstant && this.value is IntValue && this.value.value!=0
+}
+
+fun TctExpr.isAlwaysFalse() : Boolean {
+    return this is TctConstant && this.value is IntValue && this.value.value==0
+}
 
 
 fun Tct.dump(sb:StringBuilder, indent: Int) {

@@ -173,6 +173,11 @@ fun TctExpr.codeGenRvalue() : Reg {
             currentFunc.addCall(klass.constructor)
             ret
         }
+
+        is TctNullAssertExpr -> {
+            expr.codeGenRvalue()
+            // TODO - add null check code
+        }
     }
 }
 

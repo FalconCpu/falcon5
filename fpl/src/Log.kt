@@ -1,16 +1,12 @@
 object Log {
-    private val errors = mutableListOf<String>()
+    private val errors = mutableMapOf<Location,String>()
 
     fun hasErrors() = errors.isNotEmpty()
 
-    fun getMessages() = errors.joinToString("\n")
-
-    fun error(message: String) {
-        errors.add(message)
-    }
+    fun getMessages() = errors.values.joinToString("\n")
 
     fun error(location: Location, message: String) {
-        errors.add("$location $message")
+        errors[location] = "$location $message"
     }
     
     fun clear() {

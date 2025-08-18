@@ -32,7 +32,7 @@ private fun runAssembler(filenames:List<String>, format:String) {
 
     val exitCode = process.waitFor()
     if (exitCode != 0)
-        Log.error(process.inputStream.bufferedReader().readText())
+        Log.error(nullLocation, process.inputStream.bufferedReader().readText())
 }
 
 private fun runProgram() : String {
@@ -41,7 +41,7 @@ private fun runProgram() : String {
         .start()
     val exitCode = process.waitFor()
     if (exitCode != 0)
-        Log.error("Execution failed with exit code $exitCode")
+        Log.error(nullLocation, "Execution failed with exit code $exitCode")
     return process.inputStream.bufferedReader().readText().replace("\r\n", "\n")
 }
 

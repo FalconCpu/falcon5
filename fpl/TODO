@@ -11,25 +11,24 @@ break and continue statements
 const arrays
 String Operations
 Classes
+Null pointer
+path dependant typing
 
 
 Short Term:
-Null pointer
-Methods
+Methods and this pointer
 Destructors
 Function pointers
 varargs functions
 when statement
 Nullability
 Generics
-Methods and this pointer
 Inheritance
 Enums
 Then (short form if)
 if expressions
 ?. ?:
 in range test
-path dependant typing
 
 
 Backend:
