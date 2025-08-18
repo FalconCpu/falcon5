@@ -1,5 +1,4 @@
 import TokenKind.*
-import javax.management.Query
 
 class Parser(val lexer: Lexer) {
     private var currentToken = lexer.nextToken()
@@ -369,15 +368,15 @@ class Parser(val lexer: Lexer) {
     }
 
     private fun parseFunctionDef() : AstFunctionDefStmt {
-        val isExtern = canTake(EXTERN)
+        val qualifier = if (currentToken.kind in listOf(EXTERN,OVERRIDE,VIRTUAL)) nextToken().kind else EOL
         val tok = expect(FUN)
         val name = expect(IDENTIFIER)
         val params = parseParameterList(false)
         val retType = if (canTake(ARROW)) parseType() else null
         expectEol()
-        val body = if (!isExtern) parseIndentedBlock() else emptyList()
+        val body = if (currentToken.kind== INDENT) parseIndentedBlock() else emptyList()
         optionalEnd(FUN)
-        return AstFunctionDefStmt(tok.location, name.value, params, retType, body, isExtern)
+        return AstFunctionDefStmt(tok.location, name.value, params, retType, body, qualifier)
     }
 
     private fun parseClassDef() : AstClassDefStmt {
@@ -468,7 +467,7 @@ class Parser(val lexer: Lexer) {
         val loc = currentToken.location
         return try {
             when (currentToken.kind) {
-                EXTERN, FUN -> parseFunctionDef()
+                EXTERN, OVERRIDE, VIRTUAL, FUN -> parseFunctionDef()
                 VAL, VAR -> parseVarDecl()
                 WHILE -> parseWhileStmt()
                 REPEAT -> parseRepeatStmt()

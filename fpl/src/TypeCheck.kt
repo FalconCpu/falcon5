@@ -742,12 +742,22 @@ private fun AstBlock.findFunctionDefinitions(scope:AstBlock) {
             val longName = (if (scope is AstClassDefStmt) scope.klass.name + "/" else "") +
                 name + paramsSymbols.joinToString(separator = ",", prefix = "(", postfix = ")") { it.type.name }
             val thisSym = if (scope is AstClassDefStmt) VarSymbol(location, "this", scope.klass, false) else null
-            function = Function(location, longName, thisSym, paramsSymbols, returnType, isExtern)
+            function = Function(location, longName, thisSym, paramsSymbols, returnType, qualifier)
             for (sym in paramsSymbols)
                 addSymbol(sym)
             if (thisSym != null)
                 addSymbol(thisSym)
-            scope.addFunctionOverload(location, name, function)
+            if (qualifier==TokenKind.VIRTUAL) {
+                if (scope is AstClassDefStmt) {
+                    function.virtualFunctionNumber = scope.klass.virtualFunctions.size
+                    scope.klass.virtualFunctions.add(function)
+                } else
+                    Log.error(location, "Virtual function '${name}' must be defined in a class context")
+            }
+            if (qualifier==TokenKind.OVERRIDE)
+                scope.addFunctionOverride(location, name, function)
+            else
+                scope.addFunctionOverload(location, name, function)
         }
 
         is AstClassDefStmt -> {
@@ -755,9 +765,20 @@ private fun AstBlock.findFunctionDefinitions(scope:AstBlock) {
             val paramsSymbols = constructorParams.map { it.createSymbol(this) }
             val longName = "$name/constructor"
             val thisSym = VarSymbol(location, "this", klass, false)
-            klass.constructor = Function(location, longName, thisSym, paramsSymbols, TypeUnit, false)
+            klass.constructor = Function(location, longName, thisSym, paramsSymbols, TypeUnit, TokenKind.EOL)
             for (sym in paramsSymbols)
                 constructorScope.addSymbol(sym)
+
+            // Add any methods from the superclass
+            val superclass = klass.superClass
+            if (superclass != null) {
+                klass.virtualFunctions.addAll(superclass.virtualFunctions)
+                for (sym in superclass.fields.filterIsInstance<FunctionSymbol>()) {
+                    val clone = sym.clone()
+                    klass.add(clone)
+                    addSymbol(clone)
+                }
+            }
         }
 
         else -> {}
@@ -771,7 +792,7 @@ private fun AstBlock.findClassFields(scope:AstBlock) {
         // Inherit any fields from the superclass
         val superclass = klass.superClass
         if (superclass != null) {
-            for(field in superclass.fields) {
+            for(field in superclass.fields.filterIsInstance<FieldSymbol>()) {
                 addSymbol(field)
                 klass.add(field)
             }
@@ -832,7 +853,7 @@ private fun AstBlock.findClassFields(scope:AstBlock) {
 
 fun AstTop.typeCheck() : TctTop {
     pathContext = emptyPathContext
-    topLevelFunction = Function(location, "topLevel", null, emptyList(), TypeUnit, false)
+    topLevelFunction = Function(location, "topLevel", null, emptyList(), TypeUnit, TokenKind.EOL)
 
     // Make multiple passes over the AST to resolve types and symbols
 

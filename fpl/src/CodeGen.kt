@@ -348,7 +348,10 @@ fun genCall(func:Function, thisArg:Reg?, args: List<Reg>) : Reg {
         currentFunc.addMov(cpuRegs[index++], thisArg!!)
     for (arg in args)
         currentFunc.addMov(cpuRegs[index++], arg)
-    currentFunc.addCall(func)
+    if (func.virtualFunctionNumber==-1)
+        currentFunc.addCall(func)
+    else
+        currentFunc.addVCall(func)
 
     // Get the return value from the CPU register
     return if (func.returnType!= TypeUnit)

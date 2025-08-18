@@ -35,6 +35,7 @@ class TypeRange private constructor(val elementType:Type) : Type("Range<$element
 
 class TypeClass(name:String, val superClass:TypeClass?) : Type(name) {
     val fields = mutableListOf<Symbol>()
+    val virtualFunctions = mutableListOf<Function>()
     lateinit var constructor : Function
     var instanceSize = 0
     val descriptor = ClassValue.create(this)
@@ -56,6 +57,7 @@ class TypeClass(name:String, val superClass:TypeClass?) : Type(name) {
 }
 
 fun Type.isSuperClassOf(other: Type): Boolean {
+    if (this == other) return true
     if (this !is TypeClass) return false
     if (other !is TypeClass) return false
     var current: TypeClass? = other
@@ -94,7 +96,6 @@ fun Type.isAssignableTo(other: Type): Boolean {
     if (other is TypeNullable && other.elementType.isSuperClassOf(this)) return true
     if (other is TypeNullable && this is TypeNullable && other.elementType.isSuperClassOf(this.elementType)) return true
     if (other is TypeNullable && this == TypeNull) return true
-
     return false
 }
 

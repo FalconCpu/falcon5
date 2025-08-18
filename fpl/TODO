@@ -16,12 +16,12 @@ path dependant typing
 Nullability
 Methods and this pointer
 Inheritance
-
+Virtual functions
 
 
 Short Term:
+is expressions
 Destructors
-Function pointers
 varargs functions
 when statement
 Generics
@@ -35,6 +35,8 @@ const class instances ?
 unsafe blocks
 casts
 error types
+super.calls to parent class methods
+Function pointers
 
 
 Backend:
@@ -42,3 +44,4 @@ Constant folding
 Common subexpression elimination
 Dead Store elimination
 Loop invariant code motion
+vcall devirtualisation

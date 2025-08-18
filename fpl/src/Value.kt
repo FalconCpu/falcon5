@@ -98,6 +98,9 @@ class ClassValue private constructor(val klass: TypeClass) : Value(klass) {
     fun emit(sb: StringBuilder) {
         sb.append("$klass/DESCRIPTOR:\n")
         sb.append("dcw ${klass.instanceSize}\n")  // Size of the class instance
+        for (virtualFunc in klass.virtualFunctions) {
+            sb.append("dcw /${virtualFunc.name}\n")  // Virtual function names
+        }
         sb.append("\n")
     }
 

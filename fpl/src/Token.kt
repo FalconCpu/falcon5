@@ -68,6 +68,8 @@ enum class TokenKind(val value: String, val lineContinues: Boolean) {
     ARRAY         ("Array", false),
     CLASS         ("class", true),
     EXTERN        ("extern", true),
+    OVERRIDE      ("override", true),
+    VIRTUAL       ("virtual", true),
     ERROR         ("<error>", false);
 
     override fun toString(): String = value

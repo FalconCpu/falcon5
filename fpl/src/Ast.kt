@@ -46,7 +46,7 @@ class AstFunctionDefStmt(
     val params: List<AstParameter>,
     val retType: AstType?,
     body: List<AstStmt>,
-    val isExtern: Boolean
+    val qualifier: TokenKind
 ) : AstBlock(location, body) {
     lateinit var function : Function
 }
@@ -61,7 +61,7 @@ class AstClassDefStmt(
 ) : AstBlock(location, body) {
     lateinit var klass: TypeClass
     // Create a dummy AstFunction, to store constructor parameters separately from the class body
-    val constructorScope = AstFunctionDefStmt(location,name,emptyList(),null, emptyList(), false)
+    val constructorScope = AstFunctionDefStmt(location,name,emptyList(),null, emptyList(), TokenKind.EOL)
     // Initializers get identified before the main class body is type checked - so we need to store them separately
     val initializers = mutableListOf<TctFieldInitializer>()
 }

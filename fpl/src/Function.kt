@@ -6,8 +6,10 @@ class Function (
     val thisSymbol : VarSymbol?,      // This is null for static functions
     val parameters: List<VarSymbol>,
     val returnType : Type,
-    val isExtern: Boolean
+    val qualifier: TokenKind
 ) {
+    var virtualFunctionNumber = -1      // Virtual function number, -1 if not a virtual function
+
     val prog = mutableListOf<Instr>()
     val regs = cpuRegs.toMutableList<Reg>()      // Include all the CPU registers
     val labels = mutableListOf<Label>()
@@ -16,11 +18,12 @@ class Function (
     var maxRegister = 0
     var stackVarSize = 0
 
+
     val endLabel = newLabel()
 
     init {
         // Don't add extern functions to allFunctions list - as we don't want to generate code for them
-        if (!isExtern)
+        if (qualifier != TokenKind.EXTERN)
             allFunctions += this
     }
 
@@ -150,6 +153,11 @@ class Function (
 
     fun addCall(func: Function) {
         prog += InstrCall(func)
+    }
+
+    fun addVCall(func: Function) {
+        assert(func.virtualFunctionNumber >= 0)
+        prog += InstrVCall(func)
     }
 
     fun addBranch(op: BinOp, src1: Reg, src2: Reg, label: Label) {

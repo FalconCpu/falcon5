@@ -39,7 +39,7 @@ class RegisterAllocator(private val func: Function, private val livemap: LiveMap
                 }
 
             // A call statement could potentially clobber registers %1-%8, so mark those
-            if (instr is InstrCall ) {
+            if (instr is InstrCall || instr is InstrVCall) {
                 for (liveIndex in livemap.live[instr.index + 1].stream()) {
                     for (dest in caller_save_regs)
                         if (liveIndex != dest) {
@@ -107,6 +107,7 @@ class RegisterAllocator(private val func: Function, private val livemap: LiveMap
             is InstrAluLit -> InstrAluLit(op, replace(dest), replace(src), lit)
             is InstrBranch -> InstrBranch(op, replace(src1), replace(src2), label)
             is InstrCall -> this
+            is InstrVCall -> this
             is InstrJump -> this
             is InstrLabel -> this
             is InstrMov -> InstrMov(replace(dest), replace(src))

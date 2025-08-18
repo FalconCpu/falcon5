@@ -167,5 +167,221 @@ class InheritanceTests {
         runTest(prog, expected)
     }
 
+    @Test
+    fun virtualDispatchBasic() {
+        val prog = """
+            extern fun print(s:String)
+    
+            class Animal
+                virtual fun speak()
+                    print("???")
+    
+            class Dog : Animal
+                override fun speak()
+                    print("Woof")
+    
+            fun makeAnimal() -> Animal
+                return new Dog()
+    
+            fun main()
+                var a = makeAnimal()
+                a.speak()
+        """.trimIndent()
 
+        val expected = """
+            Woof
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+
+    @Test
+    fun multipleVirtualMethods() {
+        val prog = """
+            extern fun print(s:String)
+            
+            class Animal
+                virtual fun speak()
+                    print("???")
+                virtual fun move()
+                    print("...")
+            
+            class Dog : Animal
+                override fun speak()
+                    print("Woof")
+                override fun move()
+                    print("Run")
+    
+            fun main()
+                var a:Animal = new Dog()
+                a.speak()
+                print(" ")
+                a.move()
+        """.trimIndent()
+
+        val expected = """
+            Woof Run
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun partialOverride() {
+        val prog = """
+            extern fun print(s:String)
+            
+            class Animal
+                virtual fun speak()
+                    print("???")
+                virtual fun move()
+                    print("...")
+            
+            class Sloth : Animal
+                override fun move()
+                    print("Slow")
+    
+            fun main()
+                var a:Animal = new Sloth()
+                a.speak()
+                print(" ")
+                a.move()
+        """.trimIndent()
+
+        val expected = """
+            ??? Slow
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun chainedOverrides() {
+        val prog = """
+            extern fun print(s:String)
+            
+            class A
+                virtual fun f()
+                    print("A")
+    
+            class B : A
+                override fun f()
+                    print("B")
+    
+            class C : B
+                override fun f()
+                    print("C")
+    
+            fun main()
+                var a:A = new C()
+                a.f()
+        """.trimIndent()
+
+        val expected = """
+            C
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun virtualAndNonVirtualMethods() {
+        val prog = """
+            extern fun print(s:String)
+
+            class Animal
+                virtual fun speak()
+                    print("???")
+                fun info()
+                    print("I am an Animal")
+
+            class Dog : Animal
+                override fun speak()
+                    print("Woof")
+                fun wag()
+                    print("Wagging tail")
+
+            fun main()
+                var a:Animal = new Dog()
+                a.speak()   # should be virtual → Dog.speak
+                print("\n")
+                a.info()    # non-virtual → Animal.info
+                print("\n")
+                var d:Dog = new Dog()
+                d.wag()     # non-virtual → Dog.wag
+        """.trimIndent()
+
+        val expected = """
+            Woof
+            I am an Animal
+            Wagging tail
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun baseNonVirtualCalledThroughDerived() {
+        val prog = """
+            extern fun print(s:String)
+
+            class Base
+                fun greet()
+                    print("Hello from Base")
+
+            class Derived : Base
+                fun extra()
+                    print("Derived extra")
+
+            fun main()
+                var b:Base = new Derived()
+                b.greet()   # static → Base.greet
+                print("\n")
+                var d:Derived = new Derived()
+                d.extra()   # static → Derived.extra
+        """.trimIndent()
+
+        val expected = """
+            Hello from Base
+            Derived extra
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun overrideVirtualButKeepBaseNonVirtual() {
+        val prog = """
+            extern fun print(s:String)
+
+            class A
+                virtual fun foo()
+                    print("A.foo\n")
+                fun bar()
+                    print("A.bar\n")
+
+            class B : A
+                override fun foo()
+                    print("B.foo\n")
+                fun baz()
+                    print("B.baz\n")
+
+            fun main()
+                var a:A = new B()
+                a.foo()   # virtual dispatch → B.foo
+                a.bar()   # static → A.bar
+                var b:B = new B()
+                b.baz()   # static → B.baz
+        """.trimIndent()
+
+        val expected = """
+            B.foo
+            A.bar
+            B.baz
+            
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
 }

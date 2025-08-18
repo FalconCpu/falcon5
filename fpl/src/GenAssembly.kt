@@ -77,6 +77,7 @@ private fun Instr.genAssembly() = when(this) {
     is InstrAluLit -> genAssembly()
     is InstrBranch -> genAssembly()
     is InstrCall -> "jsr /${func.name}"
+    is InstrVCall -> "ldw R30, R1[-4]\nldw R30,R30[${func.virtualFunctionNumber*4+4}]\njsr R30[0]"
     is InstrEnd -> ""
     is InstrJump -> "jmp .$label"
     is InstrLabel -> ".$label:"
@@ -103,7 +104,7 @@ fun Function.genAssembly(sb:StringBuilder) {
         sb.append("# $comment\n")
 
     // setup stack frame
-    val makesCalls = prog.any{it is InstrCall}
+    val makesCalls = prog.any{it is InstrCall || it is InstrVCall}
     val stackSize = stackVarSize + (if (maxRegister>8) 4*(maxRegister-8) else 0) + (if (makesCalls) 4 else 0)
     if (stackSize!=0) {
         sb.append("sub SP, SP, $stackSize\n")

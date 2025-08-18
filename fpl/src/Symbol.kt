@@ -7,6 +7,11 @@ class ConstSymbol(location: Location, name: String, type: Type, val value: Value
 class GlobalVarSymbol(location: Location, name: String, type: Type, mutable:Boolean) : Symbol(location, name, type, mutable)
 class FunctionSymbol(location: Location, name: String) : Symbol(location, name, TypeNothing, false) {
     val overloads = mutableListOf<Function>()
+    fun clone() : FunctionSymbol {
+        val clone = FunctionSymbol(location, name)
+        clone.overloads.addAll(overloads)
+        return clone
+    }
 }
 class TypeNameSymbol(location: Location, name: String, type:Type) : Symbol(location, name, type, false)
 class FieldSymbol(location: Location, name: String, type: Type, mutable:Boolean, var offset:Int=-1) : Symbol(location, name, type, mutable)
@@ -68,6 +73,36 @@ fun AstBlock.addFunctionOverload(location: Location, name: String, function:Func
         }
     }
 }
+
+fun AstBlock.addFunctionOverride(location: Location, name: String, function:Function) {
+    when (val sym = symbols[name]) {
+        null -> {
+            Log.error(location, "Function '${name}' has nothing to override")
+            addFunctionOverload(location, name, function)
+        }
+
+        is FunctionSymbol -> {
+            val dup = sym.overloads.find { it.hasSameSignature(function) }
+            if (dup== null)
+                Log.error(location, "Function '${name}' has nothing to override")
+            else {
+                function.virtualFunctionNumber = dup.virtualFunctionNumber // Set the virtual function number
+                if(function.virtualFunctionNumber!=-1) {
+                    // Update the vtable for the class
+                    val klass = function.thisSymbol!!.type as TypeClass
+                    klass.virtualFunctions[function.virtualFunctionNumber] = function
+                }
+                sym.overloads.remove(dup) // Remove the original function
+            }
+            sym.overloads.add(function)
+        }
+
+        else -> {
+            Log.error(location, "Symbol '${name}' is already defined, but not a function")
+        }
+    }
+}
+
 
 fun Symbol.getDescription() : String = when (this) {
     is ConstSymbol -> "constant"
