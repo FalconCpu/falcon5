@@ -198,7 +198,19 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
                 is TctFunctionName -> {
                     val resolvedFunc = tctFunc.sym.resolveOverload(location, tctArgs)
                                      ?: return TctErrorExpr(location, "")  // Error message is reported by resolveOverload()
-                    TctCallExpr(location, null, resolvedFunc, tctArgs)
+                    val currentFunc = scope.findEnclosingFunction()
+                    val thisSym = currentFunc?.thisSymbol
+                    val thisArg = if (resolvedFunc.thisSymbol != null) {
+                        if (thisSym == null)
+                            return TctErrorExpr(location, "Function '${resolvedFunc.name}' requires 'this' argument but is not in a class context")
+                        else if (thisSym.type != resolvedFunc.thisSymbol.type)
+                            return TctErrorExpr(location, "Function '${resolvedFunc.name}' requires 'this' argument of type '${resolvedFunc.thisSymbol.type}' but got '${thisSym.type}'")
+                        else
+                            TctVariable(location, thisSym, thisSym.type)
+                    } else {
+                        null
+                    }
+                    TctCallExpr(location, thisArg, resolvedFunc, tctArgs)
                 }
                 is TctMethodRefExpr -> {
                     val resolvedFunc = tctFunc.methodSym.resolveOverload(location, tctArgs)
@@ -483,6 +495,8 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
                 location,
                 "Cannot infer type for variable '${name}'"
             )
+            if (type is TypeUnit)
+                Log.error(location, "Variable '${name}' cannot be of type Unit")
             val sym = VarSymbol(location, name, type, mutable)
             scope.addSymbol(sym)
             tctInitializer?.checkType(type)
@@ -703,7 +717,13 @@ private fun AstParameter.createSymbol(scope:AstBlock) : VarSymbol {
 // Find class definitions
 private fun AstBlock.findClassDefinitions(scope:AstBlock) {
     if (this is AstClassDefStmt) {
-        klass = TypeClass(name)
+        var superClass = astSuperClass?.resolveType(scope)
+        if (superClass!=null && superClass !is TypeClass) {
+            reportTypeError(location, "Superclass '$superClass' is not a class")
+            superClass = null
+        }
+
+        klass = TypeClass(name, superClass)
         val sym = TypeNameSymbol(location, name, klass)
         scope.addSymbol(sym)
     }
@@ -748,9 +768,18 @@ private fun AstBlock.findFunctionDefinitions(scope:AstBlock) {
 
 private fun AstBlock.findClassFields(scope:AstBlock) {
     if (this is AstClassDefStmt) {
+        // Inherit any fields from the superclass
+        val superclass = klass.superClass
+        if (superclass != null) {
+            for(field in superclass.fields) {
+                addSymbol(field)
+                klass.add(field)
+            }
+        }
+
         // Constructor parameters could be marked val or var -> in which case they are fields as well
         for((index,param) in constructorParams.withIndex()) {
-            if (param.kind != TokenKind.EOF) {
+            if (param.kind == TokenKind.VAL || param.kind == TokenKind.VAR) {
                 val mutable = param.kind == TokenKind.VAR
                 val paramSym = klass.constructor.parameters[index]
                 val sym = FieldSymbol(param.location, param.name, paramSym.type, mutable)
@@ -762,6 +791,21 @@ private fun AstBlock.findClassFields(scope:AstBlock) {
                 paramExpr.checkType(sym.type)
                 initializers += TctFieldInitializer(sym, paramExpr)
             }
+        }
+
+        // Call the superclass constructor
+        if (superclass!=null) {
+            val tcArgs = superClassArgs.map { it.typeCheckRvalue(constructorScope) }
+            if (!superclass.constructor.isCallableWithArgs(tcArgs)) {
+                val argsStr = tcArgs.joinToString(",") { it.type.name }
+                val paramStr = superclass.constructor.parameters.joinToString(",") { it.type.name }
+                reportTypeError(location,
+                    "Superclass constructor '$superclass' called with ($argsStr) when expecting ($paramStr)"
+                )
+            }
+            val thisExpr = TctVariable(location, klass.constructor.thisSymbol!!, klass)
+            val superCall = TctCallExpr(location, thisExpr, superclass.constructor, tcArgs)
+            initializers += TctFieldInitializer(null, superCall)
         }
 
         // Find all the fields in the class body

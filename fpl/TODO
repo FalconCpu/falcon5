@@ -13,18 +13,18 @@ String Operations
 Classes
 Null pointer
 path dependant typing
+Nullability
+Methods and this pointer
+Inheritance
 
 
 
 Short Term:
-Methods and this pointer
 Destructors
 Function pointers
 varargs functions
 when statement
-Nullability
 Generics
-Inheritance
 Enums
 Then (short form if)
 if expressions
@@ -32,7 +32,9 @@ if expressions
 in range test
 Local class instances
 const class instances ?
-
+unsafe blocks
+casts
+error types
 
 
 Backend:

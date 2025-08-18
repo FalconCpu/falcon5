@@ -54,8 +54,9 @@ class AstFunctionDefStmt(
 class AstClassDefStmt(
     location: Location,
     val name: String,
-    val parentClass: AstTypeIdentifier?,
+    val astSuperClass: AstTypeIdentifier?,
     val constructorParams: List<AstParameter>,
+    val superClassArgs: List<AstExpr>,
     body: List<AstStmt>
 ) : AstBlock(location, body) {
     lateinit var klass: TypeClass

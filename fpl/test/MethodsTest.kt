@@ -128,6 +128,35 @@ class MethodsTests {
     }
 
     @Test
+    fun methodCallsMethodImplicit() {
+        val prog = """
+            extern fun print(s:String)
+            class Cat(val name:String)
+                fun intro()
+                    print("I am ")
+                    print(name)
+                    print("\n")
+    
+                fun meow()
+                    intro()
+                    print("Meow!\n")
+    
+            fun main()
+                val c = new Cat("Whiskers")
+                c.meow()
+        """.trimIndent()
+
+        val expected = """
+            I am Whiskers
+            Meow!
+            
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+
+    @Test
     fun methodWithParams() {
         val prog = """
             extern fun print(i:Int)
@@ -315,6 +344,239 @@ class MethodsTests {
 
         val expected = """
             input.fpl:2.5-2.7:  Function 'double' must return a value along all paths
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun voidUsedAsValue() {
+        val prog = """
+            class Math
+                fun shout(x:Int)
+                    # no return
+                    val y = x + 1
+    
+            fun main()
+                val m = new Math()
+                val r = m.shout(5)   # should not be assignable
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:8.5-8.7:  Variable 'r' cannot be of type Unit
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun methodOnPrimitive() {
+        val prog = """
+            fun main()
+                val x = 42
+                x.bark()   # primitives have no methods
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:3.11-3.11:  Cannot access member 'bark' of type 'Int'
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun chainedMethodCalls() {
+        val prog = """
+            extern fun print(s:String)
+            class Person(val name:String)
+                fun clone() -> Person
+                    return new Person(name)
+                fun greet()
+                    print("Hello, I'm ")
+                    print(name)
+                    print("\n")
+    
+            fun main()
+                val p = new Person("Alice")
+                p.clone().greet()
+        """.trimIndent()
+
+        val expected = """
+            Hello, I'm Alice
+            
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun recursiveMethod() {
+        val prog = """
+            extern fun print(i:Int)
+            class Math
+                fun fact(n:Int) -> Int
+                    if n <= 1
+                        return 1
+                    return n * fact(n - 1)
+    
+            fun main()
+                val m = new Math()
+                print(m.fact(5))
+        """.trimIndent()
+
+        val expected = """
+            120
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun shadowedField() {
+        val prog = """
+            extern fun print(i:Int)
+            class Box(val value:Int)
+                fun show(value:Int)
+                    print(value)   # should print parameter, not field
+    
+            fun main()
+                val b = new Box(123)
+                b.show(456)
+        """.trimIndent()
+
+        val expected = """
+            456
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun methodOverloadByArity() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(s:String)
+            class Math
+                fun mul(a:Int, b:Int) -> Int
+                    return a * b
+                fun mul(a:Int, b:Int, c:Int) -> Int
+                    return a * b * c
+    
+            fun main()
+                val m = new Math()
+                print(m.mul(2, 3))      # calls 2-arg
+                print("\n")
+                print(m.mul(2, 3, 4))   # calls 3-arg
+        """.trimIndent()
+
+        val expected = """
+            6
+            24
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun methodOverloadByType() {
+        val prog = """
+        extern fun print(s:String)
+        extern fun print(i:Int)
+        
+        class Printer
+            fun echo(x:Int)
+                print(x)
+            print("\n")
+            fun echo(x:String)
+                print(x)
+
+        fun main()
+            val p = new Printer()
+            p.echo(42)
+            print("\n")
+            p.echo("Hello")
+    """.trimIndent()
+
+        val expected = """
+        42
+        Hello
+    """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun methodOverloadAmbiguous() {
+        val prog = """
+            class Math
+                fun add(a:Int, b:Int) -> Int
+                    return a + b
+                fun add(a:String, b:String) -> String
+                    return a + b
+    
+            fun main()
+                val m = new Math()
+                val r = m.add(42, "oops")   # mismatched overload
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:5.18-5.18:  Invalid operator '+' for types 'String' and 'String'
+            input.fpl:9.18-9.18:  No function found for add(Int,String) candidates are:-
+            Math/add(Int,Int)
+            Math/add(String,String)
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun methodOverloadChain() {
+        val prog = """
+            extern fun print(s:String)
+            class Greeter(val name:String)
+                fun greet()
+                    print("Hello, I'm ")
+                    print(name)
+                    print("\n")
+                    
+                fun greet(times:Int)
+                    for i in 1..times
+                        print("Hi, I'm ")
+                        print(name)
+                        print("\n")
+    
+            fun main()
+                val g = new Greeter("Bob")
+                g.greet()
+                g.greet(2)
+        """.trimIndent()
+
+        val expected = """
+            Hello, I'm Bob
+            Hi, I'm Bob
+            Hi, I'm Bob
+            
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun methodOverloadWrongReturn() {
+        val prog = """
+            class Math
+                fun foo() -> Int
+                    return 42
+                fun foo(x:Int) -> String
+                    return 99   # wrong type
+    
+            fun main()
+                val m = new Math()
+                val s = m.foo(1)
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:5.16-5.17:  Type mismatch got 'Int' when expecting 'String'
         """.trimIndent()
 
         runTest(prog, expected)

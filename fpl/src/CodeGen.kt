@@ -340,7 +340,7 @@ fun TctExpr.codeGenLvalue(value:Reg) {
 fun genCall(func:Function, thisArg:Reg?, args: List<Reg>) : Reg {
     assert(args.size == func.parameters.size)
     if (thisArg==null && func.thisSymbol!=null)
-        Log.error(func.location, "Function '${func.name}' requires 'this' argument but none was provided")
+        error("Function '${func.name}' requires 'this' argument but none was provided")
 
     // Copy arguments into CPU registers and call the function
     var index = 1
@@ -547,7 +547,8 @@ fun TctStmt.codeGenStmt() {
             for(init in this.initializers) {
                 val reg = init.value.codeGenRvalue()
                 val fieldReg = init.field
-                currentFunc.addStore(reg, thisReg, fieldReg)
+                if (fieldReg!=null)
+                    currentFunc.addStore(reg, thisReg, fieldReg)
             }
             // Finish the function and restore the old one
             currentFunc.addLabel(currentFunc.endLabel)

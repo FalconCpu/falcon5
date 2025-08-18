@@ -33,7 +33,7 @@ class TypeRange private constructor(val elementType:Type) : Type("Range<$element
     }
 }
 
-class TypeClass(name:String) : Type(name) {
+class TypeClass(name:String, val superClass:TypeClass?) : Type(name) {
     val fields = mutableListOf<Symbol>()
     lateinit var constructor : Function
     var instanceSize = 0
@@ -42,18 +42,30 @@ class TypeClass(name:String) : Type(name) {
     fun add(sym: Symbol) {
         // TODO - think about padding
         if (sym is FieldSymbol) {
+            if (sym.offset != -1 && sym.offset != instanceSize)
+                error("Field '${sym.name}' already has offset of ${sym.offset} but attempting to change to $instanceSize")
             sym.offset = instanceSize
             instanceSize += sym.type.getSize()
         }
         fields += sym
     }
 
-
-
     fun lookup(name:String) : Symbol? {
         return fields.firstOrNull { it.name == name }
     }
+}
 
+fun Type.isSuperClassOf(other: Type): Boolean {
+    if (this !is TypeClass) return false
+    if (other !is TypeClass) return false
+    var current: TypeClass? = other
+    while (current != null) {
+        if (this == current) {
+            return true
+        }
+        current = current.superClass
+    }
+    return false
 }
 
 class TypeNullable private constructor (val elementType: Type) : Type("$elementType?") {
@@ -78,8 +90,10 @@ fun Type.isAssignableTo(other: Type): Boolean {
     // any type can be assigned to TypeAny
     if (other == TypeAny) return true
 
-    if (other is TypeNullable && (this == other.elementType || this == TypeNull))
-        return true
+    if (other.isSuperClassOf(this)) return true
+    if (other is TypeNullable && other.elementType.isSuperClassOf(this)) return true
+    if (other is TypeNullable && this is TypeNullable && other.elementType.isSuperClassOf(this.elementType)) return true
+    if (other is TypeNullable && this == TypeNull) return true
 
     return false
 }

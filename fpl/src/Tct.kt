@@ -59,7 +59,7 @@ class TctIfStmt(location:Location, body:List<TctIfClause>) : TctBlock(location, 
 class TctRepeatStmt(location: Location, val condition: TctExpr, body: List<TctStmt>) : TctBlock(location, body)
 class TctForRangeStmt(location: Location, val index:VarSymbol, val range:TctRangeExpr, body: List<TctStmt>) : TctBlock(location, body)
 class TctForArrayStmt(location: Location, val index:VarSymbol, val array:TctExpr, body: List<TctStmt>) : TctBlock(location, body)
-class TctFieldInitializer(val field: FieldSymbol, val value: TctExpr)
+class TctFieldInitializer(val field: FieldSymbol?, val value: TctExpr)
 
 
 

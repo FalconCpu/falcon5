@@ -385,10 +385,11 @@ class Parser(val lexer: Lexer) {
         val name = expect(IDENTIFIER)
         val constructorArgs = if (currentToken.kind==OPENB) parseParameterList(true) else emptyList()
         val parentClass = if (canTake(COLON)) parseTypeIdentifier() else null
+        val parentArgs = if (currentToken.kind==OPENB && parentClass!=null) parseArgList() else emptyList()
         expectEol()
         val body = if (currentToken.kind== INDENT) parseIndentedBlock() else emptyList()
         optionalEnd(CLASS)
-        return AstClassDefStmt(tok.location, name.value, parentClass, constructorArgs, body)
+        return AstClassDefStmt(tok.location, name.value, parentClass, constructorArgs, parentArgs, body)
     }
 
     private fun parseExpressionStmt() : AstStmt {
