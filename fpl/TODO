@@ -15,6 +15,7 @@ Null pointer
 path dependant typing
 
 
+
 Short Term:
 Methods and this pointer
 Destructors
@@ -29,6 +30,9 @@ Then (short form if)
 if expressions
 ?. ?:
 in range test
+Local class instances
+const class instances ?
+
 
 
 Backend:

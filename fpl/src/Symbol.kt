@@ -52,6 +52,8 @@ fun AstBlock.addFunctionOverload(location: Location, name: String, function:Func
             val funcSym = FunctionSymbol(location, name)
             funcSym.overloads.add(function)
             symbols[name] = funcSym
+            if (this is AstClassDefStmt)
+                klass.add(funcSym)
         }
 
         is FunctionSymbol -> {

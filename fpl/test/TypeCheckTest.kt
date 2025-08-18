@@ -84,7 +84,7 @@ class TypeCheckTest {
             . . . . . . TctVariable sym=y type=Int
             . . TctFunctionDefStmt function=main() name=main
             . . . TctVarDeclStmt sym=z
-            . . . . TctCallExpr func=add(Int,Int) type=Int
+            . . . . TctCallExpr func=add(Int,Int) thisArg=null type=Int
             . . . . . TctConstant type=Int value=IntValue:1
             . . . . . TctConstant type=Int value=IntValue:2
 

@@ -27,7 +27,8 @@ fun TctExpr.codeGenRvalue() : Reg {
 
         is TctCallExpr -> {
             val argRegs = args.map { it.codeGenRvalue() }
-            genCall(func, argRegs)
+            val thisArgReg = thisArg?.codeGenRvalue()
+            genCall(func, thisArgReg, argRegs)
         }
 
         is TctErrorExpr -> { zeroReg }  // Dummy return value
@@ -178,6 +179,12 @@ fun TctExpr.codeGenRvalue() : Reg {
             expr.codeGenRvalue()
             // TODO - add null check code
         }
+
+        is TctMethodRefExpr -> {
+            Log.error(location, "Method references not supported yet")
+            zeroReg
+        }
+
     }
 }
 
@@ -330,12 +337,17 @@ fun TctExpr.codeGenLvalue(value:Reg) {
 
 
 
-fun genCall(func:Function, args: List<Reg>) : Reg {
+fun genCall(func:Function, thisArg:Reg?, args: List<Reg>) : Reg {
     assert(args.size == func.parameters.size)
+    if (thisArg==null && func.thisSymbol!=null)
+        Log.error(func.location, "Function '${func.name}' requires 'this' argument but none was provided")
 
     // Copy arguments into CPU registers and call the function
-    for ((index, arg) in args.withIndex())
-        currentFunc.addMov(cpuRegs[index+1], arg)
+    var index = 1
+    if (func.thisSymbol!=null)
+        currentFunc.addMov(cpuRegs[index++], thisArg!!)
+    for (arg in args)
+        currentFunc.addMov(cpuRegs[index++], arg)
     currentFunc.addCall(func)
 
     // Get the return value from the CPU register
@@ -363,8 +375,11 @@ fun TctStmt.codeGenStmt() {
             currentFunc = function
             currentFunc.addInstr(InstrStart())
             // copy parameters from cpu regs into UserRegs
-            for((index,param) in function.parameters.withIndex())
-                currentFunc.addMov( currentFunc.getReg(param), cpuRegs[index+1])
+            var index = 1
+            if (function.thisSymbol!=null)
+                currentFunc.addMov(currentFunc.getReg(function.thisSymbol), cpuRegs[index++]) // 'this' pointer
+            for(param in function.parameters)
+                currentFunc.addMov( currentFunc.getReg(param), cpuRegs[index++])
             // Generate code for the function body
             for(stmt in body)
                 stmt.codeGenStmt()
@@ -538,6 +553,10 @@ fun TctStmt.codeGenStmt() {
             currentFunc.addLabel(currentFunc.endLabel)
             currentFunc.addInstr(InstrEnd())
             currentFunc = oldFunc
+
+            // Look for any methods
+            for (stmt in methods)
+                stmt.codeGenStmt()
         }
     }
 }

@@ -154,7 +154,13 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
                 is GlobalVarSymbol -> TODO()
                 is TypeNameSymbol -> TctTypeName(location, sym)
                 is VarSymbol -> TctVariable(location, sym, sym.type)
-                is FieldSymbol -> TODO()
+                is FieldSymbol -> {
+                    val func = scope.findEnclosingFunction()!!
+                    if (func.thisSymbol!=null)
+                        TctMemberExpr(location, TctVariable(location, func.thisSymbol, func.thisSymbol.type), sym, sym.type)
+                    else
+                        TctErrorExpr(location, "Field '${sym.name}' cannot be accessed outside of a class context")
+                }
             }
 
         is AstBinaryExpr -> {
@@ -192,7 +198,12 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
                 is TctFunctionName -> {
                     val resolvedFunc = tctFunc.sym.resolveOverload(location, tctArgs)
                                      ?: return TctErrorExpr(location, "")  // Error message is reported by resolveOverload()
-                    TctCallExpr(location, resolvedFunc, tctArgs)
+                    TctCallExpr(location, null, resolvedFunc, tctArgs)
+                }
+                is TctMethodRefExpr -> {
+                    val resolvedFunc = tctFunc.methodSym.resolveOverload(location, tctArgs)
+                        ?: return TctErrorExpr(location, "")  // Error message is reported by resolveOverload()
+                    TctCallExpr(location, tctFunc.objectExpr, resolvedFunc, tctArgs)
                 }
                 else ->
                     return TctErrorExpr(location, "Invalid function call")
@@ -229,11 +240,12 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
                 }
 
                 is TypeClass -> {
-                    val field = tctExpr.type.lookup(memberName)
-                    if (field != null) {
-                        TctMemberExpr(location, tctExpr, field, field.type)
-                    } else
-                        TctErrorExpr(location, "Class '${tctExpr.type.name}' has no member '${memberName}'")
+                    when(val field = tctExpr.type.lookup(memberName)) {
+                        null -> TctErrorExpr(location, "Class '${tctExpr.type.name}' has no member '${memberName}'")
+                        is FieldSymbol -> TctMemberExpr(location, tctExpr, field, field.type)
+                        is FunctionSymbol -> TctMethodRefExpr(location, tctExpr, field, TypeNothing)
+                        else -> error("Unexpected symbol type '${field.getDescription()}' for member '${memberName}' of class '${tctExpr.type.name}'")
+                    }
                 }
 
                 is TypeNullable ->
@@ -634,7 +646,8 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
 
 
         is AstClassDefStmt -> {
-            TctClassDefStmt(location, klass, initializers)
+            val methods = body.filterIsInstance<AstFunctionDefStmt>().map { it.typeCheckStmt(this) as TctFunctionDefStmt }
+            TctClassDefStmt(location, klass, initializers, methods)
         }
 
         is AstLambdaExpr -> error("Lambda expressions should not be type checked here, they should be handled in the expression type checking phase")
@@ -706,7 +719,7 @@ private fun AstBlock.findFunctionDefinitions(scope:AstBlock) {
         is AstFunctionDefStmt -> {
             val paramsSymbols = params.map { it.createSymbol(this) }
             val returnType = retType?.resolveType(this) ?: TypeUnit
-            val longName =
+            val longName = (if (scope is AstClassDefStmt) scope.klass.name + "/" else "") +
                 name + paramsSymbols.joinToString(separator = ",", prefix = "(", postfix = ")") { it.type.name }
             val thisSym = if (scope is AstClassDefStmt) VarSymbol(location, "this", scope.klass, false) else null
             function = Function(location, longName, thisSym, paramsSymbols, returnType, isExtern)
@@ -742,7 +755,7 @@ private fun AstBlock.findClassFields(scope:AstBlock) {
                 val paramSym = klass.constructor.parameters[index]
                 val sym = FieldSymbol(param.location, param.name, paramSym.type, mutable)
                 addSymbol(sym)
-                klass.addField(sym)
+                klass.add(sym)
 
                 // Create an initializer for the field
                 val paramExpr = TctVariable(param.location, paramSym, paramSym.type)
@@ -759,7 +772,7 @@ private fun AstBlock.findClassFields(scope:AstBlock) {
                        reportTypeError(stmt.location, "Cannot determine type for '${stmt.name}'")
             val sym = FieldSymbol(stmt.location, stmt.name, type, stmt.mutable)
             addSymbol(sym)
-            klass.addField(sym)
+            klass.add(sym)
             if (init!=null) {
                 init.checkType(type)
                 initializers += TctFieldInitializer(sym, init)
