@@ -179,8 +179,8 @@ sub $sp, 8                # Allocate space on stack for two variables
 stw $9, $sp[0]
 stw $30, $sp[4]
 ld $9, $1                 # $9 = Class descriptor
-ldw $2, $9[0]             # Load size of class from descriptor
-add $2, 4                 # Add space for header (length prefix)
+ldw $1, $9[0]             # Load size of class from descriptor
+add $1, 4                 # Add space for header (length prefix)
 jsr malloc                # Call malloc to allocate memory
 beq $8, 0, .end           # Check if malloc failed
 add $8, 4                 # Update pointer to point to first field

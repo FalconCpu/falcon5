@@ -27,6 +27,8 @@ class AstArrayLiteralExpr(location: Location, val elementType: AstType?, val arg
 class AstNegateExpr(location: Location, val expr: AstExpr) : AstExpr(location)
 class AstRangeExpr(location: Location, val start: AstExpr, val end: AstExpr, val op:TokenKind) : AstExpr(location)
 class AstNullAssertExpr(location: Location, val expr: AstExpr) : AstExpr(location)
+class AstIsExpr(location: Location, val expr: AstExpr, val typeExpr: AstType) : AstExpr(location)
+class AstAsExpr(location: Location, val expr: AstExpr, val typeExpr: AstType) : AstExpr(location)
 
 // Statement nodes
 sealed class AstStmt(location: Location) : Ast(location)
@@ -72,6 +74,11 @@ class AstIfClause(location:Location, val condition:AstExpr?, body: List<AstStmt>
 class AstIfStmt(location:Location, body:List<AstIfClause>) : AstBlock(location, body)
 class AstLambdaExpr(location: Location, body: List<AstStmt>) : AstBlock(location, body)
 class AstForStmt(location: Location, val indexName: String, val indexType: AstType?, val range: AstExpr, body: List<AstStmt>) : AstBlock(location, body)
+
+class AstEnumDefStmt(location: Location, val name: String, val values: List<AstIdentifier>, body:List<AstStmt>) : AstBlock(location,body) {
+    lateinit var enum: TypeEnum
+}
+
 
 class AstFile(location: Location, body: List<AstStmt>) : AstBlock(location, body)
 class AstTop(location: Location, body: List<AstStmt>) : AstBlock(location, body)

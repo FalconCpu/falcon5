@@ -17,15 +17,17 @@ Nullability
 Methods and this pointer
 Inheritance
 Virtual functions
-
-
-Short Term:
 is expressions
+
+
+TODO - Front end:
+abstract class / abstract functions
 Destructors
 varargs functions
 when statement
 Generics
 Enums
+Enum with associated data
 Then (short form if)
 if expressions
 ?. ?:

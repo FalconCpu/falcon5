@@ -56,6 +56,14 @@ class TypeClass(name:String, val superClass:TypeClass?) : Type(name) {
     }
 }
 
+class TypeEnum(name:String) : Type(name) {
+    val values = mutableListOf<ConstSymbol>()
+
+    fun lookup(name:String) : ConstSymbol? {
+        return values.firstOrNull { it.name == name }
+    }
+}
+
 fun Type.isSuperClassOf(other: Type): Boolean {
     if (this == other) return true
     if (this !is TypeClass) return false
@@ -100,8 +108,9 @@ fun Type.isAssignableTo(other: Type): Boolean {
 }
 
 fun TctExpr.checkType(expectedType:Type) {
-    if (!type.isAssignableTo(expectedType))
+    if (!type.isAssignableTo(expectedType)) {
         reportTypeError(location, "Type mismatch got '$type' when expecting '$expectedType'")
+    }
 }
 
 fun reportTypeError(location: Location, message: String) : TypeError {
@@ -120,5 +129,6 @@ fun Type.getSize(): Int = when (this) {
     TypeNothing -> 0
     is TypeClass -> 4
     TypeNull -> 4
+    is TypeEnum -> 4
     is TypeNullable -> 4
 }

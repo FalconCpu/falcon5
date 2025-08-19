@@ -384,4 +384,430 @@ class InheritanceTests {
 
         runTest(prog, expected)
     }
+
+    @Test
+    fun isTest() {
+        val prog = """
+            extern fun print(s:String)
+
+            class Animal            
+            class Dog : Animal
+            class Cat : Animal
+
+            fun getAnimal() -> Animal
+                return new Dog()
+        
+            fun main()
+                var a = getAnimal()
+                if (a is Dog)
+                    print("a is Dog")
+                else
+                    print("a is not Dog")
+        """.trimIndent()
+
+        val expected = """
+            a is Dog
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun isTest2() {
+        val prog = """
+            extern fun print(s:String)
+
+            class Animal
+            class Dog : Animal
+            class Cat : Animal
+            
+            fun newDog() -> Animal
+                return new Dog()
+            
+            fun newCat() -> Animal
+                return new Cat()
+            
+            fun main()
+                var d = newDog()
+                if (d is Dog) 
+                    print("d is Dog\n")
+                else 
+                    print("d is not Dog\n")
+                        
+                var c = newCat()
+                if (c is Dog) 
+                    print("c is Dog\n") 
+                else 
+                    print("c is not Dog\n")
+            
+                var a = new Animal()
+                if (a is Dog) 
+                    print("a is Dog\n")
+                elsif (a is Cat)
+                    print("a is Cat\n")
+                else
+                    print("a is not cat or dog\n")
+        """.trimIndent()
+
+        val expected = """
+            d is Dog
+            c is not Dog
+            a is not cat or dog
+
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun isTest3() {
+        val prog = """
+            extern fun print(s:String)
+
+            class Animal
+            class Dog : Animal
+            class Puppy : Dog
+
+            fun newPuppy() -> Animal
+                return new Puppy()
+            fun newDog() -> Animal
+                return new Dog()
+
+            fun main()
+                var p = newPuppy()
+                if (p is Puppy)
+                    print("puppy is Puppy\n")
+                else
+                    print("puppy is not Puppy\n")
+                    
+                if (p is Dog)
+                    print("puppy is Dog\n")
+                else
+                    print("puppy is not Dog\n")
+                    
+                var d:Animal = newDog()
+                if (d is Puppy)
+                    print("dog is Puppy\n")
+                else
+                    print("dog is not Puppy\n")
+
+        """.trimIndent()
+
+        val expected = """
+            puppy is Puppy
+            puppy is Dog
+            dog is not Puppy
+
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun isNullTest() {
+        val prog = """
+            extern fun print(s:String)
+            
+            class Animal
+            class Dog : Animal
+
+            fun newDog() -> Animal?
+                return null
+            
+            
+            fun main()
+                var n = newDog()
+                if (n is Dog)
+                    print("n is Dog\n")
+                else
+                    print("n is not Dog\n")
+        """.trimIndent()
+
+        val expected = """
+            n is not Dog
+
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun isMixedRuntimeValues() {
+        val prog = """
+            extern fun print(s:String)
+
+            class Animal
+            class Dog : Animal
+            class Cat : Animal
+            
+            fun printType(a:Animal)
+                if (a is Dog)
+                    print("It's a Dog\n")
+                elsif (a is Cat)
+                    print("It's a Cat\n")
+                else
+                    print("It's an Animal\n")
+            
+            fun main()
+                printType(new Dog())
+                printType(new Cat())
+                printType(new Animal())
+        """.trimIndent()
+
+        val expected = """
+            It's a Dog
+            It's a Cat
+            It's an Animal
+
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun basicTypeRefinement() {
+        val prog = """
+            extern fun print(s:String)
+
+            class Animal
+            class Dog(val name:String) : Animal
+            class Cat(val color:String) : Animal
+            
+            fun printType(a:Animal)
+                if (a is Dog)
+                    print("It's a Dog named ")
+                    print(a.name)
+                    print("\n")
+                elsif (a is Cat)
+                    print("It's a Cat with color ")
+                    print(a.color)
+                    print("\n")
+                else
+                    print("It's an Animal\n")
+            
+            fun main()
+                printType(new Dog("Rex"))
+                printType(new Cat("Whiskers"))
+                printType(new Animal())
+        """.trimIndent()
+
+        val expected = """
+            It's a Dog named Rex
+            It's a Cat with color Whiskers
+            It's an Animal
+
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun testRefinementInElseBranch() {
+        val src = """
+            extern fun print(s:String)
+
+            class Animal
+                fun speak()
+                    print("???")
+
+            class Cat : Animal
+                fun meow()
+                    print("Meow!")
+
+            fun main()
+                var a:Animal = new Cat()
+                if (a is Cat)
+                    a.meow()
+                else
+                    a.speak()
+        """.trimIndent()
+
+        val expected = """
+            Meow!
+        """.trimIndent()
+        runTest(src, expected)
+    }
+
+    @Test
+    fun testNullableRefinement() {
+        val src = """
+            extern fun print(s:String)
+
+            class Animal
+            class Dog : Animal
+                fun bark()
+                    print("Woof!")
+
+            fun main()
+                var a:Animal? = new Dog()
+                if (a is Dog)
+                    a.bark()
+                else
+                    print("not a Dog")
+        """.trimIndent()
+
+        val expected = """
+            Woof!
+        """.trimIndent()
+
+        runTest(src, expected)
+    }
+
+    @Test
+    fun testNullableRefinementFailsWithNull() {
+        val src = """
+            extern fun print(s:String)
+
+            class Animal
+            class Dog : Animal
+                fun bark()
+                    print("Woof!")
+
+            fun main()
+                var a:Animal? = null
+                if (a is Dog)
+                    a.bark()
+                else
+                    print("not a Dog")
+        """.trimIndent()
+
+        val expected = """
+            not a Dog
+        """.trimIndent()
+
+        runTest(src, expected)
+    }
+
+    @Test
+    fun testRefinementInLoop() {
+        val src = """
+            extern fun print(s:String)
+
+            class Animal
+            class Dog : Animal
+                fun bark()
+                    print("Woof!\n")
+            class Cat : Animal
+                fun meow() 
+                    print("Meow!\n")
+
+            fun main()
+                var animals = local Array<Animal> [ new Dog(), new Cat(), new Animal() ]
+                for a in animals
+                    if (a is Dog)
+                        a.bark()
+                    elsif (a is Cat)
+                        a.meow()
+                    else
+                        print("???")
+        """.trimIndent()
+
+        val expected = """
+            Woof!
+            Meow!
+            ???
+        """.trimIndent()
+
+        runTest(src, expected)
+    }
+
+    @Test
+    fun testRefinementDoesNotLeakOutOfIf() {
+        val src = """
+            extern fun print(s:String)
+
+            class Animal
+            class Dog : Animal
+                fun bark()
+                    print("Woof!")
+
+            fun main()
+                var a:Animal = new Dog()
+                if (a is Dog)
+                    a.bark()
+                # Outside the if, 'a' is still Animal, so bark() is invalid
+                a.bark()
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:13.11-13.11:  Class 'Animal' has no member 'bark'
+        """.trimIndent()
+
+        runTest(src, expected)
+    }
+
+    @Test
+    fun testRefinementDoesNotLeakOutOfElse() {
+        val src = """
+            extern fun print(s:String)
+
+            class Animal
+            class Cat : Animal
+                fun meow()
+                    print("Meow!")
+
+            fun main()
+                var a:Animal = new Cat()
+                if (a is Cat)
+                    print("it's a Cat")
+                else
+                    a.meow()
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:13.15-13.15:  Class 'Animal' has no member 'meow'
+        """.trimIndent()
+
+        runTest(src, expected)
+    }
+
+    @Test
+    fun testRefinementDoesNotLeakPastLoop() {
+        val src = """
+            extern fun print(s:String)
+
+            class Animal
+            class Dog : Animal
+                fun bark()
+                    print("Woof!")
+
+            fun main()
+                var a:Animal = new Dog()
+                while 1<2
+                    if (a is Dog)
+                        a.bark()
+                # After the loop body, refinement should not hold
+                a.bark()
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:14.11-14.11:  Class 'Animal' has no member 'bark'
+        """.trimIndent()
+
+        runTest(src, expected)
+    }
+
+    @Test
+    fun testRefinementWithNullCheckDoesNotPersist() {
+        val src = """
+            extern fun print(s:String)
+
+            class Animal
+                fun speak()
+                    print("???")
+
+            fun main()
+                var a:Animal? = null
+                if (a is Animal)
+                    a.speak()
+                # Here a is still nullable, so calling speak() directly is invalid
+                a.speak()
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:12.12-12.12:  Cannot access member as expression may be null
+        """.trimIndent()
+
+        runTest(src, expected)
+    }
 }

@@ -32,6 +32,8 @@ class TctRangeExpr(location: Location, val start: TctExpr, val end: TctExpr, val
 class TctNewClassExpr(location: Location, val klass: TypeClass, val args: List<TctExpr>, val arena: Arena, type:Type) : TctExpr(location, type)
 class TctNullAssertExpr(location: Location, val expr: TctExpr, type:Type) : TctExpr(location, type)
 class TctMethodRefExpr(location: Location, val objectExpr: TctExpr, val methodSym: FunctionSymbol, type:Type) : TctExpr(location, type)
+class TctIsExpr(location: Location, val expr: TctExpr, val typeExpr: TypeClass) : TctExpr(location, TypeBool)
+class TctAsExpr(location: Location, val expr: TctExpr, typeExpr: Type) : TctExpr(location, typeExpr)
 
 class TctErrorExpr(location: Location, val message: String = "") : TctExpr(location, TypeError) {
     init {

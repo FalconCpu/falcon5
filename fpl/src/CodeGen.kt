@@ -185,6 +185,21 @@ fun TctExpr.codeGenRvalue() : Reg {
             zeroReg
         }
 
+        is TctIsExpr ->
+            TODO()
+
+        is TctAsExpr -> {
+            val reg = expr.codeGenRvalue()
+            if (type is TypeEnum) {
+                // Do a range check when casting to an enum. We can use the INDEX instruction (normally used for array
+                // bounds checks) to check if the value is within the range of enum values.
+                val enumSizeReg = currentFunc.addLdImm(type.values.size)
+                currentFunc.addIndex(1, reg, enumSizeReg)
+            } else {
+                // For other casts simply copy the value to the result register
+                currentFunc.addCopy(reg)
+            }
+        }
     }
 }
 
@@ -294,6 +309,27 @@ fun TctExpr.codeGenBool(trueLabel: Label, falseLabel: Label) {
             rhs.codeGenBool(trueLabel, falseLabel)
         }
 
+        is TctIsExpr -> {
+            val reg = expr.codeGenRvalue()
+            if (expr.type is TypeNullable)
+                currentFunc.addBranch(BinOp.EQ_I, reg, zeroReg, falseLabel)
+            val typeRReg = currentFunc.addLea(typeExpr.descriptor)
+
+            // Get the type field of the object. Need to copy it to a user reg to keep things SSA
+            val tmpReg = currentFunc.newUserTemp()
+            val typeLReg = currentFunc.addLoad(4, reg, -4)   // object's descriptor
+            currentFunc.addMov(tmpReg, typeLReg)
+
+            // Loop through the parent chain
+            val loopLabel = currentFunc.newLabel()
+            currentFunc.addLabel(loopLabel)
+            currentFunc.addBranch(BinOp.EQ_I, tmpReg, typeRReg, trueLabel)
+            val parent = currentFunc.addLoad(4, tmpReg, 4)   // offset 4 = parent
+            currentFunc.addMov(tmpReg, parent)
+            currentFunc.addBranch(BinOp.NE_I, tmpReg, zeroReg, loopLabel)
+            currentFunc.addJump(falseLabel)
+        }
+
         else -> {
             val reg = codeGenRvalue()
             currentFunc.addBranch(BinOp.EQ_I, reg, zeroReg, falseLabel)
@@ -328,14 +364,10 @@ fun TctExpr.codeGenLvalue(value:Reg) {
             currentFunc.addStore(value,objectReg, member)
         }
 
-
-
         else ->
             error("Not an lvalue ${this.javaClass}")
     }
 }
-
-
 
 fun genCall(func:Function, thisArg:Reg?, args: List<Reg>) : Reg {
     assert(args.size == func.parameters.size)

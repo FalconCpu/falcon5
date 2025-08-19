@@ -203,11 +203,21 @@ class Parser(val lexer: Lexer) {
         }
     }
 
+    private fun parseAsExpr() : AstExpr {
+        val expr = parsePrefixExpr()
+        if (currentToken.kind == AS) {
+            val tok = nextToken() // Consume AS
+            val type = parseType()
+            return AstAsExpr(tok.location, expr, type)
+        }
+        return expr
+    }
+
     private fun parseMultiplicativeExpr() : AstExpr {
-        var ret = parsePrefixExpr()
+        var ret = parseAsExpr()
         while (currentToken.kind in listOf(STAR, SLASH, PERCENT, AMPERSAND, LSL, LSR, ASR)) {
             val tok = nextToken()
-            val right = parsePrefixExpr()
+            val right = parseAsExpr()
             ret = AstBinaryExpr(tok.location, tok.kind, ret, right)
         }
         return ret
@@ -235,16 +245,21 @@ class Parser(val lexer: Lexer) {
     }
 
     private fun parseRelationalExpr() : AstExpr {
-        var ret = parseRangeExpr()
-        while (currentToken.kind in listOf(LT, GT, LTE, GTE, EQ, NEQ)) {
+        val ret = parseRangeExpr()
+        return if (currentToken.kind in listOf(LT, GT, LTE, GTE)) {
             val tok = nextToken()
             val right = parseRangeExpr()
-            ret = if (tok.kind==EQ || tok.kind==NEQ)
-                AstEqualityExpr(tok.location, tok.kind, ret, right)
-            else
-                AstCompareExpr(tok.location, tok.kind, ret, right)
-        }
-        return ret
+            AstCompareExpr(tok.location, tok.kind, ret, right)
+        } else if (currentToken.kind == EQ || currentToken.kind == NEQ) {
+            val tok = nextToken() // Consume EQ or NEQ
+            val right = parseRangeExpr()
+            AstEqualityExpr(tok.location, tok.kind, ret, right)
+        } else if (currentToken.kind == IS) {
+            val tok = nextToken() // Consume IS
+            val type = parseType()
+            AstIsExpr(tok.location, ret, type)
+        } else
+            ret
     }
 
     private fun parseAndExpr() : AstExpr {
@@ -463,6 +478,21 @@ class Parser(val lexer: Lexer) {
         return AstIfStmt(loc, clauses)
     }
 
+    private fun parseEnum() : AstEnumDefStmt {
+        val tok = expect(ENUM)
+        val name = expect(IDENTIFIER)
+        expect(OPENSQ) // Consume OPENB
+        val values = mutableListOf<AstIdentifier>()
+        if (currentToken.kind != CLOSEB)
+            do {
+                val id = parseIdentifier()
+                values += id
+            } while (canTake(COMMA))
+        expect(CLOSESQ) // Consume CLOSEB
+        expectEol()
+        return AstEnumDefStmt(tok.location, name.value, values, emptyList())
+    }
+
     private fun parseStmt() : AstStmt {
         val loc = currentToken.location
         return try {
@@ -474,6 +504,7 @@ class Parser(val lexer: Lexer) {
                 IF -> parseIfStmt()
                 FOR -> parseForStmt()
                 CLASS -> parseClassDef()
+                ENUM -> parseEnum()
                 ELSIF -> throw ParseError(currentToken.location, "ELSIF without IF")
                 ELSE -> throw ParseError(currentToken.location, "ELSE without IF")
                 END -> throw ParseError(currentToken.location, "END without IF, WHILE, REPEAT or FUN")
