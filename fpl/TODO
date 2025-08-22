@@ -18,6 +18,7 @@ Methods and this pointer
 Inheritance
 Virtual functions
 is expressions
+Enums
 
 
 TODO - Front end:
@@ -26,7 +27,6 @@ Destructors
 varargs functions
 when statement
 Generics
-Enums
 Enum with associated data
 Then (short form if)
 if expressions

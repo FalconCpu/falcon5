@@ -1,0 +1,12 @@
+ld $1, 10
+ld $2, 20
+add $3, $1, $2    # check bypassing from p4 to p3
+add $4, $3, $2    # check bypassing from p5 to p3, and p4 to p3
+sub $5, $4, 1     # check immediate subtraction
+
+ld   $7, 1
+ld   $8, -1
+clt  $9, $8, $7   # signed compare  -1 < 1  TRUE
+cltu $10, $8, $7  # unsigned compare -1 < 1 FALSE
+clt  $11, $7, $8  # signed compare   1 < -1  FALSE
+cltu $12, $7, $8  # unsigned compare 1 < -1  TRUE

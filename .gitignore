@@ -1,0 +1,13 @@
+binutils/build/
+fpl/.idea
+rtl/rtl_regs.txt
+rtl/sim_blit.log
+rtl/sim_mem.log
+rtl/sim_reg.log
+rtl/sim_traace.log
+rtl/sim_uart.log
+rtl/wave.gtkw
+rtl/asm.hex
+rtl/a.out
+rtl/asm.labels
+rtl/cpu.vcd

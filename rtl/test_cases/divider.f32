@@ -1,0 +1,97 @@
+ld   R1, 10
+ld   R2, 3
+divu R3, R1, R2 
+stw  R3, 0[0x100]      # expect 3
+modu R4, R1, R2
+stw  R4, 0[0x104]      # expect 1
+
+ld   R1, -10
+ld   R2, 3
+divs R3, R1, R2
+stw  R3, 0[0x108]      # expect -3
+mods R4, R1, R2
+stw  R4, 0[0x10C]      # expect -1
+
+ld   R1, 10
+ld   R2, -3
+divs R3, R1, R2
+stw  R3, 0[0x110]      # expect -3
+mods R4, R1, R2
+stw  R4, 0[0x114]      # expect +1
+
+ld   R1, -10
+ld   R2, -3
+divs R3, R1, R2
+stw  R3, 0[0x118]      # expect 3
+mods R4, R1, R2
+stw  R4, 0[0x11C]      # expect -1
+
+# larger values
+ld   R1, 100
+ld   R2, 7
+divu R3, R1, R2
+stw  R3, 0[0x120]      # expect 14
+modu R4, R1, R2
+stw  R4, 0[0x124]      # expect 2
+
+# === New edge cases ===
+
+# Division by zero (unsigned)
+ld   R1, 1234
+ld   R2, 0
+divu R3, R1, R2
+stw  R3, 0[0x128]      # expected? (depends on your spec: trap / 0 / maxint?)
+modu R4, R1, R2
+stw  R4, 0[0x12C]      # expected? (usually undefined)
+
+# Division by zero (signed)
+ld   R1, -1234
+ld   R2, 0
+divs R3, R1, R2
+stw  R3, 0[0x130]      # expected? (trap / 0 / maxint?)
+mods R4, R1, R2
+stw  R4, 0[0x134]      # expected? (undefined)
+
+# INT_MIN / -1 overflow case (signed)
+ld   R1, 0x80000000     # -2147483648
+ld   R2, -1
+divs R3, R1, R2
+stw  R3, 0[0x138]      # expect 0x80000000 (if wrap) OR trap
+mods R4, R1, R2
+stw  R4, 0[0x13C]      # expect 0 if wraparound is used
+
+# Unsigned large divide
+ld   R1, 0xFFFFFFFE     # 4294967294
+ld   R2, 2
+divu R3, R1, R2
+stw  R3, 0[0x140]      # expect 0x7FFFFFFF (2147483647)
+modu R4, R1, R2
+stw  R4, 0[0x144]      # expect 0
+
+# Dividend smaller than divisor (unsigned)
+ld   R1, 5
+ld   R2, 10
+divu R3, R1, R2
+stw  R3, 0[0x148]      # expect 0
+modu R4, R1, R2
+stw  R4, 0[0x14C]      # expect 5
+
+# Dividend smaller than divisor (signed, positive)
+ld   R1, 5
+ld   R2, -10
+divs R3, R1, R2
+stw  R3, 0[0x150]      # expect 0
+mods R4, R1, R2
+stw  R4, 0[0x154]      # expect 5
+
+# Dividend smaller than divisor (signed, negative)
+ld   R1, -5
+ld   R2, 10
+divs R3, R1, R2
+stw  R3, 0[0x158]      # expect 0
+mods R4, R1, R2
+stw  R4, 0[0x15C]      # expect -5
+
+
+
+ret
