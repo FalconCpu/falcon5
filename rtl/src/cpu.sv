@@ -2,7 +2,28 @@
 
 module cpu(
     input logic       clock,
-    input logic       reset
+    input logic       reset,
+
+    // Bus to address decoder
+    output logic        cpu_dec_request,
+    output logic        cpu_dec_write,
+    output logic [31:0] cpu_dec_address,
+    output logic [3:0]  cpu_dec_wstrb,
+    output logic [31:0] cpu_dec_wdata,
+    input  logic        cpu_dec_rvalid,
+    input  logic [31:0] cpu_dec_rdata,
+    input  logic [8:0]  cpu_dec_rtag,
+
+    // Bus to sdram arbiter
+    output logic        cpu_sdram_request,
+    input  logic        cpu_sdram_ready,
+    output logic        cpu_sdram_write,
+    output logic [25:0] cpu_sdram_address,
+    output logic [3:0]  cpu_sdram_wstrb,
+    output logic [31:0] cpu_sdram_wdata,
+    input logic         cpu_sdram_rvalid,
+    input logic [31:0]  cpu_sdram_rdata,
+    input logic [8:0]   cpu_sdram_rtag
 );
 
 logic        ifetch_icache_request;
@@ -83,7 +104,6 @@ logic        cpu_dcache_request;
 logic        cpu_dcache_ready;
 logic        cpu_dcache_write;
 logic [31:0] cpu_dcache_address;
-logic        cpu_dcache_burst;
 logic [3:0]  cpu_dcache_wstrb;
 logic [31:0] cpu_dcache_wdata;
 logic        cpu_dcache_rvalid;
@@ -148,6 +168,7 @@ cpu_ifetch  cpu_ifetch_inst (
     .p3_latent_dest(p3_latent_dest),
     .cpu_ready(cpu_ready),
     .div_ready(div_ready),
+    .mem_fifo_full(mem_fifo_full),
     .read_dest_reg(read_dest_reg),
     .p3_op(p3_op),
     .p3_pc(p3_pc),
@@ -218,7 +239,6 @@ cpu_ifetch  cpu_ifetch_inst (
     .cpu_dcache_ready(cpu_dcache_ready),
     .cpu_dcache_write(cpu_dcache_write),
     .cpu_dcache_address(cpu_dcache_address),
-    .cpu_dcache_burst(cpu_dcache_burst),
     .cpu_dcache_wstrb(cpu_dcache_wstrb),
     .cpu_dcache_wdata(cpu_dcache_wdata),
     .p3_mem_request(p3_mem_request),
@@ -236,12 +256,25 @@ cpu_dcache  cpu_dcache_inst (
     .cpu_dcache_ready(cpu_dcache_ready),
     .cpu_dcache_write(cpu_dcache_write),
     .cpu_dcache_address(cpu_dcache_address),
-    .cpu_dcache_burst(cpu_dcache_burst),
     .cpu_dcache_wstrb(cpu_dcache_wstrb),
     .cpu_dcache_wdata(cpu_dcache_wdata),
     .cpu_dcache_rvalid(cpu_dcache_rvalid),
     .cpu_dcache_rdata(cpu_dcache_rdata),
-    .cpu_dcache_rtag(cpu_dcache_rtag)
+    .cpu_dcache_rtag(cpu_dcache_rtag),
+    .cpu_dec_request(cpu_dec_request),
+    .cpu_dec_write(cpu_dec_write),
+    .cpu_dec_address(cpu_dec_address),
+    .cpu_dec_wstrb(cpu_dec_wstrb),
+    .cpu_dec_wdata(cpu_dec_wdata),
+    .dcache_sdram_request(cpu_sdram_request),
+    .dcache_sdram_ready(cpu_sdram_ready),
+    .dcache_sdram_write(cpu_sdram_write),
+    .dcache_sdram_address(cpu_sdram_address),
+    .dcache_sdram_wstrb(cpu_sdram_wstrb),
+    .dcache_sdram_wdata(cpu_sdram_wdata),
+    .dcache_sdram_rvalid(cpu_sdram_rvalid),
+    .dcache_sdram_rdata(cpu_sdram_rdata),
+    .dcache_sdram_rtag(cpu_sdram_rtag)
   );
 
 cpu_read_fifo  cpu_read_fifo_inst (
@@ -253,6 +286,9 @@ cpu_read_fifo  cpu_read_fifo_inst (
     .cpu_dcache_rvalid(cpu_dcache_rvalid),
     .cpu_dcache_rdata(cpu_dcache_rdata),
     .cpu_dcache_rtag(cpu_dcache_rtag),
+    .cpu_dec_rvalid(cpu_dec_rvalid),
+    .cpu_dec_rdata(cpu_dec_rdata),
+    .cpu_dec_rtag(cpu_dec_rtag),
     .div_valid(div_valid),
     .div_result(div_result),
     .div_dest_reg(div_dest_reg)

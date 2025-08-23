@@ -1,0 +1,16 @@
+
+SCREEN_START = 0x3f80000
+SCREEN_END   = 0x3fcb000
+
+ld $1, SCREEN_START
+ld $2, SCREEN_END
+ld $3, 0x000000FF
+ld $4, 0x01010101
+
+loop:
+    stw  0, $1[0]
+    stw $3, $1[4]
+    add $1, $1, 8
+    blt $1, $2, loop
+
+ret

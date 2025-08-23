@@ -38,6 +38,7 @@ module cpu_decoder(
     output logic        cpu_ready,      // Signal to the read fifo that we are ready to accept data
     input  logic [4:0]  read_dest_reg,  // The register the read fifo wishes to write to
     input               div_ready,      // The divider is ready for a new operation
+    input               mem_fifo_full,  // The memory read fifo is full
 
     // Control signals for P5 - Writeback stage
     output logic [4:0]  p5_dest_reg   // Which register to write the result to
@@ -65,6 +66,7 @@ logic          p2_bypass_b4;    // Use output of instruction now at P4 as operan
 logic          p2_latency2;     // Is this a latency 2 instruction?
 logic          p3_latency2;
 logic          p2_is_div; 
+logic          p2_is_mem;      // Is this a memory operation?
 
 logic [4:0]    p2_latent_dest;  // Destination register for a latent instruction
 logic [4:0]    p3_dest_reg;     // Destination register instruction now at P3
@@ -91,6 +93,7 @@ always_comb begin
     p2_latency2  = 1'b0;
     p2_latent_dest = 5'b0;
     p2_is_div = 1'b0;
+    p2_is_mem = 1'b0;
     scoreboard   = prev_scoreboard;
 
     case(instr_k) 
@@ -114,6 +117,7 @@ always_comb begin
             p2_use_a     = 1'b1;
             p2_literal   = {{19{instr_c[7]}}, instr_c, instr_b}; 
             p2_latent_dest= instr_d;
+            p2_is_mem    = 1'b1;
         end
 
         `KIND_STORE: begin 
@@ -121,6 +125,7 @@ always_comb begin
             p2_use_a     = 1'b1;
             p2_use_b     = 1'b1;
             p2_literal   = {{19{instr_c[7]}}, instr_c, instr_d}; 
+            p2_is_mem    = 1'b1;
         end
 
         `KIND_BRANCH: begin 
@@ -213,6 +218,7 @@ always_comb begin
 
     p2_ready = !( 
         (p2_is_div && !div_ready) ||
+        (mem_fifo_full && p2_is_mem) ||
         (p2_use_a && instr_a==p3_dest_reg && p3_latency2 && p3_dest_reg!=0) || 
         (p2_use_b && instr_b==p3_dest_reg && p3_latency2 && p3_dest_reg!=0) || 
         (p2_use_a && scoreboard[instr_a]) ||

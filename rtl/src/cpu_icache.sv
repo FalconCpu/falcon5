@@ -41,14 +41,14 @@ always_ff @(posedge clock) begin
     end
 
     if (ifetch_icache_request) begin
-        if (ifetch_icache_address[31:16]!=16'hffff)
-            $display("ERROR %t: Address out of range %x", $time, ifetch_icache_address);
+        if (ifetch_icache_address[31:16]!=16'hffff && ifetch_icache_address!=0)
+            $display("ERROR %t: ICACHE Address out of range %x", $time, ifetch_icache_address);
         if (ifetch_icache_write)
-            $display("ERROR %t: Write request from ifetch", $time);
+            $display("ERROR %t: ICACHE Write request from ifetch", $time);
         if (ifetch_icache_burst)
-            $display("ERROR %t: Burst request from ifetch", $time);
+            $display("ERROR %t: ICACHE Burst request from ifetch", $time);
         if (ifetch_icache_wstrb!=4'h0)
-            $display("ERROR %t: Burst request from ifetch", $time);
+            $display("ERROR %t: ICACHE Burst request from ifetch", $time);
     end
 end
 

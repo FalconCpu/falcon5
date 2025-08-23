@@ -48,13 +48,13 @@ logic [31:0] p3_result;
 logic        [31:0] data_a;
 logic        [31:0] data_b;
 logic signed [31:0] signed_data_a;
-logic signed [31:0] signed_data_b;
 logic               clt;
 logic               cltu;
 logic        [31:0] jump_target;
 logic        [31:0] p3_jump_address;
 logic        [31:0] mem_addr;
 logic        [31:0] p3_mult;
+logic        [32:0] sub;
 
 always_comb begin
     // Select the operands based on bypassing
@@ -67,9 +67,9 @@ always_comb begin
 
     // Some common expressions
     signed_data_a = $signed(data_a);
-    signed_data_b = $signed(data_b);
-    clt    = signed_data_a < signed_data_b;
-    cltu   = data_a < data_b;
+    sub = {1'b0, data_a} - {1'b0, data_b};
+    clt = sub[31];
+    cltu = sub[32];
     jump_target = p3_pc + {p3_literal[29:0], 2'b00}; // PC-relative jump
     mem_addr    = data_a + p3_literal;
 
@@ -100,7 +100,7 @@ always_comb begin
                                (p3_literal[6:5]==2'b10) ? (signed_data_a >>> p3_literal[4:0]) :
                                32'hx;
         `OP_ADD:   p3_result = data_a + data_b;
-        `OP_SUB:   p3_result = data_a - data_b;
+        `OP_SUB:   p3_result = sub[31:0];
         `OP_CLT:   p3_result = {31'b0, clt};
         `OP_CLTU:  p3_result = {31'b0, cltu};
 
@@ -228,7 +228,7 @@ always_comb begin
 end
 
 
-always_ff @(posedge clock or posedge reset) begin
+always_ff @(posedge clock) begin
     p4_result       <= p3_result;
     p4_jump         <= p3_jump;
     p4_jump_address <= p3_jump_address;

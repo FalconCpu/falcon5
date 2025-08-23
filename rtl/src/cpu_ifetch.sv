@@ -92,7 +92,7 @@ always_comb begin
     // update the PC
     if (p4_jump) begin
         pc         = p4_jump_address;
-        jump_count = prev_jump_count + 1;
+        jump_count = prev_jump_count + 1'b1;
     end else if (prev_ifetch_icache_ready && prev_ifetch_icache_request) begin
         pc = pc + 4;
     end
@@ -105,7 +105,7 @@ always_comb begin
         ifetch_icache_burst   = 1'b0;
         ifetch_icache_wstrb   = 4'h0;
         ifetch_icache_wdata   = {29'b0, jump_count}; // Tag with jump count
-        pending_count         = pending_count + 1;
+        pending_count         = pending_count + 1'b1;
     end
 
     // Handle the decoder consuming the instruction
@@ -122,7 +122,7 @@ always_comb begin
 
         if (pending_count==0)
             error_skid_underflow = 1'b1;
-        pending_count = pending_count - 1;
+        pending_count = pending_count - 1'b1;
 
     end
 
@@ -207,6 +207,12 @@ always_ff @(posedge clock) begin
         $display("ERROR %t: Skid buffer overflow in cpu_ifetch", $time);
     if (error_skid_underflow)
         $display("ERROR %t: Skid buffer underflow in cpu_ifetch", $time);
+    // synthesis translate_off
+    if (p4_jump && p4_jump_address==32'h0) begin
+        $display("INFO %t: Simulation completed", $time);
+        $finish;
+    end
+    // synthesis translate_on
 end
 
 

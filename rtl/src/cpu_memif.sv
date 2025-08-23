@@ -11,7 +11,6 @@ module cpu_memif(
     input  logic        cpu_dcache_ready,
     output logic        cpu_dcache_write,
     output logic [31:0] cpu_dcache_address,
-    output logic        cpu_dcache_burst,
     output logic [3:0]  cpu_dcache_wstrb,
     output logic [31:0] cpu_dcache_wdata,
 
@@ -25,8 +24,6 @@ module cpu_memif(
     // Stall signal to decoder
     output logic        mem_fifo_full
 );
-
-assign cpu_dcache_burst = 1'b0;
 
 logic        prev_cpu_dcache_request;
 logic        prev_cpu_dcache_ready;
@@ -116,6 +113,12 @@ always_comb begin
     end
 
     mem_fifo_full = skid2_request;
+
+    if (reset) begin
+        cpu_dcache_request   = 1'b0;
+        skid1_request        = 1'b0;
+        skid2_request        = 1'b0;
+    end
 end
 
 

@@ -12,6 +12,7 @@ reg [31:0] mem[0:31];
 
 initial begin
     mem[0] = 32'h00000000;
+	mem[30] = 32'h00000000;
 end
 
 assign q = mem[rdaddress];
