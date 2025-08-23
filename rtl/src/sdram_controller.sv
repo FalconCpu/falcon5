@@ -14,7 +14,8 @@ module sdram_controller(
     input  logic [31:0] sdram_wdata,        // Data to write / tag for read
     output logic [8:0]  sdram_rtag,         // Tag of the request that was just completed
     output logic [31:0] sdram_rdata,        // Data read from SDRAM
-    output logic [2:0]  sdram_rvalid,        // Which bus master to send data to
+    output logic [25:0] sdram_raddress,     // Address of data read from SDRAM
+    output logic [2:0]  sdram_rvalid,       // Which bus master to send data to
     output logic        sdram_complete,     // SDRAM controller is done with the current burst
   
     // SDRAM interface
@@ -65,6 +66,14 @@ logic [12:0] bank2_row, next_bank2_row;
 logic [12:0] bank3_row, next_bank3_row;
 logic [12:0] selected_bank_row;
 logic        selected_bank_open;
+
+logic [25:0] next_raddress, this_raddress;
+logic [25:0] next1_sdram_raddress;
+logic [25:0] next2_sdram_raddress;
+logic [25:0] next3_sdram_raddress;
+logic [25:0] next4_sdram_raddress;
+logic [25:0] next5_sdram_raddress;
+logic [25:0] next6_sdram_raddress;
 
 // CPU transfers are 32 bits, but SDRAMs are 16 bits. So we need to capture the upper half of a 32 bit write
 // to present to the SDRAM on the next clock cycle.
@@ -126,6 +135,8 @@ always_comb begin
     next_write_pipeline = {write_pipeline[0], 1'b0};
     next_burst_addr = this_burst_addr;
     next_tag = tag_0;
+    next1_sdram_raddress = 26'hx;
+    next_raddress = this_raddress;
 
 
     // Timer for refreshing SDRAM
@@ -195,15 +206,17 @@ always_comb begin
                 end else if (!sdram_write) begin
                     // The addressed bank is open at the row we want to access - read from it
                     next_cmd  = `CMD_READ;
+                    next_raddress = sdram_address;
                     next_addr = {3'b0,addr_col,1'b0};
                     next_bank = addr_bank;
                     next_dqm  = 0;
-                    next_state = sdram_burst ? `STATE_READ_BURST : `STATE_READ;      // ***
+                    next_state = sdram_burst ? `STATE_READ_BURST : `STATE_READ;
                     next_tag   = sdram_wdata[8:0];
                     sdram_ready  = 1'b1;
                     next_read_pipeline[2:0] = sdram_request;
                     next_read_master = sdram_request;
-                    next_complete_pipeline[0] = !sdram_burst;        // ***
+                    next_complete_pipeline[0] = !sdram_burst; 
+                    next1_sdram_raddress = sdram_address;
                     next_burst_addr = addr_col;
                 end
             end else if (sdram_request==0) begin
@@ -230,6 +243,7 @@ always_comb begin
                 next_burst_addr = {this_burst_addr[8:4], this_burst_addr[3:0]+1'b1};
                 next_addr = {3'b0,next_burst_addr,1'b0};
                 next_read_pipeline[2:0] = this_read_master;
+                next1_sdram_raddress = {this_raddress[25:11], next_burst_addr, 2'b00};
             end
         end
 
@@ -340,6 +354,13 @@ always_ff @(posedge clock) begin
     tag_3 <= tag_2;
     tag_4 <= tag_3;
     sdram_rtag <= tag_4;
+    sdram_raddress <= next6_sdram_raddress;
+    next6_sdram_raddress <= next5_sdram_raddress;
+    next5_sdram_raddress <= next4_sdram_raddress;
+    next4_sdram_raddress <= next3_sdram_raddress;
+    next3_sdram_raddress <= next2_sdram_raddress;
+    next2_sdram_raddress <= next1_sdram_raddress;
+    this_raddress <= next_raddress;
 end
 
 wire unused_ok = &{1'b0,sdram_address[1:0]};

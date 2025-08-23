@@ -66,12 +66,12 @@ always_comb begin
     m2_ready     = 1'b0;
     m1_rvalid    = 1'b0;
     m1_raddress  = 26'bx;
-    m1_rdata     = 32'bx;
+    m1_rdata     = 32'h0b0b0b0b;
     m1_rtag      = 9'bx;
     m1_complete  = 1'bx;
     m2_rvalid    = 1'b0;
     m2_raddress  = 26'bx;
-    m2_rdata     = 32'bx;
+    m2_rdata     = 32'h0b0b0b0b;
     m2_rtag      = 9'bx;
     m2_complete  = 1'bx;
 

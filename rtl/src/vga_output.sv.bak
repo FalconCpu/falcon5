@@ -1,0 +1,75 @@
+`timescale 1ns/1ps
+
+module vga_output(
+    input  logic clock,             // 125MHz system clock
+    input  logic reset,             // Active high reset
+
+	output logic      	VGA_CLK,    // 25MHz pixel clock
+	output logic [7:0]	VGA_R,
+	output logic [7:0]	VGA_G,
+	output logic [7:0]	VGA_B,
+	output logic      	VGA_HS,     // Horizontal sync
+	output logic      	VGA_VS,     // Vertical sync
+	output logic      	VGA_SYNC_N, 
+    output logic      	VGA_BLANK_N  
+);
+
+assign VGA_SYNC_N = 1'b1;     // Not used
+assign VGA_BLANK_N = 1'b1;    // Not used
+assign VGA_CLK = !clk_div[1]; // 25MHz pixel clock
+
+// VGA 640x480 @ 60Hz timings
+localparam H_VISIBLE  = 640;
+localparam H_FRONT    = 16;
+localparam H_SYNC     = 96;
+localparam H_BACK     = 48;
+localparam H_TOTAL    = H_VISIBLE + H_FRONT + H_SYNC + H_BACK; // 800
+
+localparam V_VISIBLE  = 480;
+localparam V_FRONT    = 10;
+localparam V_SYNC     = 2;
+localparam V_BACK     = 33;
+localparam V_TOTAL    = V_VISIBLE + V_FRONT + V_SYNC + V_BACK; // 525
+
+logic [2:0] clk_div;
+logic [9:0] pos_x;
+logic [9:0] pos_y;
+
+// Horizontal and vertical counters
+always_ff @(posedge clock) begin
+    clk_div <= clk_div + 1;
+    if (clk_div == 4) begin
+        clk_div <= 0;
+        pos_x <= pos_x + 1;
+        if (pos_x == H_TOTAL-1) begin
+            pos_x <= 0;
+            pos_y <= pos_y + 1;
+            if (pos_y == V_TOTAL-1) begin
+                pos_y <= 0;
+            end
+        end
+    end
+
+    VGA_HS <= ~(pos_x >= (H_VISIBLE + H_FRONT) && pos_x < (H_VISIBLE + H_FRONT + H_SYNC));
+    VGA_VS <= ~(pos_y >= (V_VISIBLE + V_FRONT) && pos_y < (V_VISIBLE + V_FRONT + V_SYNC));
+
+    if ((pos_x < H_VISIBLE) && (pos_y < V_VISIBLE)) begin
+        // In visible area
+        VGA_R <= (pos_x[3:0]==0) ? 8'hFF : 8'h00; // Vertical stripes
+        VGA_G <= (pos_y[3:0]==0) ? 8'hFF : 8'h00; // Horizontal stripes
+        VGA_B <= ((pos_x[4]^pos_y[4])==0) ? 8'hFF : 8'h00; // Checkerboard
+    end else begin
+        // In blanking area
+        VGA_R <= 8'h00;
+        VGA_G <= 8'h00;
+        VGA_B <= 8'h00;
+    end
+
+    if (reset) begin
+        clk_div <= 0;
+        pos_x <= 0;
+        pos_y <= 0;
+    end 
+end
+
+endmodule

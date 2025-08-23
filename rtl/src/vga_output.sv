@@ -4,13 +4,10 @@ module vga_output(
     input  logic clock,             // 125MHz system clock
     input  logic reset,             // Active high reset
 
-    // Interface to SDRAM (externally wired to always read bursts)
-    output logic         vga_sdram_request,    // Request memory
-    input  logic         vga_sdram_ready,      // Access granted
-    output logic [25:0]  vga_sdram_address,    // Address
-    input  logic         vga_sdram_rvalid,     // Read data valid
-    input  logic [31:0]  vga_sdram_rdata,      // Read data
-    input  logic         vga_sdram_complete,   // Burst complete
+    // Connection to the pixel FIFO
+    output logic         new_pixel,   // New pixel available
+    output logic         new_frame,   // New frame started
+    input  logic [23:0]  pixel_data,  // Pixel data (rgb)
 
     // Interface to VGA PINS
 	output logic      	VGA_CLK,    // 25MHz pixel clock
@@ -51,15 +48,6 @@ localparam FRAME_BUFFER_END   = FRAME_BUFFER_START + (H_VISIBLE * V_VISIBLE); //
 logic [2:0]  clk_div;
 logic [9:0]  pos_x;
 logic [9:0]  pos_y;
-logic [25:0] sdram_address;
-
-logic         request_in_progress;
-logic [31:0]  fifo [0:63]; // 64 word FIFO
-logic [5:0]   write_ptr;
-logic [5:0]   read_ptr;
-wire  [5:0]   fifo_free = read_ptr - write_ptr -1'b1;
-logic [31:0]  current_word;
-logic [7:0]   current_byte;
 
 reg [15:0] mouse_image[15:0];
 initial begin
@@ -103,78 +91,44 @@ always_ff @(posedge clock) begin
     VGA_HS <= ~(pos_x >= (H_VISIBLE + H_FRONT) && pos_x < (H_VISIBLE + H_FRONT + H_SYNC));
     VGA_VS <= ~(pos_y >= (V_VISIBLE + V_FRONT) && pos_y < (V_VISIBLE + V_FRONT + V_SYNC));
 
-    // Request new data from SDRAM when FIFO has space
-    if (!request_in_progress && sdram_address!=FRAME_BUFFER_END && fifo_free>16) begin
-        vga_sdram_request <= 1'b1;
-        vga_sdram_address <= sdram_address;
-        request_in_progress <= 1'b1;
-    end 
-
-    if (vga_sdram_ready) begin
-        vga_sdram_request <= 1'b0;
-    end
-
-    if (vga_sdram_complete) begin
-        request_in_progress <= 1'b0;
-        sdram_address <= sdram_address + 26'd64; // Next burst
-    end
-
-    if (vga_sdram_rvalid) begin
-        fifo[write_ptr] <= vga_sdram_rdata;
-        write_ptr <= write_ptr + 1'b1;
-    end
-
-    // Read data from FIFO for display
-    // verilator lint_off BLKSEQ
-    current_word <= fifo[read_ptr];
-    current_byte = (pos_x[1:0]==2'd3) ? current_word[31:24] :
-                   (pos_x[1:0]==2'd2) ? current_word[23:16] :
-                   (pos_x[1:0]==2'd1) ? current_word[15:8]  :
-                                        current_word[7:0];
-    if (clk_div == 0 && pos_x[1:0] == 2'd3 && pos_x<H_VISIBLE && pos_y<V_VISIBLE) begin
-        read_ptr <= read_ptr + 1'b1;
-    end
-
-    // In visible area
-    VGA_R <= current_byte; // Grayscale
-    VGA_G <= current_byte;
-    VGA_B <= current_byte;
-
-    // Overlay mouse cursor
+    new_frame <= (clk_div==0 && pos_x==H_TOTAL-128 && pos_y==V_TOTAL-1);
     mouse_image_line <= mouse_image[pos_y[3:0] - mouse_y[3:0]];
-    if (pos_y>=mouse_y && pos_y<mouse_y+16 && pos_x >=mouse_x && pos_x<mouse_x+16) begin
-        mouse_image_bit = mouse_image_line[15 - (pos_x - mouse_x)];
-        if (mouse_image_bit) begin
-            VGA_R <= 8'hff;
-            VGA_G <= 8'hff;
-            VGA_B <= 8'hff;
+
+    if (clk_div==0) begin
+        if (pos_x<H_VISIBLE && pos_y<V_VISIBLE) begin
+            // In visible area
+            VGA_R <= pixel_data[23:16]; // Grayscale
+            VGA_G <= pixel_data[15:8];
+            VGA_B <= pixel_data[7:0];
+
+            // Overlay mouse cursor
+            if (pos_y>=mouse_y && pos_y<mouse_y+16 && pos_x >=mouse_x && pos_x<mouse_x+16) begin
+                // verilator lint_off BLKSEQ
+                mouse_image_bit = mouse_image_line[15 - (pos_x - mouse_x)];
+                if (mouse_image_bit) begin
+                    VGA_R <= 8'hff;
+                    VGA_G <= 8'hff;
+                    VGA_B <= 8'hff;
+                end
+            end
+            new_pixel <= 1'b1;
+        end else begin
+            // Outside visible area
+            VGA_R <= 8'b0;
+            VGA_G <= 8'b0;
+            VGA_B <= 8'b0;
         end
+        new_pixel <= (pos_x<H_VISIBLE && pos_y<V_VISIBLE);
+    end else begin
+        new_pixel <= 1'b0;
+        
     end
-
-    // Outside visible area
-    if (pos_x >= H_VISIBLE || pos_y >= V_VISIBLE) begin
-        VGA_R <= 8'b0;
-        VGA_G <= 8'b0;
-        VGA_B <= 8'b0;
-    end
-
-    // Reset just before start of frame
-    if (clk_div == 4 && pos_x == H_TOTAL-128 && pos_y == V_TOTAL-1) begin
-        sdram_address <= FRAME_BUFFER_START;
-        read_ptr <= 0;
-        write_ptr <= 0;
-    end    
 
     // reset
     if (reset) begin
         clk_div <= 0;
         pos_x <= 0;
         pos_y <= V_TOTAL-1; // Start just before start of frame
-        vga_sdram_request <= 1'b0;
-        request_in_progress <= 1'b0;
-        sdram_address <= FRAME_BUFFER_START;
-        write_ptr <= 0;
-        read_ptr <= 0;
     end 
 end
 

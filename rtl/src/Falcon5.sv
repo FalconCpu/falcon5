@@ -118,6 +118,7 @@ logic         vga_sdram_ready;
 logic [25:0]  vga_sdram_address;
 logic         vga_sdram_rvalid;
 logic [31:0]  vga_sdram_rdata;
+logic [25:0]  vga_sdram_raddress;
 logic         vga_sdram_complete;
 
 logic [2:0]  sdram_request;
@@ -129,6 +130,7 @@ logic [3:0]  sdram_wstrb;
 logic [31:0] sdram_wdata;
 logic [8:0]  sdram_rtag;
 logic [31:0] sdram_rdata;
+logic [25:0] sdram_raddress;
 logic [2:0]  sdram_rvalid;
 logic        sdram_complete;
 
@@ -234,7 +236,7 @@ sdram_arbiter  sdram_arbiter_inst (
     .m1_wdata(32'hx),
     .m1_wstrb(4'h0),
     .m1_rvalid(vga_sdram_rvalid),
-    .m1_raddress(),
+    .m1_raddress(vga_sdram_raddress),
     .m1_rdata(vga_sdram_rdata),
     .m1_rtag(),
     .m1_complete(vga_sdram_complete),
@@ -260,7 +262,7 @@ sdram_arbiter  sdram_arbiter_inst (
     .sdram_wstrb(sdram_wstrb),
     .sdram_wdata(sdram_wdata),
     .sdram_rtag(sdram_rtag),
-    .sdram_raddress(),
+    .sdram_raddress(sdram_raddress),
     .sdram_rdata(sdram_rdata),
     .sdram_rvalid(sdram_rvalid),
     .sdram_complete(sdram_complete)
@@ -279,6 +281,7 @@ sdram_controller  sdram_controller_inst (
     .sdram_ready(sdram_ready),
     .sdram_rdata(sdram_rdata),
     .sdram_rvalid(sdram_rvalid),
+    .sdram_raddress(sdram_raddress),
     .sdram_complete(sdram_complete),
     .DRAM_ADDR(DRAM_ADDR),
     .DRAM_BA(DRAM_BA),
@@ -292,15 +295,14 @@ sdram_controller  sdram_controller_inst (
     .DRAM_WE_N(DRAM_WE_N)
   );
 
-vga_output  vga_output_inst (
+wire mmreg_write = hwregs_request && hwregs_write && hwregs_address[15:8]==8'h01;
+
+vga  vga_inst (
     .clock(clock),
     .reset(reset),
-    .vga_sdram_request(vga_sdram_request),
-    .vga_sdram_ready(vga_sdram_ready),
-    .vga_sdram_address(vga_sdram_address),
-    .vga_sdram_rvalid(vga_sdram_rvalid),
-    .vga_sdram_rdata(vga_sdram_rdata),
-    .vga_sdram_complete(vga_sdram_complete),
+    .mmreg_write(mmreg_write),
+    .mmreg_address(hwregs_address[15:0]),
+    .mmreg_wdata(hwregs_wdata),
     .VGA_CLK(VGA_CLK),
     .VGA_R(VGA_R),
     .VGA_G(VGA_G),
@@ -309,7 +311,15 @@ vga_output  vga_output_inst (
     .VGA_VS(VGA_VS),
     .VGA_SYNC_N(VGA_SYNC_N),
     .VGA_BLANK_N(VGA_BLANK_N),
+    .vga_sdram_request(vga_sdram_request),
+    .vga_sdram_ready(vga_sdram_ready),
+    .vga_sdram_address(vga_sdram_address),
+    .vga_sdram_rvalid(vga_sdram_rvalid),
+    .vga_sdram_rdata(vga_sdram_rdata),
+    .vga_sdram_raddress(vga_sdram_raddress),
+    .vga_sdram_complete(vga_sdram_complete),
     .mouse_x(mouse_x),
     .mouse_y(mouse_y)
   );
+
 endmodule
