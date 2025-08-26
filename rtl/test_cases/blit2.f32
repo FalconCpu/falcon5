@@ -1,0 +1,59 @@
+HWREGS_BASE = 0xE0000000
+HWREGS_BLIT_CMD  = 0x0034   # Write commands here, read=# slots free
+HWREGS_BLIT_CTRL = 0x0038
+
+BLIT_CMD_SETUP = 0xFF000000
+BLIT_CMD_RECT  = 0x01000000
+BLIT_CMD_COPY  = 0x02000000
+
+# Configure the blitter registers
+ld $1, HWREGS_BASE
+
+ld $2, 1
+stw $2, $1[HWREGS_BLIT_CTRL]  # Enable blitter privileged mode
+
+ld $2, BLIT_CMD_SETUP
+ld $3, 640
+or $2, $3                     # $2 = SETUP + width
+ld $3, 0x3f80000              # $3 = Screen base address
+ld $4, 0x01E00280             # $4 = x2=640 y2=480
+
+stw $2, $1[HWREGS_BLIT_CMD]   # screen SETUP + width
+stw $3, $1[HWREGS_BLIT_CMD]   # screen base addr
+stw 0,  $1[HWREGS_BLIT_CMD]   # clip x1/y1
+stw $4, $1[HWREGS_BLIT_CMD]   # clip x2/y2
+stw 0,  $1[HWREGS_BLIT_CMD]   # offset x/y
+stw $3, $1[HWREGS_BLIT_CMD]   # src addr
+stw $4, $1[HWREGS_BLIT_CMD]   # src width
+
+# draw a black rectangle
+ld $5, BLIT_CMD_RECT
+ld $6, 0x00100020
+ld $7, 0x00200030
+stw $5, $1[HWREGS_BLIT_CMD]    # DRAW_RECT color
+stw $6, $1[HWREGS_BLIT_CMD]   # x1=16 y1=32
+stw $7, $1[HWREGS_BLIT_CMD]   # x2=32 y2=48
+
+# draw a yellow rectangle
+ld $5, BLIT_CMD_RECT
+or $5, 4                      # color=4 (yellow)
+ld $6, 0x00140024   
+ld $7, 0x00180028
+stw $5, $1[HWREGS_BLIT_CMD]    # DRAW_RECT color
+stw $6, $1[HWREGS_BLIT_CMD]   # x1=20 y1=36
+stw $7, $1[HWREGS_BLIT_CMD]   # x2=24 y2=40
+
+# copy the rectangle
+ld $10, BLIT_CMD_COPY
+ld $11, 0x00600020            # dest x1=96 y1=32
+ld $12, 0x00700030            # dest x2=112 y2=48
+ld $13, 0x00100020            # src x1=16 y1=32
+stw $10, $1[HWREGS_BLIT_CMD]  # COPY
+stw $11, $1[HWREGS_BLIT_CMD]
+stw $12, $1[HWREGS_BLIT_CMD]
+stw $13, $1[HWREGS_BLIT_CMD]
+
+
+# wait forever
+forever:
+jmp forever

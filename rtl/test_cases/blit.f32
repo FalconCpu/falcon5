@@ -1,0 +1,86 @@
+HWREGS_BASE = 0xE0000000
+HWREGS_BLIT_CMD  = 0x0034   # Write commands here, read=# slots free
+HWREGS_BLIT_CTRL = 0x0038
+
+BLIT_CMD_SETUP = 0xFF000000
+BLIT_CMD_RECT  = 0x01000000
+BLIT_CMD_COPY  = 0x02000000
+
+# Configure the blitter registers
+ld $1, HWREGS_BASE
+
+ld $2, 1
+stw $2, $1[HWREGS_BLIT_CTRL]  # Enable blitter privileged mode
+
+ld $2, BLIT_CMD_SETUP
+ld $3, 640
+or $2, $3                     # $2 = SETUP + width
+ld $3, 0x3f80000              # $3 = Screen base address
+ld $4, 0x01E00280             # $4 = x2=640 y2=480
+
+stw $2, $1[HWREGS_BLIT_CMD]   # screen SETUP + width
+stw $3, $1[HWREGS_BLIT_CMD]   # screen base addr
+stw 0,  $1[HWREGS_BLIT_CMD]   # clip x1/y1
+stw $4, $1[HWREGS_BLIT_CMD]   # clip x2/y2
+stw 0,  $1[HWREGS_BLIT_CMD]   # offset x/y
+stw $3, $1[HWREGS_BLIT_CMD]   # src addr
+stw $4, $1[HWREGS_BLIT_CMD]   # src width
+
+# copy a rectangle
+ld $10, BLIT_CMD_COPY
+ld $11, 0x00100020          # x1=16 y1=32
+ld $12, 0x00200030          # x2=32 y2=48
+ld $13, 0x00400020          # src x1=64 y1
+stw $10, $1[HWREGS_BLIT_CMD]   # COPY color=0
+stw $11, $1[HWREGS_BLIT_CMD]
+stw $12, $1[HWREGS_BLIT_CMD]
+stw $13, $1[HWREGS_BLIT_CMD]
+
+# clear the screen
+ld $5, BLIT_CMD_RECT
+stw $5, $1[HWREGS_BLIT_CMD]    # DRAW_RECT color=0
+stw 0, $1[HWREGS_BLIT_CMD]     # x1=0 y1=0
+stw $4, $1[HWREGS_BLIT_CMD]
+
+# Setup an offset for drawing rectangles
+ld  $5, 0x00400020
+stw $2, $1[HWREGS_BLIT_CMD]   # screen SETUP + width
+stw $3, $1[HWREGS_BLIT_CMD]   # screen base addr
+stw 0,  $1[HWREGS_BLIT_CMD]   # clip x1/y1
+stw $4, $1[HWREGS_BLIT_CMD]   # dest addr
+stw $5,  $1[HWREGS_BLIT_CMD]   # offset x/y
+
+ld $5, 0            # $5 = counter
+ld $6, 800          # $6 = limit  (takes us off the edge of the screen)
+
+# Loop to draw multiple rectangles
+
+loop:
+# wait until the blitter has at least 8 slots free
+ldw $2, $1[HWREGS_BLIT_CMD]
+ld $3, 8
+blt $2, $3, loop
+
+# calculate the coordinates
+ld $2, BLIT_CMD_RECT
+or $2, $5              
+stw $2, $1[HWREGS_BLIT_CMD]    # DRAW_RECT color=counter
+and $2, $5, 0x0F               # x = counter & 0x0F
+and $3, $5, 0x300              # high bit of x from bit 8 of counter
+lsl $2, $2, 4                  # x = x * 16
+or $2, $3                      # combine x and high bit
+and $3, $5, 0xF0               # y = counter & 0xF0
+lsl $3, $3, 16                 # shift into upper half
+or $2, $3                      # combine x and y 
+stw $2, $1[HWREGS_BLIT_CMD]
+ld $3, 0x000E000E              # width=14 height=14
+add $2, $3
+stw $2, $1[HWREGS_BLIT_CMD]    # x2 = x1 + 14, y2 = y1 + 14
+
+# increment counter
+add $5, 1
+blt $5, $6, loop
+
+# wait forever
+forever:
+jmp forever

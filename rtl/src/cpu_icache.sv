@@ -8,50 +8,38 @@ module cpu_icache (
     // Connection to the instruction fetch
     input  logic        ifetch_icache_request,
     output logic        ifetch_icache_ready,
-    input  logic        ifetch_icache_write,
     input  logic [31:0] ifetch_icache_address,
-    input  logic        ifetch_icache_burst,
-    input  logic [3:0]  ifetch_icache_wstrb,
     input  logic [31:0] ifetch_icache_wdata,
     output logic [31:0] ifetch_icache_rdata,
     output logic [31:0] ifetch_icache_raddr,
     output logic [8:0]  ifetch_icache_rtag,
-    output logic        ifetch_icache_rvalid
+    output logic        ifetch_icache_rvalid,
+
+    // Connection to the IRAM
+    output logic        ifetch_iram_request,
+    input  logic        ifetch_iram_ready,
+    output logic [31:0] ifetch_iram_address,
+    output logic [31:0] ifetch_iram_wdata,
+    input  logic [31:0] ifetch_iram_rdata,
+    input  logic [31:0] ifetch_iram_raddr,
+    input  logic [8:0]  ifetch_iram_rtag,
+    input  logic        ifetch_iram_rvalid
+
+
 );
 
-logic [31:0] rom [0:16383]; // 64kB of ROM
+always_comb begin
+    ifetch_icache_ready = ifetch_iram_ready;
+    ifetch_icache_rdata = ifetch_iram_rdata;
+    ifetch_icache_raddr = ifetch_iram_raddr;
+    ifetch_icache_rtag  = ifetch_iram_rtag;
+    ifetch_icache_rvalid= ifetch_iram_rvalid;
 
-initial begin
-    $readmemh("asm.hex", rom);
+    ifetch_iram_request = ifetch_icache_request;
+    ifetch_iram_address = ifetch_icache_address;
+    ifetch_iram_wdata   = ifetch_icache_wdata; // Copy tag from wdata
 end
 
-always_ff @(posedge clock) begin
-    ifetch_icache_ready <= 1'b1;
-
-    if (ifetch_icache_request) begin
-        ifetch_icache_rdata <= rom[ifetch_icache_address[15:2]]; // 4-byte aligned
-        ifetch_icache_raddr <= ifetch_icache_address;
-        ifetch_icache_rtag  <= ifetch_icache_wdata[8:0];         // Copy tag from wdata
-        ifetch_icache_rvalid<= 1'b1;
-    end else begin
-        ifetch_icache_rvalid <= 1'b0;
-        ifetch_icache_rdata  <= 32'bx;
-        ifetch_icache_raddr  <= 32'bx;
-        ifetch_icache_rtag   <= 9'bx;
-    end
-
-    if (ifetch_icache_request) begin
-        if (ifetch_icache_address[31:16]!=16'hffff && ifetch_icache_address!=0)
-            $display("ERROR %t: ICACHE Address out of range %x", $time, ifetch_icache_address);
-        if (ifetch_icache_write)
-            $display("ERROR %t: ICACHE Write request from ifetch", $time);
-        if (ifetch_icache_burst)
-            $display("ERROR %t: ICACHE Burst request from ifetch", $time);
-        if (ifetch_icache_wstrb!=4'h0)
-            $display("ERROR %t: ICACHE Burst request from ifetch", $time);
-    end
-end
-
-wire unused_ok = &{1'b0, ifetch_icache_wdata[31:9]};
+wire unused_ok = &{1'b0, clock};
 
 endmodule

@@ -7,10 +7,7 @@ module cpu_ifetch(
     // Connection to the instruction cache
     output logic        ifetch_icache_request,
     input  logic        ifetch_icache_ready,
-    output logic        ifetch_icache_write,
     output logic [31:0] ifetch_icache_address,
-    output logic        ifetch_icache_burst,
-    output logic [3:0]  ifetch_icache_wstrb,
     output logic [31:0] ifetch_icache_wdata,
     input  logic [31:0] ifetch_icache_rdata,
     input  logic [31:0] ifetch_icache_raddr,
@@ -30,10 +27,7 @@ module cpu_ifetch(
 
 logic        prev_ifetch_icache_request;
 logic        prev_ifetch_icache_ready;
-logic        prev_ifetch_icache_write;
 logic [31:0] prev_ifetch_icache_address;
-logic        prev_ifetch_icache_burst;
-logic [3:0]  prev_ifetch_icache_wstrb;
 logic [31:0] prev_ifetch_icache_wdata;
 
 logic        next_p2_valid;
@@ -59,9 +53,6 @@ always_comb begin
     // Default values
     ifetch_icache_request  = prev_ifetch_icache_request;
     ifetch_icache_address  = prev_ifetch_icache_address;
-    ifetch_icache_write    = prev_ifetch_icache_write;
-    ifetch_icache_burst    = prev_ifetch_icache_burst;
-    ifetch_icache_wstrb    = prev_ifetch_icache_wstrb;
     ifetch_icache_wdata    = prev_ifetch_icache_wdata;
     next_p2_valid          = p2_valid;
     next_p2_instr          = p2_instr;
@@ -83,9 +74,6 @@ always_comb begin
     if (prev_ifetch_icache_ready) begin
         ifetch_icache_request = 1'b0;
         ifetch_icache_address = 32'bx;
-        ifetch_icache_write   = 1'bx;
-        ifetch_icache_burst   = 1'bx;
-        ifetch_icache_wstrb   = 4'bx;
         ifetch_icache_wdata   = 32'bx;
     end
 
@@ -101,9 +89,6 @@ always_comb begin
     if (ifetch_icache_request==1'b0 && pending_count==0) begin
         ifetch_icache_request = 1'b1;
         ifetch_icache_address = pc;
-        ifetch_icache_write   = 1'b0;
-        ifetch_icache_burst   = 1'b0;
-        ifetch_icache_wstrb   = 4'h0;
         ifetch_icache_wdata   = {29'b0, jump_count}; // Tag with jump count
         pending_count         = pending_count + 1'b1;
     end
@@ -164,9 +149,6 @@ always_comb begin
         pc                    = 32'hffff0000;
         ifetch_icache_request = 1'b0;
         ifetch_icache_address = 32'bx;
-        ifetch_icache_write   = 1'bx;
-        ifetch_icache_burst   = 1'bx;
-        ifetch_icache_wstrb   = 4'bx;
         ifetch_icache_wdata   = 32'bx;
         next_p2_valid         = 1'b0;
         next_p2_instr         = 32'bx;
@@ -186,9 +168,6 @@ always_ff @(posedge clock) begin
     prev_ifetch_icache_request <= ifetch_icache_request;
     prev_ifetch_icache_ready   <= ifetch_icache_ready;
     prev_ifetch_icache_address <= ifetch_icache_address;
-    prev_ifetch_icache_write   <= ifetch_icache_write;
-    prev_ifetch_icache_burst   <= ifetch_icache_burst;
-    prev_ifetch_icache_wstrb   <= ifetch_icache_wstrb;
     prev_ifetch_icache_wdata   <= ifetch_icache_wdata;
     p2_valid                   <= next_p2_valid;
     p2_instr                   <= next_p2_instr;

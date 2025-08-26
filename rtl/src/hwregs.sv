@@ -19,6 +19,8 @@
 // E0000028  MOUSE_BUTTONS  R    Mouse buttons (bit 0 = left, bit 1 = right, bit 2 = middle)
 // E000002C  SIMULATION     R    Reads as 1 in simulation, 0 in hardware
 // E0000030  TIMER          RW   32 bit free running timer
+// E0000034  BLIT_CMD       RW   Write=Blitter Command Read=Fifo full
+// E0000038  BLIT_CTRL      RW   Blitter Control register 
 
 // verilator lint_off PINCONNECTEMPTY
 
@@ -36,6 +38,13 @@ module hwregs (
     output logic        hwregs_rvalid,      // Memory has responded to the request.
     output logic [8:0]  hwregs_rtag,        // Tag to identify the request 
     output logic [31:0] hwregs_rdata,       // Data read from memory
+
+    // Connnections to the blitter
+    output logic         hwregs_blit_valid,
+    output logic [31:0]  hwregs_blit_command,
+    output logic         hwregs_blit_privaledge, // 1 = allow privileged commands
+    input  logic [9:0]   blit_fifo_slots_free,
+
 
     // Connections to the chip pins
     output logic [6:0]	HEX0,
@@ -80,6 +89,8 @@ always_ff @(posedge clock) begin
     hwregs_rvalid <= hwregs_request & !hwregs_write;
     hwregs_rtag   <= hwregs_wdata[8:0];
     hwregs_rdata <= 32'b0;
+    hwregs_blit_valid <= 1'b0;
+    hwregs_blit_command <= 32'bx;
     timer <= timer + 1;
 
     if (hwregs_request && hwregs_write) begin
@@ -123,6 +134,14 @@ always_ff @(posedge clock) begin
                 if (hwregs_wmask[2])  timer[23:16] <= hwregs_wdata[23:16];
                 if (hwregs_wmask[3])  timer[31:24] <= hwregs_wdata[31:24];
             end
+            16'h0034: begin  // Blitter command register
+                hwregs_blit_valid <= 1'b1;
+                hwregs_blit_command <= hwregs_wdata;
+            end
+            16'h0038: begin
+                // Blitter control register - currently unused
+                hwregs_blit_privaledge <= hwregs_wdata[0];
+            end
             default: begin end
         endcase
 
@@ -147,6 +166,7 @@ always_ff @(posedge clock) begin
                         // synthesis translate_on
                       end
             16'h0030: hwregs_rdata <= timer;
+            16'h0034: hwregs_rdata <= {22'b0, blit_fifo_slots_free};
             default:  hwregs_rdata <= 32'bx;
         endcase
     end

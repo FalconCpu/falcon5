@@ -14,6 +14,17 @@ module cpu(
     input  logic [31:0] cpu_dec_rdata,
     input  logic [8:0]  cpu_dec_rtag,
 
+    // Connection to iram
+    output logic        ifetch_iram_request,
+    input  logic        ifetch_iram_ready,
+    output logic [31:0] ifetch_iram_address,
+    output logic [31:0] ifetch_iram_wdata,
+    input  logic [31:0] ifetch_iram_rdata,
+    input  logic [31:0] ifetch_iram_raddr,
+    input  logic [8:0]  ifetch_iram_rtag,
+    input  logic        ifetch_iram_rvalid,
+
+
     // Bus to sdram arbiter
     output logic        cpu_sdram_request,
     input  logic        cpu_sdram_ready,
@@ -28,10 +39,7 @@ module cpu(
 
 logic        ifetch_icache_request;
 logic        ifetch_icache_ready;
-logic        ifetch_icache_write;
 logic [31:0] ifetch_icache_address;
-logic        ifetch_icache_burst;
-logic [3:0]  ifetch_icache_wstrb;
 logic [31:0] ifetch_icache_wdata;
 logic [31:0] ifetch_icache_rdata;
 logic [31:0] ifetch_icache_raddr;
@@ -117,15 +125,20 @@ logic [8:0]  cpu_dcache_rtag;
     .clock(clock),
     .ifetch_icache_request(ifetch_icache_request),
     .ifetch_icache_ready(ifetch_icache_ready),
-    .ifetch_icache_write(ifetch_icache_write),
     .ifetch_icache_address(ifetch_icache_address),
-    .ifetch_icache_burst(ifetch_icache_burst),
-    .ifetch_icache_wstrb(ifetch_icache_wstrb),
     .ifetch_icache_wdata(ifetch_icache_wdata),
     .ifetch_icache_rdata(ifetch_icache_rdata),
     .ifetch_icache_raddr(ifetch_icache_raddr),
     .ifetch_icache_rtag(ifetch_icache_rtag),
-    .ifetch_icache_rvalid(ifetch_icache_rvalid)
+    .ifetch_icache_rvalid(ifetch_icache_rvalid),
+    .ifetch_iram_request(ifetch_iram_request),
+    .ifetch_iram_ready(ifetch_iram_ready),
+    .ifetch_iram_address(ifetch_iram_address),
+    .ifetch_iram_wdata(ifetch_iram_wdata),
+    .ifetch_iram_rdata(ifetch_iram_rdata),
+    .ifetch_iram_raddr(ifetch_iram_raddr),
+    .ifetch_iram_rtag(ifetch_iram_rtag),
+    .ifetch_iram_rvalid(ifetch_iram_rvalid)
   );
 
 cpu_ifetch  cpu_ifetch_inst (
@@ -133,10 +146,7 @@ cpu_ifetch  cpu_ifetch_inst (
     .reset(reset),
     .ifetch_icache_request(ifetch_icache_request),
     .ifetch_icache_ready(ifetch_icache_ready),
-    .ifetch_icache_write(ifetch_icache_write),
     .ifetch_icache_address(ifetch_icache_address),
-    .ifetch_icache_burst(ifetch_icache_burst),
-    .ifetch_icache_wstrb(ifetch_icache_wstrb),
     .ifetch_icache_wdata(ifetch_icache_wdata),
     .ifetch_icache_rdata(ifetch_icache_rdata),
     .ifetch_icache_raddr(ifetch_icache_raddr),

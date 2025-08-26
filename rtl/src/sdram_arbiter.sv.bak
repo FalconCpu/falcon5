@@ -93,8 +93,6 @@ always_comb begin
     next_wdata   = sdram_wdata;
     m1_ready     = 1'b0;
     m2_ready     = 1'b0;
-    m3_ready     = 1'b0;
-    m4_ready     = 1'b0;
     m1_rvalid    = 1'b0;
     m1_raddress  = 26'bx;
     m1_rdata     = 32'hx;
@@ -136,8 +134,8 @@ always_comb begin
             next_wdata   = m2_wdata;
             m2_ready     = 1'b1;
         end else if (m3_request) begin
-            // Master 3
-            next_request = 3'b011;
+            // Master 2
+            next_request = 3'b010;
             next_address = m3_address;
             next_write   = m3_write;
             next_burst   = m3_burst;
@@ -145,8 +143,8 @@ always_comb begin
             next_wdata   = m3_wdata;
             m3_ready     = 1'b1;
         end else if (m4_request) begin
-            // Master 4
-            next_request = 3'b100;
+            // Master 2
+            next_request = 3'b010;
             next_address = m4_address;
             next_write   = m4_write;
             next_burst   = m4_burst;

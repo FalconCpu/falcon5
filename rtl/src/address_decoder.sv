@@ -21,7 +21,17 @@ module address_decoder (
     output logic [31:0] hwregs_wdata,       // Data to write
     input  logic        hwregs_rvalid,      // Memory has responded to the request.
     input  logic [8:0]  hwregs_rtag,        // Tag to identify the request 
-    input  logic [31:0] hwregs_rdata       // Data read from memory
+    input  logic [31:0] hwregs_rdata,       // Data read from memory
+
+    // Bus to/from the iram peripherals
+    output logic        iram_request,     // Request a read or write
+    output logic        iram_write,       // 1 = write, 0 = read
+    output logic [15:0] iram_address,     // Address of data to read/write
+    output logic [3:0]  iram_wmask,       // For a write, which bytes to write.
+    output logic [31:0] iram_wdata,       // Data to write
+    input  logic        iram_rvalid,      // Memory has responded to the request.
+    input  logic [8:0]  iram_rtag,        // Tag to identify the request 
+    input  logic [31:0] iram_rdata       // Data read from memory
 );
 
 always_ff @(posedge clock) begin
@@ -35,12 +45,23 @@ always_ff @(posedge clock) begin
         hwregs_address <= cpu_dec_address[15:0];
         hwregs_wmask   <= cpu_dec_wstrb;
         hwregs_wdata   <= cpu_dec_wdata;
+    end else if (cpu_dec_request && cpu_dec_address[31:16]==16'hFFFF) begin
+        iram_request <= cpu_dec_request;
+        iram_write   <= cpu_dec_write;
+        iram_address <= cpu_dec_address[15:0];
+        iram_wmask   <= cpu_dec_wstrb;
+        iram_wdata   <= cpu_dec_wdata;
     end else begin
         hwregs_request <= 1'b0;
         hwregs_write   <= 1'bx;
         hwregs_address <= 16'bx;
         hwregs_wmask   <= 4'bx;
         hwregs_wdata   <= 32'bx;
+        iram_request <= 1'b0;
+        iram_write   <= 1'bx;
+        iram_address <= 16'bx;
+        iram_wmask   <= 4'bx;
+        iram_wdata   <= 32'bx;
     end
 
     // Route read data back to the CPU
@@ -48,6 +69,10 @@ always_ff @(posedge clock) begin
         cpu_dec_rvalid <= hwregs_rvalid;
         cpu_dec_rdata  <= hwregs_rdata;
         cpu_dec_rtag   <= hwregs_rtag;
+    end else if (iram_rvalid) begin
+        cpu_dec_rvalid <= iram_rvalid;
+        cpu_dec_rdata  <= iram_rdata;
+        cpu_dec_rtag   <= iram_rtag;
     end else begin
         cpu_dec_rvalid <= 1'b0;
         cpu_dec_rdata  <= 32'b0;
