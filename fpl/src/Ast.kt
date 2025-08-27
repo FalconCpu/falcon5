@@ -29,6 +29,7 @@ class AstRangeExpr(location: Location, val start: AstExpr, val end: AstExpr, val
 class AstNullAssertExpr(location: Location, val expr: AstExpr) : AstExpr(location)
 class AstIsExpr(location: Location, val expr: AstExpr, val typeExpr: AstType) : AstExpr(location)
 class AstAsExpr(location: Location, val expr: AstExpr, val typeExpr: AstType) : AstExpr(location)
+class AstTryExpr(location: Location, val expr: AstExpr) : AstExpr(location)
 
 // Statement nodes
 sealed class AstStmt(location: Location) : Ast(location)
@@ -75,7 +76,7 @@ class AstIfStmt(location:Location, body:List<AstIfClause>) : AstBlock(location, 
 class AstLambdaExpr(location: Location, body: List<AstStmt>) : AstBlock(location, body)
 class AstForStmt(location: Location, val indexName: String, val indexType: AstType?, val range: AstExpr, body: List<AstStmt>) : AstBlock(location, body)
 
-class AstEnumDefStmt(location: Location, val name: String, val values: List<AstIdentifier>, body:List<AstStmt>) : AstBlock(location,body) {
+class AstEnumDefStmt(location: Location, val name: String, val params: List<AstParameter>, val values: List<AstEnumEntry>, body:List<AstStmt>) : AstBlock(location,body) {
     lateinit var enum: TypeEnum
 }
 
@@ -87,10 +88,12 @@ class AstTop(location: Location, body: List<AstStmt>) : AstBlock(location, body)
 sealed class AstType(location:Location) : Ast(location)
 class AstArrayType(location: Location, val elementType: AstType) : AstType(location)
 class AstNullableType(location: Location, val elementType: AstType) : AstType(location)
+class AstErrableType(location: Location, val elementType: AstType) : AstType(location)
 class AstTypeIdentifier(location: Location, val name: String) : AstType(location)
 
 // Other nodes
 class AstParameter(location: Location, val kind:TokenKind, val name: String, val type: AstType) : Ast(location)
+class AstEnumEntry(location: Location, val name: String, val args: List<AstExpr>) : Ast(location)
 
 enum class Arena {
     STACK, HEAP, CONST

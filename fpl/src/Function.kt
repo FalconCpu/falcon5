@@ -52,8 +52,13 @@ class Function (
         return symToReg.getOrPut(sym) {
             val ret = UserReg(sym.name)
             regs += ret
-            ret
+            if (sym.type is TypeErrable) newUnionReg(newUserTemp(), ret) else ret
         }
+    }
+
+    fun newUnionReg(typeReg: Reg, valueReg: Reg) : UnionReg {
+        val ret = UnionReg(typeReg, valueReg, "u${tempCount++}")
+        return ret
     }
 
     fun stackAlloc(size: Int, offset:Int): Reg {

@@ -241,7 +241,6 @@ class PathContextTests {
 
         val expected = """
             input.fpl:5.11-5.11:  'y' is uninitialized
-            input.fpl:6.13-6.13:  'y' may be uninitialized
             input.fpl:9.11-9.11:  'x' is uninitialized
             input.fpl:10.11-10.11:  'y' is uninitialized
         """.trimIndent()

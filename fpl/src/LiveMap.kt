@@ -8,11 +8,20 @@ class LiveMap(private val func: Function) {
     private val kill = Array(numRows){BitSet(numCols)}
 
     private fun gen() {
+
         for(instr in func.prog) {
             val writes = instr.getDestReg()
+            if (writes is UnionReg)
+                error("Internal error: Union register ${writes.name} used in instruction $instr")
             if (writes!=null)
                 kill[instr.index][writes.index] = true
-            for(reg in instr.getSrcReg())
+            val reads = instr.getSrcReg()
+            // Do a sanity check here to make sure no UnionRegs are being used
+            for(reg in reads)
+                if (reg is UnionReg)
+                    error("Internal error: Union register ${reg.name} used in instruction $instr")
+
+            for(reg in reads)
                 live[instr.index][reg.index]=true
         }
     }

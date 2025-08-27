@@ -208,4 +208,238 @@ class EnumTests {
         runTest(prog, expected)
     }
 
+    @Test
+    fun enumProperties() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(s:String)
+            
+            enum Color(name:String) [
+                RED("Red"),
+                GREEN("Green"),
+                BLUE("Blue") ]
+           
+            fun main()
+                for c in Color.values
+                    print(c.name)
+                    print("\n") 
+        """.trimIndent()
+
+        val expected = """
+            Red
+            Green
+            Blue
+            
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun enumMultipleFields() {
+        val prog = """
+        extern fun print(s:String)
+        extern fun print(i:Int)
+
+        enum Planet(name:String, order:Int) [
+            MERCURY("Mercury", 1),
+            VENUS("Venus", 2),
+            EARTH("Earth", 3) ]
+
+        fun main()
+            for p in Planet.values
+                print(p.name)
+                print(" is planet #")
+                print(p.order)
+                print("\n")
+    """.trimIndent()
+
+        val expected = """
+        Mercury is planet #1
+        Venus is planet #2
+        Earth is planet #3
+        
+    """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun enumDirectAccess() {
+        val prog = """
+        extern fun print(s:String)
+
+        enum Day(abbrev:String) [
+            MON("Mon"), TUE("Tue"), WED("Wed") ]
+
+        fun main()
+            print(Day.MON.abbrev)
+            print(Day.WED.abbrev)
+    """.trimIndent()
+
+        val expected = """
+        MonWed
+    """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun enumInIfElse() {
+        val prog = """
+        extern fun print(s:String)
+
+        enum TrafficLight(msg:String) [
+            RED("Stop"), YELLOW("Caution"), GREEN("Go") ]
+
+        fun main()
+            val t = TrafficLight.YELLOW
+            if t = TrafficLight.RED
+                print(t.msg)
+            elsif t = TrafficLight.GREEN
+                print(t.msg)
+            else
+                print("Other: ")
+                print(t.msg)
+    """.trimIndent()
+
+        val expected = """
+        Other: Caution
+    """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun enumIterateAndCast() {
+        val prog = """
+        extern fun print(s:String)
+
+        enum Color(name:String) [
+            RED("Red"), GREEN("Green"), BLUE("Blue") ]
+
+        fun main()
+            for i in 0 ..< 3
+                val c = i as Color
+                print(c.name)
+    """.trimIndent()
+
+        val expected = """
+        RedGreenBlue
+    """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun enumAsParameter() {
+        val prog = """
+        extern fun print(s:String)
+
+        enum Color(name:String) [
+            RED("Red"), GREEN("Green"), BLUE("Blue") ]
+
+        fun describe(c:Color)
+            print("Color is ")
+            print(c.name)
+            print("\n")
+
+        fun main()
+            describe(Color.RED)
+            describe(Color.GREEN)
+            describe(Color.BLUE)
+    """.trimIndent()
+
+        val expected = """
+        Color is Red
+        Color is Green
+        Color is Blue
+        
+    """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun enumAsReturn() {
+        val prog = """
+        extern fun print(s:String)
+
+        enum Color(name:String) [
+            RED("Red"), GREEN("Green"), BLUE("Blue") ]
+
+        fun favorite() -> Color
+            return Color.GREEN
+
+        fun main()
+            val f = favorite()
+            print("My favorite is ")
+            print(f.name)
+    """.trimIndent()
+
+        val expected = """
+        My favorite is Green
+    """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun enumEqualityInFunction() {
+        val prog = """
+        extern fun print(s:String)
+
+        enum Light(name:String) [
+            RED("Red"), GREEN("Green") ]
+
+        fun isGo(l:Light) -> Bool
+            return l = Light.GREEN
+
+        fun main()
+            if isGo(Light.RED)
+                print("Go!")
+            else
+                print("Stop!")
+    """.trimIndent()
+
+        val expected = """
+        Stop!
+    """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun enumRoundTrip() {
+        val prog = """
+        extern fun print(s:String)
+
+        enum Direction(symbol:String) [
+            NORTH("N"), EAST("E"), SOUTH("S"), WEST("W") ]
+
+        fun next(d:Direction) -> Direction
+            if d = Direction.NORTH
+                return Direction.EAST
+            elsif d = Direction.EAST
+                return Direction.SOUTH
+            elsif d = Direction.SOUTH
+                return Direction.WEST
+            else
+                return Direction.NORTH
+
+        fun main()
+            var d = Direction.NORTH
+            for i in 0 ..< 4
+                print(d.symbol)
+                d = next(d)
+    """.trimIndent()
+
+        val expected = """
+        NESW
+    """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+
 }

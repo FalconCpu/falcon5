@@ -34,6 +34,11 @@ class TctNullAssertExpr(location: Location, val expr: TctExpr, type:Type) : TctE
 class TctMethodRefExpr(location: Location, val objectExpr: TctExpr, val methodSym: FunctionSymbol, type:Type) : TctExpr(location, type)
 class TctIsExpr(location: Location, val expr: TctExpr, val typeExpr: TypeClass) : TctExpr(location, TypeBool)
 class TctAsExpr(location: Location, val expr: TctExpr, typeExpr: Type) : TctExpr(location, typeExpr)
+class TctEnumEntryExpr(location: Location, val expr:TctExpr, val field:FieldSymbol, type:Type) : TctExpr(location, type)
+class TctMakeUnionExpr(location: Location, val expr:TctExpr, val typeIndex:Int, type:TypeErrable) : TctExpr(location, type)
+class TctIsUnionTypeExpr(location: Location, val expr:TctExpr, val typeIndex:Int) : TctExpr(location, TypeBool)
+class TctExtractUnionExpr(location: Location, val expr:TctExpr, type:Type) : TctExpr(location, type)
+class TctTryExpr(location: Location, val expr: TctExpr, type:Type) : TctExpr(location, type)
 
 class TctErrorExpr(location: Location, val message: String = "") : TctExpr(location, TypeError) {
     init {

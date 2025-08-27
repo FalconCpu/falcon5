@@ -1,5 +1,7 @@
 // Type system
 
+var errorEnum : TypeEnum? = null
+
 sealed class Type (val name:String) {
     override fun toString(): String = name
 }
@@ -57,10 +59,12 @@ class TypeClass(name:String, val superClass:TypeClass?) : Type(name) {
 }
 
 class TypeEnum(name:String) : Type(name) {
-    val values = mutableListOf<ConstSymbol>()
+    lateinit var parameters : List<FieldSymbol>
+    val entries = mutableListOf<ConstSymbol>()
+    val values = mutableMapOf<FieldSymbol, ArrayValue>()
 
     fun lookup(name:String) : ConstSymbol? {
-        return values.firstOrNull { it.name == name }
+        return entries.firstOrNull { it.name == name }
     }
 }
 
@@ -87,6 +91,16 @@ class TypeNullable private constructor (val elementType: Type) : Type("$elementT
     }
 }
 
+class TypeErrable private constructor(val okType: Type) : Type("$okType!") {
+    companion object {
+        val allErrableTypes = mutableMapOf<Type, TypeErrable>()
+        fun create(okType: Type) = allErrableTypes.getOrPut(okType) {
+            TypeErrable(okType)
+        }
+    }
+}
+
+
 // Type checking
 fun Type.isAssignableTo(other: Type): Boolean {
     if (this == other) return true
@@ -104,13 +118,23 @@ fun Type.isAssignableTo(other: Type): Boolean {
     if (other is TypeNullable && other.elementType.isSuperClassOf(this)) return true
     if (other is TypeNullable && this is TypeNullable && other.elementType.isSuperClassOf(this.elementType)) return true
     if (other is TypeNullable && this == TypeNull) return true
+
+    if (this==errorEnum && other is TypeErrable) return true
+    if (other is TypeErrable && this.isAssignableTo(other.okType)) return true
+
     return false
 }
 
-fun TctExpr.checkType(expectedType:Type) {
-    if (!type.isAssignableTo(expectedType)) {
-        reportTypeError(location, "Type mismatch got '$type' when expecting '$expectedType'")
-    }
+fun TctExpr.checkType(expectedType:Type) : TctExpr {
+    // Handle wrapping a value into an errable type
+    if (expectedType is TypeErrable && this.type==errorEnum)
+        return TctMakeUnionExpr(location, this, 1, expectedType)
+    if (expectedType is TypeErrable && this.type==expectedType.okType)
+        return TctMakeUnionExpr(location, this, 0, expectedType)
+
+    if (!type.isAssignableTo(expectedType))
+        return TctErrorExpr(location, "Type mismatch got '$type' when expecting '$expectedType'")
+    return this
 }
 
 fun reportTypeError(location: Location, message: String) : TypeError {
@@ -131,4 +155,5 @@ fun Type.getSize(): Int = when (this) {
     TypeNull -> 4
     is TypeEnum -> 4
     is TypeNullable -> 4
+    is TypeErrable -> 8
 }

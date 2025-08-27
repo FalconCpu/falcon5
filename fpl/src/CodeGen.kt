@@ -37,8 +37,13 @@ fun TctExpr.codeGenRvalue() : Reg {
 
         is TctReturnExpr -> {
             val retReg = expr?.codeGenRvalue()
-            if (retReg!= null)
-                currentFunc.addMov(resultReg, retReg)
+            if (retReg is UnionReg) {
+                // Need to split the union into type and value registers
+                currentFunc.addMov(cpuRegs[7], retReg.typeReg)
+                currentFunc.addMov(cpuRegs[8], retReg.valueReg)
+            } else if (retReg!=null) {
+                currentFunc.addMov(cpuRegs[8], retReg)
+            }
             currentFunc.addJump(currentFunc.endLabel)
             zeroReg  // Dummy return value
         }
@@ -193,12 +198,43 @@ fun TctExpr.codeGenRvalue() : Reg {
             if (type is TypeEnum) {
                 // Do a range check when casting to an enum. We can use the INDEX instruction (normally used for array
                 // bounds checks) to check if the value is within the range of enum values.
-                val enumSizeReg = currentFunc.addLdImm(type.values.size)
+                val enumSizeReg = currentFunc.addLdImm(type.entries.size)
                 currentFunc.addIndex(1, reg, enumSizeReg)
             } else {
                 // For other casts simply copy the value to the result register
                 currentFunc.addCopy(reg)
             }
+        }
+
+        is TctEnumEntryExpr -> {
+            val objReg = expr.codeGenRvalue()       // Evaluate the expression as an Int
+            val enum = (expr.type as TypeEnum)
+            val arrayReg = currentFunc.addLea(enum.values[field]!!)
+            val size = field.type.getSize()
+            val indexReg = currentFunc.addAlu(BinOp.MUL_I, objReg, size) // Scale by size of each entry
+            val addrReg = currentFunc.addAlu(BinOp.ADD_I, arrayReg, indexReg)
+            currentFunc.addLoad(size, addrReg, 0)
+        }
+
+        is TctMakeUnionExpr -> {
+            val valueReg = expr.codeGenRvalue()
+            val typeReg = currentFunc.addLdImm(typeIndex)
+            currentFunc.newUnionReg(typeReg, valueReg)
+        }
+
+        is TctIsUnionTypeExpr -> TODO()
+
+        is TctExtractUnionExpr -> {
+            val reg = expr.codeGenRvalue()
+            require(reg is UnionReg)
+            reg.valueReg
+        }
+
+        is TctTryExpr -> {
+            val reg = expr.codeGenRvalue()
+            require(reg is UnionReg)
+            currentFunc.addBranch(BinOp.NE_I, reg.typeReg, zeroReg, currentFunc.endLabel)
+            reg.valueReg
         }
     }
 }
@@ -330,6 +366,18 @@ fun TctExpr.codeGenBool(trueLabel: Label, falseLabel: Label) {
             currentFunc.addJump(falseLabel)
         }
 
+        is TctIsUnionTypeExpr -> {
+            val reg = expr.codeGenRvalue()
+            require(reg is UnionReg)
+            if (this.typeIndex==0) {
+                currentFunc.addBranch(BinOp.EQ_I, reg.typeReg, zeroReg, trueLabel)
+                currentFunc.addJump(falseLabel)
+            } else {
+                currentFunc.addBranch(BinOp.NE_I, reg.typeReg, zeroReg, trueLabel)
+                currentFunc.addJump(falseLabel)
+            }
+        }
+
         else -> {
             val reg = codeGenRvalue()
             currentFunc.addBranch(BinOp.EQ_I, reg, zeroReg, falseLabel)
@@ -341,7 +389,16 @@ fun TctExpr.codeGenBool(trueLabel: Label, falseLabel: Label) {
 fun TctExpr.codeGenLvalue(value:Reg) {
     when(this) {
         is TctVariable -> {
-            currentFunc.addMov(currentFunc.getReg(sym), value)
+            val dest = currentFunc.getReg(sym)
+            if (value is UnionReg && dest is UnionReg) {
+                currentFunc.addMov(dest.typeReg, value.typeReg)
+                currentFunc.addMov(dest.valueReg, value.valueReg)
+            } else if (value is UnionReg)
+                error("Cannot assign union value to non-union variable '${sym.name}'")
+            else if (dest is UnionReg)
+                error("Cannot assign non-union value to union variable '${sym.name}'")
+            else
+                currentFunc.addMov(dest, value)
         }
 
         is TctIndexExpr -> {
@@ -353,7 +410,11 @@ fun TctExpr.codeGenLvalue(value:Reg) {
             val bounds = currentFunc.addLoad(arrayReg, lengthSymbol)
             val scaled = currentFunc.addIndex(size, indexReg, bounds)
             val addr = currentFunc.addAlu(BinOp.ADD_I, arrayReg, scaled)
-            currentFunc.addStore(size, value, addr, 0)
+            if (value is UnionReg) {
+                currentFunc.addStore(4, value.typeReg, addr, 0)
+                currentFunc.addStore(4, value.valueReg, addr, 4)
+            } else
+                currentFunc.addStore(size, value, addr, 0)
         }
 
         is TctMemberExpr -> {
@@ -361,7 +422,11 @@ fun TctExpr.codeGenLvalue(value:Reg) {
             val size = member.type.getSize()
             if (size == 0)
                 Log.error(location, "Cannot access member '${member.name}' of type '${objectExpr.type}'")
-            currentFunc.addStore(value,objectReg, member)
+            if (value is UnionReg) {
+                currentFunc.addStore(4, value.typeReg ,objectReg, member.offset)
+                currentFunc.addStore(4, value.valueReg ,objectReg, member.offset+4)
+            } else
+                currentFunc.addStore(value,objectReg, member)
         }
 
         else ->
@@ -386,7 +451,11 @@ fun genCall(func:Function, thisArg:Reg?, args: List<Reg>) : Reg {
         currentFunc.addVCall(func)
 
     // Get the return value from the CPU register
-    return if (func.returnType!= TypeUnit)
+    return if (func.returnType is TypeErrable) {
+        val typeReg = currentFunc.addCopy(cpuRegs[7])
+        val valueReg = currentFunc.addCopy(cpuRegs[8])
+        currentFunc.newUnionReg(typeReg, valueReg)
+    } else if (func.returnType!= TypeUnit)
         currentFunc.addCopy(resultReg)
     else
         zeroReg  // Dummy return value
@@ -438,7 +507,12 @@ fun TctStmt.codeGenStmt() {
 
         is TctVarDeclStmt -> {
             val regInit = initializer?.codeGenRvalue()
-            if (regInit!= null)
+            if (regInit is UnionReg) {
+                val dest = currentFunc.getReg(sym)
+                require(dest is UnionReg)
+                currentFunc.addMov(dest.typeReg, regInit.typeReg)
+                currentFunc.addMov(dest.valueReg, regInit.valueReg)
+            } else if (regInit!= null)
                 currentFunc.addMov(currentFunc.getReg(sym), regInit)
         }
 

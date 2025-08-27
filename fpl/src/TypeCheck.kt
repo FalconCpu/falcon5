@@ -29,6 +29,8 @@ private fun AstExpr.typeCheckRvalue(scope: AstBlock, allowTypes:Boolean=false) :
             else if (ret.sym in pathContext.maybeUninitializedVariables)
                 Log.error(location, "'${ret.sym.name}' may be uninitialized")
             val refinedType = pathContext.refinedTypes[ret.sym]
+            if (ret.type is TypeErrable && refinedType!=null && refinedType !is TypeErrable)
+                return TctExtractUnionExpr(location, ret, refinedType)
             if (refinedType!=null)
                 return TctVariable(location, ret.sym, refinedType)
         }
@@ -103,6 +105,16 @@ private fun AstExpr.typeCheckBoolExpr(scope: AstBlock) : BranchPathContext {
 
             if (tcExpr is TctIsExpr)
                 truePath = pathContext.refineType(tcExpr.expr, tcExpr.typeExpr)
+            if (tcExpr is TctIsUnionTypeExpr) {
+                val tcType = (tcExpr.expr.type as TypeErrable).okType
+                if (tcExpr.typeIndex == 0) {
+                    truePath = pathContext.refineType(tcExpr.expr, tcType)
+                    falsePath = pathContext.refineType(tcExpr.expr, errorEnum!!)
+                } else {
+                    falsePath = pathContext.refineType(tcExpr.expr, tcType)
+                    truePath = pathContext.refineType(tcExpr.expr, errorEnum!!)
+                }
+            }
 
             BranchPathContext(truePath, falsePath, tcExpr)
         }
@@ -130,8 +142,7 @@ private fun AstExpr.typeCheckBoolExpr(scope: AstBlock) : BranchPathContext {
         else -> {
             // For all other expressions, we type check them as rvalues
             // and then check if they are boolean expressions.
-            val expr = typeCheckRvalue(scope)
-            expr.checkType(TypeBool)
+            val expr = typeCheckRvalue(scope).checkType(TypeBool)
             BranchPathContext(pathContext, pathContext, expr)
         }
     }
@@ -190,14 +201,15 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
             val enclosingFunc = scope.findEnclosingFunction()
                                ?: return TctErrorExpr(location, "Return statement outside of a function")
             val tctExpr = expr?.typeCheckRvalue(scope)
-            if (tctExpr==null) {
+            val ret = if (tctExpr==null) {
                 if (enclosingFunc.returnType!=TypeUnit)
                     Log.error(location, "Function should return an expression of type '${enclosingFunc.returnType}'")
+                null
             } else {
                 tctExpr.checkType(enclosingFunc.returnType)
             }
             pathContext = unreachablePathContext
-            TctReturnExpr(location, tctExpr)
+            TctReturnExpr(location, ret)
         }
 
         is AstCallExpr -> {
@@ -236,12 +248,11 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
 
         is AstIndexExpr -> {
             val arrayExpr = array.typeCheckRvalue(scope)
-            val indexExpr = index.typeCheckRvalue(scope)
+            val indexExpr = index.typeCheckRvalue(scope).checkType(TypeInt)
             if (arrayExpr.type is TypeError || indexExpr.type is TypeError)
                 return TctErrorExpr(location, "")
             if (arrayExpr.type !is TypeArray)
                 return TctErrorExpr(location, "Cannot index type '${arrayExpr.type}'")
-            indexExpr.checkType(TypeInt)
             return TctIndexExpr(location, arrayExpr, indexExpr, arrayExpr.type.elementType)
         }
 
@@ -276,6 +287,14 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
                     }
                 }
 
+                is TypeEnum -> {
+                    val field = tctExpr.type.parameters.find {it.name==memberName}
+                    if (field==null)
+                        TctErrorExpr(location, "Enum '${tctExpr.type.name}' has no member '${memberName}'")
+                    else
+                        TctEnumEntryExpr(location, tctExpr, field, field.type)
+                }
+
                 is TypeNullable ->
                     TctErrorExpr(location, "Cannot access member as expression may be null")
 
@@ -293,8 +312,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
                 is TypeArray -> {
                     if (tcArgs.size != 1)
                         return TctErrorExpr(location, "Array constructor requires exactly one argument")
-                    val size = tcArgs[0]
-                    size.checkType(TypeInt)
+                    val size = tcArgs[0].checkType(TypeInt)
                     if (arena==Arena.STACK && size !is TctConstant)
                         return TctErrorExpr(location, "Local arrays must have a constant size")
                     if (size is TctConstant && size.value is IntValue && size.value.value < 0)
@@ -323,17 +341,16 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
                 reportTypeError(location, "Cannot infer type for array literal")
             if (type !is TypeArray)
                 return TctErrorExpr(location, "Cannot create array literal of type '${type.name}'")
-            for(item in tcArgs)
-                item.checkType(type.elementType)
+            val tcItems = tcArgs.map {it.checkType(type.elementType)}
             if (arena==Arena.CONST) {
                 val e = tcArgs.find {it !is TctConstant}
                 if (e != null)
                     return TctErrorExpr(e.location, "Cannot create constant array literal with non-constant element")
-                val values = tcArgs.map { (it as TctConstant).value }
+                val values = tcItems.map { (it as TctConstant).value }
                 val arrayValue = ArrayValue.create(values, type)
                 return TctConstant(location, arrayValue)
             } else
-                return TctNewArrayLiteralExpr(location, tcArgs, arena, type)
+                return TctNewArrayLiteralExpr(location, tcItems, arena, type)
         }
 
         is AstNegateExpr -> {
@@ -349,12 +366,11 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
 
         is AstRangeExpr -> {
             val tcStart = start.typeCheckRvalue(scope)
-            val tcEnd = end.typeCheckRvalue(scope)
+            val tcEnd = end.typeCheckRvalue(scope).checkType(tcStart.type)
             if (tcStart.type is TypeError || tcEnd.type is TypeError)
                 return TctErrorExpr(location, "")
             if (tcStart.type!=TypeInt && tcStart.type!=TypeChar)
                 return TctErrorExpr(location, "Range start must be of type Int or Char, got '${tcStart.type}'")
-            tcEnd.checkType(tcStart.type)
             val op = when(op) {
                 TokenKind.LT -> BinOp.LT_I
                 TokenKind.LTE -> BinOp.LE_I
@@ -445,13 +461,19 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
 
         is AstIsExpr -> {
             val tctExpr = expr.typeCheckRvalue(scope)
+            val typeR = typeExpr.resolveType(scope)
+
             if (tctExpr.type is TypeError)
                 return TctErrorExpr(location, "")
             val typeL = if (tctExpr.type is TypeNullable) tctExpr.type.elementType else tctExpr.type
+
+            if (typeL is TypeErrable && typeR==errorEnum)
+                return TctIsUnionTypeExpr(location, tctExpr, 1)
+            if (typeL is TypeErrable && typeR==typeL.okType)
+                return TctIsUnionTypeExpr(location, tctExpr,0)
+
             if (typeL !is TypeClass)
                 return TctErrorExpr(location, "Got type '${tctExpr.type}' when expecting a class type")
-
-            val typeR = typeExpr.resolveType(scope)
             if (typeR is TypeError)
                 return TctErrorExpr(location, "")
             if (typeR !is TypeClass)
@@ -475,6 +497,20 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
             else
                 TctErrorExpr(location, "Cannot cast type '${tctExpr.type}' to '${typeR.name}'")
         }
+
+        is AstTryExpr -> {
+            val enclosingFunc = scope.findEnclosingFunction()
+                ?: return TctErrorExpr(location, "Return statement outside of a function")
+            val tctExpr = expr.typeCheckRvalue(scope)
+            if (tctExpr.type is TypeError)
+                return TctErrorExpr(location, "")
+            if (tctExpr.type !is TypeErrable)
+                return TctErrorExpr(location, "Cannot use 'try' on non-errable type '${tctExpr.type}'")
+            if (enclosingFunc.returnType !is TypeErrable)
+                return TctErrorExpr(location, "Function '${enclosingFunc.name}' must have an errable return type to use 'try'")
+            val type = tctExpr.type.okType
+            return TctTryExpr(location, tctExpr, type)
+        }
     }
 }
 
@@ -483,7 +519,7 @@ private fun AstMemberExpr.typecheckStaticMember(tctExpr: TctExpr): TctExpr {
         // Special case enumName.values -> range of enum values
         if (memberName == "values") {
             val zeroExpr = TctConstant(location, IntValue(0, tctExpr.type))
-            val lengthExpr = TctConstant(location, IntValue(tctExpr.type.values.size, tctExpr.type))
+            val lengthExpr = TctConstant(location, IntValue(tctExpr.type.entries.size, tctExpr.type))
             return TctRangeExpr(location, zeroExpr, lengthExpr, BinOp.LT_I, TypeRange.create(tctExpr.type))
         }
 
@@ -567,10 +603,10 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
                 Log.error(location, "Variable '${name}' cannot be of type Unit")
             val sym = VarSymbol(location, name, type, mutable)
             scope.addSymbol(sym)
-            tctInitializer?.checkType(type)
-            if (tctInitializer == null)
+            val tcr = tctInitializer?.checkType(type)
+            if (tcr == null)
                 pathContext = pathContext.addUninitialized(sym)
-            TctVarDeclStmt(location, sym, tctInitializer)
+            TctVarDeclStmt(location, sym, tcr)
         }
 
         is AstFunctionDefStmt -> {
@@ -699,9 +735,8 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
 
 
         is AstAssignStmt -> {
-            val rhs = rhs.typeCheckRvalue(scope)
             val lhs = lhs.typeCheckLvalue(scope)
-            rhs.checkType(lhs.type)
+            val rhs = rhs.typeCheckRvalue(scope).checkType(lhs.type)
             if (rhs.type != lhs.type)
                 pathContext = pathContext.refineType(lhs, rhs.type)
             TctAssignStmt(location, op, lhs, rhs)
@@ -760,6 +795,12 @@ private fun AstType.resolveType(scope:AstBlock) : Type {
             val elementType = elementType.resolveType(scope)
             return TypeNullable.create(elementType)
         }
+        is AstErrableType -> {
+            val elementType = elementType.resolveType(scope)
+            if (elementType is TypeErrable)
+                reportTypeError(location, "Cannot have nested errable types")
+            return TypeErrable.create(elementType)
+        }
     }
 }
 
@@ -783,6 +824,12 @@ private fun AstParameter.createSymbol(scope:AstBlock) : VarSymbol {
     return VarSymbol(location, name, type, false)
 }
 
+private fun AstParameter.createFieldSymbol(scope:AstBlock) : FieldSymbol {
+    val type = type.resolveType(scope)
+    return FieldSymbol(location, name, type, false)
+}
+
+
 
 // Find class definitions
 private fun AstBlock.findClassDefinitions(scope:AstBlock) {
@@ -800,6 +847,11 @@ private fun AstBlock.findClassDefinitions(scope:AstBlock) {
         enum = TypeEnum(name)
         val sym = TypeNameSymbol(location, name, enum)
         scope.addSymbol(sym)
+        if (name=="Error") {
+            if (errorEnum!=null)
+                Log.error(location, "Multiple definitions of special enum 'Error'")
+            errorEnum = enum
+        }
     }
 
 
@@ -857,6 +909,11 @@ private fun AstBlock.findFunctionDefinitions(scope:AstBlock) {
             }
         }
 
+        is AstEnumDefStmt -> {
+            val paramsSymbols = params.map{ it.createFieldSymbol(this)}
+            enum.parameters = paramsSymbols
+        }
+
         else -> {}
     }
     for (blk in body.filterIsInstance<AstBlock>())
@@ -884,8 +941,7 @@ private fun AstBlock.findClassFields(scope:AstBlock) {
                 klass.add(sym)
 
                 // Create an initializer for the field
-                val paramExpr = TctVariable(param.location, paramSym, paramSym.type)
-                paramExpr.checkType(sym.type)
+                val paramExpr = TctVariable(param.location, paramSym, paramSym.type).checkType(sym.type)
                 initializers += TctFieldInitializer(sym, paramExpr)
             }
         }
@@ -914,21 +970,36 @@ private fun AstBlock.findClassFields(scope:AstBlock) {
             val sym = FieldSymbol(stmt.location, stmt.name, type, stmt.mutable)
             addSymbol(sym)
             klass.add(sym)
-            if (init!=null) {
-                init.checkType(type)
-                initializers += TctFieldInitializer(sym, init)
-            }
+            if (init!=null)
+                initializers += TctFieldInitializer(sym, init.checkType(type))
         }
     } else if (this is AstEnumDefStmt) {
         // Create the enum values
+        val enumValues = enum.parameters.associateWith{ mutableListOf<Value>()}
+
         for (value in values) {
-            val index = enum.values.size
+            val index = enum.entries.size
             val sym = ConstSymbol(value.location, value.name, enum, IntValue(index,enum))
+            val args = value.args.map { it.typeCheckRvalue(this) }
             val duplicate = enum.lookup(value.name)
             if (duplicate != null)
                 Log.error(value.location, "Duplicate enum value '${value.name}' in enum '${name}'")
-            enum.values += sym
+            enum.entries += sym
+            if (args.size != enum.parameters.size)
+                Log.error(value.location, "Enum value '${value.name}' in enum '${name}' has ${args.size} parameters, but enum declares ${enum.parameters.size}")
+            for ((param, arg) in enum.parameters zip args) {
+                val tca = arg.checkType(param.type)
+                if (tca is TctConstant)
+                    enumValues[param]!!.add(tca.value)
+                else
+                    Log.error(arg.location, "Enum value parameter must be a constant")
+
+            }
             addSymbol(sym)
+        }
+        for (param in enum.parameters) {
+            val array = ArrayValue.create(enumValues[param]!!, TypeArray.create(param.type))
+            enum.values[param] = array
         }
     }
 

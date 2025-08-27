@@ -10,6 +10,7 @@ class CpuReg(name: String) : Reg(name)
 class TempReg(name: String) : Reg(name) {
     var def : Instr? = null
 }
+class UnionReg(val typeReg:Reg, val valueReg:Reg, name:String) : Reg(name)
 
 val cpuRegs = (0..31).map {
     CpuReg( when(it) {

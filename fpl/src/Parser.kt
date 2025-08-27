@@ -81,6 +81,13 @@ class Parser(val lexer: Lexer) {
         return AstReturnExpr(loc.location, expr)
     }
 
+    private fun parseTry() : AstTryExpr {
+        val loc = expect(TRY)
+        val expr = parseExpr()
+        return AstTryExpr(loc.location, expr)
+    }
+
+
     private fun parseBreak() : AstBreakExpr {
         val loc = expect(BREAK)
         return AstBreakExpr(loc.location)
@@ -118,6 +125,7 @@ class Parser(val lexer: Lexer) {
             STRINGLITERAL -> parseStringLit()
             CHARLITERAL -> parseCharLit()
             RETURN -> parseReturn()
+            TRY -> parseTry()
             BREAK -> parseBreak()
             CONTINUE -> parseContinue()
             OPENB -> parseParentheses()
@@ -326,7 +334,8 @@ class Parser(val lexer: Lexer) {
 
         if (canTake(QMARK))
             ret = AstNullableType(currentToken.location, ret)
-
+        if (canTake(EMARK))
+            ret = AstErrableType(currentToken.location, ret)
         return ret
     }
 
@@ -478,19 +487,26 @@ class Parser(val lexer: Lexer) {
         return AstIfStmt(loc, clauses)
     }
 
+    private fun parseEnumEntry() : AstEnumEntry {
+        val name = expect(IDENTIFIER)
+        val args = if (currentToken.kind == OPENB) parseArgList() else emptyList()
+        return AstEnumEntry(name.location, name.value, args)
+    }
+
     private fun parseEnum() : AstEnumDefStmt {
         val tok = expect(ENUM)
         val name = expect(IDENTIFIER)
+        val params = if (currentToken.kind==OPENB) parseParameterList(false) else emptyList()
         expect(OPENSQ) // Consume OPENB
-        val values = mutableListOf<AstIdentifier>()
-        if (currentToken.kind != CLOSEB)
+        val values = mutableListOf<AstEnumEntry>()
+        if (currentToken.kind != CLOSESQ)
             do {
-                val id = parseIdentifier()
+                val id = parseEnumEntry()
                 values += id
             } while (canTake(COMMA))
         expect(CLOSESQ) // Consume CLOSEB
         expectEol()
-        return AstEnumDefStmt(tok.location, name.value, values, emptyList())
+        return AstEnumDefStmt(tok.location, name.value, params, values, emptyList())
     }
 
     private fun parseStmt() : AstStmt {
