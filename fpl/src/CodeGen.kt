@@ -176,7 +176,7 @@ fun TctExpr.codeGenRvalue() : Reg {
             currentFunc.addMov(cpuRegs[index++], ret) // 'this' pointer
             for (arg in argRegs)
                 currentFunc.addMov(cpuRegs[index++], arg)
-            currentFunc.addCall(klass.constructor)
+            currentFunc.addCall(klass.constructor.function)
             ret
         }
 
@@ -235,6 +235,17 @@ fun TctExpr.codeGenRvalue() : Reg {
             require(reg is UnionReg)
             currentFunc.addBranch(BinOp.NE_I, reg.typeReg, zeroReg, currentFunc.endLabel)
             reg.valueReg
+        }
+
+        is TctVarargExpr -> {
+            val ret = currentFunc.stackAlloc(4*exprs.size+4, 4)      // +4 for the length field
+            val sizeReg = currentFunc.addLdImm(exprs.size)
+            currentFunc.addStore(sizeReg, ret, lengthSymbol)
+            for(i in exprs.indices) {
+                val v = exprs[i].codeGenRvalue()
+                currentFunc.addStore(4, v, ret, i*4)
+            }
+            ret
         }
     }
 }
@@ -349,7 +360,7 @@ fun TctExpr.codeGenBool(trueLabel: Label, falseLabel: Label) {
             val reg = expr.codeGenRvalue()
             if (expr.type is TypeNullable)
                 currentFunc.addBranch(BinOp.EQ_I, reg, zeroReg, falseLabel)
-            val typeRReg = currentFunc.addLea(typeExpr.descriptor)
+            val typeRReg = currentFunc.addLea(typeExpr.genericType.descriptor)
 
             // Get the type field of the object. Need to copy it to a user reg to keep things SSA
             val tmpReg = currentFunc.newUserTemp()
@@ -641,10 +652,43 @@ fun TctStmt.codeGenStmt() {
             breakStack.removeAt(breakStack.lastIndex)
         }
 
+        is TctForIterableStmt ->  {
+            require(iterable.type is TypeClassInstance)
+            val instance = iterable.codeGenRvalue()
+
+            val labelStart = currentFunc.newLabel()
+            val labelEnd = currentFunc.newLabel()
+            val labelCond = currentFunc.newLabel()
+            val labelCont = currentFunc.newLabel()
+            val index = currentFunc.newUserTemp()
+            currentFunc.addMov(index, zeroReg)
+            val lengthReg = currentFunc.addLoad(instance, lengthSym)
+            val symReg = currentFunc.getReg(this.loopVar)
+            continueStack.add(labelCont)
+            breakStack.add(labelEnd)
+            currentFunc.addJump(labelCond)
+            currentFunc.addLabel(labelStart)
+            // call get method
+            currentFunc.addMov(cpuRegs[1], instance)
+            currentFunc.addMov(cpuRegs[2], index)
+            val v = currentFunc.addCall(getMethod.function)
+            currentFunc.addMov(symReg, cpuRegs[8])
+            for (stmt in body)
+                stmt.codeGenStmt()
+            currentFunc.addLabel(labelCont)
+            val incIndex = currentFunc.addAlu(BinOp.ADD_I, index, 1)
+            currentFunc.addMov(index, incIndex)
+            currentFunc.addLabel(labelCond)
+            currentFunc.addBranch(BinOp.LT_I, index, lengthReg, labelStart)
+            currentFunc.addLabel(labelEnd)
+            continueStack.removeAt(continueStack.lastIndex)
+            breakStack.removeAt(breakStack.lastIndex)
+        }
+
         is TctClassDefStmt -> {
             // Create a new function and save the old one
             val oldFunc = currentFunc
-            currentFunc = klass.constructor
+            currentFunc = klass.constructor.function
             currentFunc.addInstr(InstrStart())
             // copy parameters from cpu regs into UserRegs
             val thisReg = currentFunc.getReg(currentFunc.thisSymbol!!)
@@ -668,6 +712,7 @@ fun TctStmt.codeGenStmt() {
             for (stmt in methods)
                 stmt.codeGenStmt()
         }
+
     }
 }
 

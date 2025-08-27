@@ -57,7 +57,12 @@ private fun AstExpr.typeCheckLvalue(scope: AstBlock) : TctExpr {
         is TctIndexExpr -> {
         }
 
-        else -> return TctErrorExpr(location,"expression  is not an Lvalue")
+        is TctMemberExpr -> {
+            if (!ret.member.mutable)
+                Log.error(location,"Field ${ret.member} is not mutable")
+        }
+
+        else -> return TctErrorExpr(location,"expression  is not an Lvalue  $ret")
     }
     return ret
 }
@@ -234,12 +239,13 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
                     } else {
                         null
                     }
-                    TctCallExpr(location, thisArg, resolvedFunc, tctArgs)
+                    val splitVarargs = splitOffVarargs(tctArgs, resolvedFunc)
+                    TctCallExpr(location, thisArg, resolvedFunc.function, splitVarargs, resolvedFunc.returnType)
                 }
                 is TctMethodRefExpr -> {
                     val resolvedFunc = tctFunc.methodSym.resolveOverload(location, tctArgs)
                         ?: return TctErrorExpr(location, "")  // Error message is reported by resolveOverload()
-                    TctCallExpr(location, tctFunc.objectExpr, resolvedFunc, tctArgs)
+                    TctCallExpr(location, tctFunc.objectExpr, resolvedFunc.function, tctArgs, resolvedFunc.returnType)
                 }
                 else ->
                     return TctErrorExpr(location, "Invalid function call")
@@ -278,7 +284,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
                         TctMemberExpr(location, tctExpr, lengthSymbol, TypeInt)
                 }
 
-                is TypeClass -> {
+                is TypeClassInstance -> {
                     when(val field = tctExpr.type.lookup(memberName)) {
                         null -> TctErrorExpr(location, "Class '${tctExpr.type.name}' has no member '${memberName}'")
                         is FieldSymbol -> TctMemberExpr(location, tctExpr, field, field.type)
@@ -286,6 +292,8 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
                         else -> error("Unexpected symbol type '${field.getDescription()}' for member '${memberName}' of class '${tctExpr.type.name}'")
                     }
                 }
+
+                is TypeClass -> error("Cannot access member of generic class '$tctExpr.type' without type arguments")
 
                 is TypeEnum -> {
                     val field = tctExpr.type.parameters.find {it.name==memberName}
@@ -322,14 +330,16 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
                     return TctNewArrayExpr(location, type, size, arena, tcLambda, arrayType)
                 }
 
-                is TypeClass -> {
+                is TypeClassInstance -> {
                     if (!type.constructor.isCallableWithArgs(tcArgs)) {
                         val argsStr = tcArgs.joinToString(",") { it.type.name }
                         val paramStr = type.constructor.parameters.joinToString(",") { it.type.name }
                         return TctErrorExpr(location,"Constructor '$type' called with ($argsStr) when expecting ($paramStr)")
                     }
-                    TctNewClassExpr(location, type, tcArgs, arena, type)
+                    TctNewClassExpr(location, type.genericType, tcArgs, arena, type)
                 }
+
+                is TypeClass -> error("Cannot create new instance of generic class '$type' without type arguments")
 
                 else -> return TctErrorExpr(location, "Cannot create new instance of type '${type.name}'")
             }
@@ -472,11 +482,11 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
             if (typeL is TypeErrable && typeR==typeL.okType)
                 return TctIsUnionTypeExpr(location, tctExpr,0)
 
-            if (typeL !is TypeClass)
+            if (typeL !is TypeClassInstance)
                 return TctErrorExpr(location, "Got type '${tctExpr.type}' when expecting a class type")
             if (typeR is TypeError)
                 return TctErrorExpr(location, "")
-            if (typeR !is TypeClass)
+            if (typeR !is TypeClassInstance)
                 return TctErrorExpr(typeExpr.location, "Got type '$typeR' when expecting a class type")
             if (!typeL.isSuperClassOf(typeR))
                 return TctErrorExpr(location, "Is expression is always false, '${typeL.name}' is not a super class of '${typeR.name}'")
@@ -544,14 +554,40 @@ fun TokenKind.toCompareOp() = when(this) {
     else -> error("Invalid binary operator $this")
 }
 
-fun Function.isCallableWithArgs(args: List<TctExpr>) : Boolean {
-    if (parameters.size!= args.size) return false
-    for ((param, arg) in parameters zip(args))
-        if (! arg.type.isAssignableTo(param.type)) return false
-    return true
+fun FunctionInstance.isCallableWithArgs(args: List<TctExpr>) : Boolean {
+    if (isVararg) {
+        if (args.size < parameters.size-1 ) return false
+        for(index in 0..<parameters.size-1) {
+            val param = parameters[index]
+            val arg = args[index]
+            if (!arg.type.isAssignableTo(param.type)) return false
+        }
+        val varargType = (parameters.last().type as TypeArray).elementType
+        for(index in parameters.size-1..<args.size) {
+            val arg = args[index]
+            if (!arg.type.isAssignableTo(varargType)) return false
+        }
+        return true
+    } else {
+        if (parameters.size != args.size) return false
+        for ((param, arg) in parameters zip (args))
+            if (!arg.type.isAssignableTo(param.type)) return false
+        return true
+    }
 }
 
-fun FunctionSymbol.resolveOverload(location:Location, args: List<TctExpr>) : Function? {
+fun splitOffVarargs(args: List<TctExpr>, func:FunctionInstance) : List<TctExpr> {
+    // Separate out the varargs into a single array argument
+    if (!func.isVararg)
+        return args
+
+    val countNormalParams = func.parameters.size-1
+    val normalArgs = args.take(countNormalParams)
+    val varargArgs = args.drop(countNormalParams)
+    return normalArgs + TctVarargExpr(nullLocation, varargArgs, func.parameters.last().type)
+}
+
+fun FunctionSymbol.resolveOverload(location:Location, args: List<TctExpr>) : FunctionInstance? {
     val resolvedFunc = overloads.filter { it.isCallableWithArgs(args) }
     if (resolvedFunc.isEmpty()) {
         val longName = name + args.joinToString(separator = ",", prefix = "(", postfix = ")") { it.type.name }
@@ -688,12 +724,17 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
             val oldSecondTypeCheckPass = secondTypecheckPass
             val entryPathContext = pathContext
             currentLoop = this
+            var iterableDesc : Pair<FieldSymbol,FunctionInstance>? = null
 
             val tcRange = range.typeCheckRvalue(scope)
             val type = indexType?.resolveType(scope) ?: when (tcRange.type) {
                 is TypeError -> TypeError
                 is TypeRange -> tcRange.type.elementType
                 is TypeArray -> tcRange.type.elementType
+                is TypeClassInstance -> {
+                    iterableDesc = tcRange.type.isIterable()
+                    iterableDesc?.second?.returnType ?: reportTypeError(location, "Type '${tcRange.type}' is not iterable")
+                }
                 else -> reportTypeError(location, " Cannot iterate over type '${tcRange.type}'")
             }
 
@@ -716,6 +757,7 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
             else if (tcRange is TctRangeExpr) {
                 tcRange.start.checkType(type)
                 TctForRangeStmt(location, sym, tcRange, tcBody)
+
             } else if (tcRange.type is TypeArray) {
                 if (!tcRange.type.elementType.isAssignableTo(type))
                     reportTypeError(
@@ -723,8 +765,11 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
                         "Cannot iterate over array of type '${tcRange.type}' with index type '${type}'"
                     )
                 TctForArrayStmt(location, sym, tcRange, tcBody)
-            } else
+            } else if (tcRange.type is TypeClassInstance)
+                TctForIterableStmt(location, sym, tcRange, iterableDesc!!.first, iterableDesc.second, tcBody)
+            else
                 TODO()
+
             pathContext = (breakContext+pathContext).merge()
             breakContext = oldBreakContext
             continueContext = oldContinueContext
@@ -778,14 +823,22 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
 //                          Types
 // ===========================================================================
 
+private fun AstTypeIdentifier.resolve(scope: AstBlock) : Type {
+    return when (val sym = scope.lookupSymbol(name)) {
+        null -> reportTypeError(location, "Unresolved identifier: '$name'")
+        is TypeNameSymbol -> sym.type
+        else -> reportTypeError(location, "'${sym.name}' is a ${sym.getDescription()} not a type")
+    }
+}
+
 private fun AstType.resolveType(scope:AstBlock) : Type {
     when(this) {
         is AstTypeIdentifier -> {
-            return when (val sym = scope.lookupSymbol(name)) {
-                null -> reportTypeError(location, "Unresolved identifier: '$name'")
-                is TypeNameSymbol -> sym.type
-                else -> reportTypeError(location, "'${sym.name}' is a ${sym.getDescription()} not a type")
-            }
+            val ret = resolve(scope)
+            return if (ret is TypeClass)
+                TypeClassInstance.create(ret, emptyMap())
+            else
+                 ret
         }
         is AstArrayType -> {
             val elementType = elementType.resolveType(scope)
@@ -801,7 +854,38 @@ private fun AstType.resolveType(scope:AstBlock) : Type {
                 reportTypeError(location, "Cannot have nested errable types")
             return TypeErrable.create(elementType)
         }
+
+        is AstGenericType -> {
+            val baseType = baseType.resolveType(scope)
+
+            if (baseType !is TypeClassInstance)
+                return reportTypeError(location, "Type '${baseType.name}' is not a class")
+            if (baseType.typeArguments.isNotEmpty())
+                return reportTypeError(location, "Type '${baseType.name}' is not a generic class")
+            val genericType = baseType.genericType
+            if (genericType.typeParameters.size != typeArgs.size)
+                return reportTypeError(location, "Type '${baseType.name}' requires ${genericType.typeParameters.size} type arguments")
+            val resolvedArgs = typeArgs.map { it.resolveType(scope) }
+            val mapping = (genericType.typeParameters zip resolvedArgs).toMap()
+            return TypeClassInstance.create(genericType, mapping)
+        }
     }
+}
+
+fun TypeClassInstance.isIterable() : Pair<FieldSymbol,FunctionInstance>? {
+    // Test to see if a class has an Int field named "length", and a method get(Int)
+    val lengthField = lookup("length")
+    if (lengthField==null || lengthField !is FieldSymbol || lengthField.type!=TypeInt)
+        return null
+
+    val getMethod = lookup("get")
+    if (getMethod==null || getMethod !is FunctionSymbol)
+        return null
+    val getOverloads = getMethod.overloads.filter { it.parameters.size==1 && it.parameters[0].type==TypeInt }
+    if (getOverloads.size!=1)
+        return null
+
+    return Pair(lengthField, getOverloads[0])
 }
 
 
@@ -820,7 +904,9 @@ private fun AstBlock.setParent(parent: AstBlock?) {
 }
 
 private fun AstParameter.createSymbol(scope:AstBlock) : VarSymbol {
-    val type = type.resolveType(scope)
+    var type = type.resolveType(scope)
+    if (kind== TokenKind.VARARG)
+        type = TypeArray.create(type)
     return VarSymbol(location, name, type, false)
 }
 
@@ -834,15 +920,27 @@ private fun AstParameter.createFieldSymbol(scope:AstBlock) : FieldSymbol {
 // Find class definitions
 private fun AstBlock.findClassDefinitions(scope:AstBlock) {
     if (this is AstClassDefStmt) {
-        var superClass = astSuperClass?.resolveType(scope)
-        if (superClass!=null && superClass !is TypeClass) {
+        // Add the type parameter symbols to the scope
+        val typeParameters = mutableListOf<TypeGenericParameter>()
+        for (tp in typeParams) {
+            val tgp = TypeGenericParameter(tp.name)
+            val sym = TypeNameSymbol(tp.location, tp.name, tgp)
+            addSymbol(sym)
+            typeParameters += tgp
+        }
+
+        // Find the superclass
+        var superClass = astSuperClass?.resolveType(this)
+        if (superClass!=null && superClass !is TypeClassInstance) {
             reportTypeError(location, "Superclass '$superClass' is not a class")
             superClass = null
         }
 
-        klass = TypeClass(name, superClass)
+        klass = TypeClass(name,typeParameters,  superClass)
         val sym = TypeNameSymbol(location, name, klass)
         scope.addSymbol(sym)
+
+
     } else if (this is AstEnumDefStmt) {
         enum = TypeEnum(name)
         val sym = TypeNameSymbol(location, name, enum)
@@ -853,8 +951,6 @@ private fun AstBlock.findClassDefinitions(scope:AstBlock) {
             errorEnum = enum
         }
     }
-
-
 
     // Walk the tree
     for (stmt in body.filterIsInstance<AstBlock>())
@@ -869,8 +965,9 @@ private fun AstBlock.findFunctionDefinitions(scope:AstBlock) {
             val returnType = retType?.resolveType(this) ?: TypeUnit
             val longName = (if (scope is AstClassDefStmt) scope.klass.name + "/" else "") +
                 name + paramsSymbols.joinToString(separator = ",", prefix = "(", postfix = ")") { it.type.name }
-            val thisSym = if (scope is AstClassDefStmt) VarSymbol(location, "this", scope.klass, false) else null
-            function = Function(location, longName, thisSym, paramsSymbols, returnType, qualifier)
+            val thisSym = if (scope is AstClassDefStmt) VarSymbol(location, "this", scope.klass.toClassInstance(), false) else null
+            val isVararg = params.any { it.kind==TokenKind.VARARG }
+            function = Function(location, longName, thisSym, paramsSymbols, returnType, qualifier, isVararg)
             for (sym in paramsSymbols)
                 addSymbol(sym)
             if (thisSym != null)
@@ -882,10 +979,11 @@ private fun AstBlock.findFunctionDefinitions(scope:AstBlock) {
                 } else
                     Log.error(location, "Virtual function '${name}' must be defined in a class context")
             }
+            val functionInstance = function.toFunctionInstance()
             if (qualifier==TokenKind.OVERRIDE)
-                scope.addFunctionOverride(location, name, function)
+                scope.addFunctionOverride(location, name, functionInstance)
             else
-                scope.addFunctionOverload(location, name, function)
+                scope.addFunctionOverload(location, name, functionInstance)
         }
 
         is AstClassDefStmt -> {
@@ -893,15 +991,16 @@ private fun AstBlock.findFunctionDefinitions(scope:AstBlock) {
             val paramsSymbols = constructorParams.map { it.createSymbol(this) }
             val longName = "$name/constructor"
             val thisSym = VarSymbol(location, "this", klass, false)
-            klass.constructor = Function(location, longName, thisSym, paramsSymbols, TypeUnit, TokenKind.EOL)
+            val constructor = Function(location, longName, thisSym, paramsSymbols, TypeUnit, TokenKind.EOL)
+            klass.constructor = constructor.toFunctionInstance()
             for (sym in paramsSymbols)
                 constructorScope.addSymbol(sym)
 
             // Add any methods from the superclass
             val superclass = klass.superClass
             if (superclass != null) {
-                klass.virtualFunctions.addAll(superclass.virtualFunctions)
-                for (sym in superclass.fields.filterIsInstance<FunctionSymbol>()) {
+                klass.virtualFunctions.addAll(superclass.genericType.virtualFunctions)
+                for (sym in superclass.genericType.fields.filterIsInstance<FunctionSymbol>()) {
                     val clone = sym.clone()
                     klass.add(clone)
                     addSymbol(clone)
@@ -925,9 +1024,10 @@ private fun AstBlock.findClassFields(scope:AstBlock) {
         // Inherit any fields from the superclass
         val superclass = klass.superClass
         if (superclass != null) {
-            for(field in superclass.fields.filterIsInstance<FieldSymbol>()) {
-                addSymbol(field)
-                klass.add(field)
+            for(field in superclass.genericType.fields.filterIsInstance<FieldSymbol>()) {
+                val newField = field.mapType(superclass.typeArguments)
+                addSymbol(newField)
+                klass.add(newField)
             }
         }
 
@@ -957,7 +1057,7 @@ private fun AstBlock.findClassFields(scope:AstBlock) {
                 )
             }
             val thisExpr = TctVariable(location, klass.constructor.thisSymbol!!, klass)
-            val superCall = TctCallExpr(location, thisExpr, superclass.constructor, tcArgs)
+            val superCall = TctCallExpr(location, thisExpr, superclass.constructor.function, tcArgs, superclass.constructor.returnType)
             initializers += TctFieldInitializer(null, superCall)
         }
 

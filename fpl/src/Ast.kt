@@ -57,7 +57,8 @@ class AstFunctionDefStmt(
 class AstClassDefStmt(
     location: Location,
     val name: String,
-    val astSuperClass: AstTypeIdentifier?,
+    val typeParams: List<AstTypeIdentifier>,
+    val astSuperClass: AstType?,
     val constructorParams: List<AstParameter>,
     val superClassArgs: List<AstExpr>,
     body: List<AstStmt>
@@ -90,6 +91,7 @@ class AstArrayType(location: Location, val elementType: AstType) : AstType(locat
 class AstNullableType(location: Location, val elementType: AstType) : AstType(location)
 class AstErrableType(location: Location, val elementType: AstType) : AstType(location)
 class AstTypeIdentifier(location: Location, val name: String) : AstType(location)
+class AstGenericType(location: Location, val baseType: AstTypeIdentifier, val typeArgs: List<AstType>) : AstType(location)
 
 // Other nodes
 class AstParameter(location: Location, val kind:TokenKind, val name: String, val type: AstType) : Ast(location)

@@ -6,7 +6,7 @@ class VarSymbol(location: Location, name: String, type: Type, mutable: Boolean) 
 class ConstSymbol(location: Location, name: String, type: Type, val value: Value) : Symbol(location, name, type, false)
 class GlobalVarSymbol(location: Location, name: String, type: Type, mutable:Boolean) : Symbol(location, name, type, mutable)
 class FunctionSymbol(location: Location, name: String) : Symbol(location, name, TypeNothing, false) {
-    val overloads = mutableListOf<Function>()
+    val overloads = mutableListOf<FunctionInstance>()
     fun clone() : FunctionSymbol {
         val clone = FunctionSymbol(location, name)
         clone.overloads.addAll(overloads)
@@ -51,7 +51,7 @@ fun AstBlock.addSymbol(symbol: Symbol) {
     symbols[symbol.name] = symbol
 }
 
-fun AstBlock.addFunctionOverload(location: Location, name: String, function:Function) {
+fun AstBlock.addFunctionOverload(location: Location, name: String, function:FunctionInstance) {
     when (val sym = symbols[name]) {
         null -> {
             val funcSym = FunctionSymbol(location, name)
@@ -74,7 +74,7 @@ fun AstBlock.addFunctionOverload(location: Location, name: String, function:Func
     }
 }
 
-fun AstBlock.addFunctionOverride(location: Location, name: String, function:Function) {
+fun AstBlock.addFunctionOverride(location: Location, name: String, function:FunctionInstance) {
     when (val sym = symbols[name]) {
         null -> {
             Log.error(location, "Function '${name}' has nothing to override")
@@ -86,11 +86,11 @@ fun AstBlock.addFunctionOverride(location: Location, name: String, function:Func
             if (dup== null)
                 Log.error(location, "Function '${name}' has nothing to override")
             else {
-                function.virtualFunctionNumber = dup.virtualFunctionNumber // Set the virtual function number
-                if(function.virtualFunctionNumber!=-1) {
+                function.function.virtualFunctionNumber = dup.function.virtualFunctionNumber // Set the virtual function number
+                if(function.function.virtualFunctionNumber!=-1) {
                     // Update the vtable for the class
-                    val klass = function.thisSymbol!!.type as TypeClass
-                    klass.virtualFunctions[function.virtualFunctionNumber] = function
+                    val klass = (function.function.thisSymbol!!.type as TypeClassInstance).genericType
+                    klass.virtualFunctions[function.function.virtualFunctionNumber] = function.function
                 }
                 sym.overloads.remove(dup) // Remove the original function
             }
@@ -111,4 +111,43 @@ fun Symbol.getDescription() : String = when (this) {
     is TypeNameSymbol -> "type name"
     is VarSymbol -> "variable"
     is FieldSymbol -> "field"
+}
+
+
+// A FunctionInstance represents a specific instantiation of a generic function with concrete type arguments
+class FunctionInstance(
+    val name : String,
+    val function: Function,
+    val parameters: List<VarSymbol>,
+    val thisSymbol : VarSymbol? = null,
+    val returnType: Type,
+    val isVararg : Boolean
+)
+
+fun FunctionInstance.mapTypes(typeMap: Map<TypeGenericParameter, Type>) : FunctionInstance {
+    val newParams = parameters.map { VarSymbol(it.location, it.name, it.type.mapType(typeMap), it.mutable) }
+    val newThisSymbol = thisSymbol?.let { VarSymbol(it.location, it.name, it.type.mapType(typeMap), it.mutable) }
+    val newReturnType = returnType.mapType(typeMap)
+    val newName = name.substringBefore("(")+newParams.joinToString(prefix="(", postfix=")", separator = ",") { it.type.name }
+    return FunctionInstance(newName, this.function, newParams, newThisSymbol, newReturnType, isVararg)
+}
+
+fun Function.toFunctionInstance() : FunctionInstance {
+    return FunctionInstance(name, this, parameters, thisSymbol, returnType, isVararg)
+}
+
+fun Symbol.mapType(typeMap: Map<TypeGenericParameter, Type>) : Symbol {
+    return when(this) {
+        is ConstSymbol -> ConstSymbol(location, name, type.mapType(typeMap), value)
+        is FieldSymbol -> FieldSymbol(location, name, type.mapType(typeMap), mutable, offset)
+        is FunctionSymbol -> {
+            val clone = this.clone()
+            clone.overloads.clear()
+            clone.overloads.addAll(overloads.map { it.mapTypes(typeMap) })
+            clone
+        }
+        is GlobalVarSymbol -> GlobalVarSymbol(location, name, type.mapType(typeMap), mutable)
+        is TypeNameSymbol -> TypeNameSymbol(location, name, type.mapType(typeMap))
+        is VarSymbol -> VarSymbol(location, name, type.mapType(typeMap), mutable)
+    }
 }

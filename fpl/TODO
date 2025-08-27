@@ -19,6 +19,8 @@ Inheritance
 Virtual functions
 is expressions
 Enums
+Enum with associated data
+error types
 
 
 TODO - Front end:
@@ -27,7 +29,6 @@ Destructors
 varargs functions
 when statement
 Generics
-Enum with associated data
 Then (short form if)
 if expressions
 ?. ?:
@@ -36,7 +37,6 @@ Local class instances
 const class instances ?
 unsafe blocks
 casts
-error types
 super.calls to parent class methods
 Function pointers
 

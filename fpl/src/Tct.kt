@@ -20,7 +20,7 @@ class TctOrExpr(location: Location, val lhs: TctExpr, val rhs: TctExpr) : TctExp
 class TctReturnExpr(location: Location, val expr: TctExpr?) : TctExpr(location, TypeNothing)
 class TctContinueExpr(location: Location) : TctExpr(location, TypeNothing)
 class TctBreakExpr(location: Location) : TctExpr(location, TypeNothing)
-class TctCallExpr(location: Location, val thisArg:TctExpr?, val func:Function, val args: List<TctExpr>) : TctExpr(location, func.returnType)
+class TctCallExpr(location: Location, val thisArg:TctExpr?, val func:Function, val args: List<TctExpr>, type:Type) : TctExpr(location, type)
 class TctIndexExpr(location: Location, val array: TctExpr, val index: TctExpr, type:Type) : TctExpr(location, type)
 class TctMemberExpr(location: Location, val objectExpr: TctExpr, val member:FieldSymbol, type:Type) : TctExpr(location, type)
 class TctNewArrayExpr(location: Location, val elementType: Type, val size:TctExpr, val arena: Arena, val lambda:TctLambdaExpr?, type:Type) : TctExpr(location, type)
@@ -32,13 +32,14 @@ class TctRangeExpr(location: Location, val start: TctExpr, val end: TctExpr, val
 class TctNewClassExpr(location: Location, val klass: TypeClass, val args: List<TctExpr>, val arena: Arena, type:Type) : TctExpr(location, type)
 class TctNullAssertExpr(location: Location, val expr: TctExpr, type:Type) : TctExpr(location, type)
 class TctMethodRefExpr(location: Location, val objectExpr: TctExpr, val methodSym: FunctionSymbol, type:Type) : TctExpr(location, type)
-class TctIsExpr(location: Location, val expr: TctExpr, val typeExpr: TypeClass) : TctExpr(location, TypeBool)
+class TctIsExpr(location: Location, val expr: TctExpr, val typeExpr: TypeClassInstance) : TctExpr(location, TypeBool)
 class TctAsExpr(location: Location, val expr: TctExpr, typeExpr: Type) : TctExpr(location, typeExpr)
 class TctEnumEntryExpr(location: Location, val expr:TctExpr, val field:FieldSymbol, type:Type) : TctExpr(location, type)
 class TctMakeUnionExpr(location: Location, val expr:TctExpr, val typeIndex:Int, type:TypeErrable) : TctExpr(location, type)
 class TctIsUnionTypeExpr(location: Location, val expr:TctExpr, val typeIndex:Int) : TctExpr(location, TypeBool)
 class TctExtractUnionExpr(location: Location, val expr:TctExpr, type:Type) : TctExpr(location, type)
 class TctTryExpr(location: Location, val expr: TctExpr, type:Type) : TctExpr(location, type)
+class TctVarargExpr(location: Location, val exprs: List<TctExpr>, type:Type) : TctExpr(location, type)
 
 class TctErrorExpr(location: Location, val message: String = "") : TctExpr(location, TypeError) {
     init {
@@ -66,6 +67,7 @@ class TctIfStmt(location:Location, body:List<TctIfClause>) : TctBlock(location, 
 class TctRepeatStmt(location: Location, val condition: TctExpr, body: List<TctStmt>) : TctBlock(location, body)
 class TctForRangeStmt(location: Location, val index:VarSymbol, val range:TctRangeExpr, body: List<TctStmt>) : TctBlock(location, body)
 class TctForArrayStmt(location: Location, val index:VarSymbol, val array:TctExpr, body: List<TctStmt>) : TctBlock(location, body)
+class TctForIterableStmt(location: Location, val loopVar:VarSymbol, val iterable:TctExpr, val lengthSym:FieldSymbol, val getMethod:FunctionInstance, body: List<TctStmt>) : TctBlock(location, body)
 class TctFieldInitializer(val field: FieldSymbol?, val value: TctExpr)
 
 

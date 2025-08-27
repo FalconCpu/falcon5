@@ -293,6 +293,7 @@ class ErrorTests {
 
         val expected = """
             Opened handle: 42
+            
         """.trimIndent()
 
         runTest(prog, expected)

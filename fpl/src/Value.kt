@@ -98,7 +98,7 @@ class ClassValue private constructor(val klass: TypeClass) : Value(klass) {
     fun emit(sb: StringBuilder) {
         sb.append("$klass/DESCRIPTOR:\n")
         sb.append("dcw ${klass.instanceSize}\n")  // Size of the class instance
-        val superClass = klass.superClass
+        val superClass = klass.superClass?.genericType
         if (superClass == null)
             sb.append("dcw 0\n")  // No superclass
         else

@@ -24,7 +24,7 @@ enum class TokenKind(val value: String, val lineContinues: Boolean) {
     NEQ           ("!=", true),
     LT            ("<", true),
     LTE           ("<=", true),
-    GT            (">", true),
+    GT            (">", false),
     GTE           (">=", true),
     IS            ("is", true),
     COLON         (":", true),
@@ -74,6 +74,7 @@ enum class TokenKind(val value: String, val lineContinues: Boolean) {
     EXTERN        ("extern", true),
     OVERRIDE      ("override", true),
     VIRTUAL       ("virtual", true),
+    VARARG        ("vararg", true),
     ERROR         ("<error>", false);
 
     override fun toString(): String = value

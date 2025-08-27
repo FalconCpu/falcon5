@@ -311,6 +311,18 @@ class Parser(val lexer: Lexer) {
         return AstTypeIdentifier(tok.location, tok.value)
     }
 
+    private fun parseTypeArgs() : List<AstType> {
+        val args = mutableListOf<AstType>()
+        if (!canTake(LT))
+            return args
+        if (currentToken.kind!= GT)
+            do {
+                args.add(parseType())
+            } while( canTake(COMMA))
+        expect(GT)
+        return args
+    }
+
     private fun parseTypeArray() : AstArrayType {
         expect(ARRAY) // Consume ARRAY
         expect(LT)
@@ -332,6 +344,13 @@ class Parser(val lexer: Lexer) {
             else -> throw ParseError(currentToken.location, "Got '$currentToken' when expecting type")
         }
 
+        if (currentToken.kind==LT) {
+            val typeArgs = parseTypeArgs()
+            if (ret !is AstTypeIdentifier)
+                throw ParseError(ret.location, "Type arguments can only be applied to type identifiers")
+            ret = AstGenericType(ret.location, ret, typeArgs)
+        }
+
         if (canTake(QMARK))
             ret = AstNullableType(currentToken.location, ret)
         if (canTake(EMARK))
@@ -348,8 +367,9 @@ class Parser(val lexer: Lexer) {
         val kindLoc = currentToken.location
         val kind = if (canTake(VAL)) VAL else
                    if (canTake(VAR)) VAR else
+                   if (canTake(VARARG)) VARARG else
                                      EOL
-        if (kind != EOL && !allowVal)
+        if ((kind==VAL || kind==VAR) && !allowVal)
             Log.error(kindLoc, "'val' or 'var' not allowed on function parameters ")
         val id = parseIdentifier()
         expect(COLON)
@@ -365,6 +385,26 @@ class Parser(val lexer: Lexer) {
                 params.add(parseParameter(allowVal))
             } while( canTake(COMMA))
         expect(CLOSEB)
+
+        // Check that vararg is last parameter
+        val varargs = params.filter { it.kind == VARARG }
+        if (varargs.size > 1)
+            Log.error(varargs[1].location, "Only one vararg parameter allowed")
+        if (varargs.size == 1 && params.last().kind != VARARG)
+            Log.error(varargs[0].location, "Vararg parameter must be the last parameter")
+
+        return params
+    }
+
+    private fun parseTypeParams() : MutableList<AstTypeIdentifier> {
+        val params = mutableListOf<AstTypeIdentifier>()
+        expect(LT)
+        if (currentToken.kind!= GT)
+            do {
+                val id = expect(IDENTIFIER)
+                params.add(AstTypeIdentifier(id.location, id.value))
+            } while( canTake(COMMA))
+        expect(GT)
         return params
     }
 
@@ -406,13 +446,14 @@ class Parser(val lexer: Lexer) {
     private fun parseClassDef() : AstClassDefStmt {
         val tok = expect(CLASS)
         val name = expect(IDENTIFIER)
+        val typeParams = if (currentToken.kind==LT) parseTypeParams() else emptyList()
         val constructorArgs = if (currentToken.kind==OPENB) parseParameterList(true) else emptyList()
-        val parentClass = if (canTake(COLON)) parseTypeIdentifier() else null
+        val parentClass = if (canTake(COLON)) parseType() else null
         val parentArgs = if (currentToken.kind==OPENB && parentClass!=null) parseArgList() else emptyList()
         expectEol()
         val body = if (currentToken.kind== INDENT) parseIndentedBlock() else emptyList()
         optionalEnd(CLASS)
-        return AstClassDefStmt(tok.location, name.value, parentClass, constructorArgs, parentArgs, body)
+        return AstClassDefStmt(tok.location, name.value, typeParams, parentClass, constructorArgs, parentArgs, body)
     }
 
     private fun parseExpressionStmt() : AstStmt {

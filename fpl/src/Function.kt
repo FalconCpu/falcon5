@@ -6,7 +6,8 @@ class Function (
     val thisSymbol : VarSymbol?,      // This is null for static functions
     val parameters: List<VarSymbol>,
     val returnType : Type,
-    val qualifier: TokenKind
+    val qualifier: TokenKind,
+    val isVararg: Boolean = false
 ) {
     var virtualFunctionNumber = -1      // Virtual function number, -1 if not a virtual function
 
@@ -178,7 +179,7 @@ class Function (
 }
 
 
-fun Function.hasSameSignature(other: Function): Boolean {
+fun FunctionInstance.hasSameSignature(other: FunctionInstance): Boolean {
     if (parameters.size!= other.parameters.size) return false
     for (i in parameters.indices)
         if (parameters[i].type!= other.parameters[i].type) return false

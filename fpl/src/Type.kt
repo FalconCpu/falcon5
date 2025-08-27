@@ -35,10 +35,10 @@ class TypeRange private constructor(val elementType:Type) : Type("Range<$element
     }
 }
 
-class TypeClass(name:String, val superClass:TypeClass?) : Type(name) {
+class TypeClass(name:String, val typeParameters:List<TypeGenericParameter>, val superClass:TypeClassInstance?) : Type(name) {
     val fields = mutableListOf<Symbol>()
     val virtualFunctions = mutableListOf<Function>()
-    lateinit var constructor : Function
+    lateinit var constructor : FunctionInstance
     var instanceSize = 0
     val descriptor = ClassValue.create(this)
 
@@ -70,14 +70,14 @@ class TypeEnum(name:String) : Type(name) {
 
 fun Type.isSuperClassOf(other: Type): Boolean {
     if (this == other) return true
-    if (this !is TypeClass) return false
-    if (other !is TypeClass) return false
-    var current: TypeClass? = other
+    if (this !is TypeClassInstance) return false
+    if (other !is TypeClassInstance) return false
+    var current: TypeClass? = other.genericType
     while (current != null) {
-        if (this == current) {
+        if (this.genericType == current) {
             return true
         }
-        current = current.superClass
+        current = current.superClass?.genericType
     }
     return false
 }
@@ -99,6 +99,43 @@ class TypeErrable private constructor(val okType: Type) : Type("$okType!") {
         }
     }
 }
+
+class TypeGenericParameter(name: String) : Type(name)
+
+class TypeClassInstance private constructor(val genericType: TypeClass, val typeArguments: Map<TypeGenericParameter,Type>, name:String) : Type(name) {
+    private val fields = mutableMapOf<String,Symbol>()
+
+    val constructor by lazy { genericType.constructor.mapTypes(typeArguments) }
+
+    fun lookup(name:String) : Symbol? {
+        val sym = fields[name]
+        if (sym != null) return sym
+
+        val lok = genericType.lookup(name) ?: return null
+        val mapped = lok.mapType(typeArguments)
+        fields[name] = mapped
+        return mapped
+    }
+
+    companion object {
+        val allInstances = mutableListOf<TypeClassInstance>()
+        fun create(genericType: TypeClass, typeArguments: Map<TypeGenericParameter,Type>) : TypeClassInstance {
+            val ret = allInstances.find{ it.genericType == genericType && it.typeArguments == typeArguments }
+            if (ret != null) return ret
+            val name = if (typeArguments.isEmpty())
+                genericType.name
+            else
+                genericType.name + "<" + typeArguments.values.joinToString(",") + ">"
+            val instance = TypeClassInstance(genericType, typeArguments, name)
+            allInstances.add(instance)
+            return instance
+        }
+    }
+}
+
+fun TypeClass.toClassInstance() = TypeClassInstance.create(this, emptyMap())
+
+
 
 
 // Type checking
@@ -156,4 +193,41 @@ fun Type.getSize(): Int = when (this) {
     is TypeEnum -> 4
     is TypeNullable -> 4
     is TypeErrable -> 8
+    is TypeGenericParameter -> 4
+    is TypeClassInstance -> 4
 }
+
+// ========================================================================
+//                          Map Type
+// ========================================================================
+// Map a generic type to a concrete type
+
+fun Type.mapType(typeMap: Map<TypeGenericParameter, Type>): Type {
+    return when(this) {
+        is TypeGenericParameter -> typeMap[this] ?: this
+        is TypeClassInstance -> {
+            val newTypeArgs = typeArguments.mapValues { it.value.mapType(typeMap) }
+            TypeClassInstance.create(genericType, newTypeArgs)
+        }
+        is TypeArray -> TypeArray.create(elementType.mapType(typeMap))
+        is TypeRange -> TypeRange.create(elementType.mapType(typeMap))
+        is TypeNullable -> TypeNullable.create(elementType.mapType(typeMap))
+        is TypeErrable -> TypeErrable.create(okType.mapType(typeMap))
+        is TypeClass -> {
+            val newTypeArgs = typeParameters.associateWith { (typeMap[it] ?: it) }
+            TypeClassInstance.create(this, newTypeArgs)
+        }
+        TypeAny,
+        TypeBool,
+        TypeChar,
+        is TypeEnum,
+        TypeError,
+        TypeInt,
+        TypeNothing,
+        TypeNull,
+        TypeReal,
+        TypeString,
+        TypeUnit -> this
+    }
+}
+
