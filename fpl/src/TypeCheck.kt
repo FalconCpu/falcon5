@@ -13,6 +13,7 @@ private var firstUnreachableStatement = true
 // On the second pass disable reporting duplicate variable declarations (as they were allocated in the first pass)
 var secondTypecheckPass = false
 
+var insideUnsafe = false
 
 
 // ===========================================================================
@@ -30,7 +31,7 @@ private fun AstExpr.typeCheckRvalue(scope: AstBlock, allowTypes:Boolean=false) :
                 Log.error(location, "'${ret.sym.name}' may be uninitialized")
             val refinedType = pathContext.refinedTypes[ret.sym]
             if (ret.type is TypeErrable && refinedType!=null && refinedType !is TypeErrable)
-                return TctExtractUnionExpr(location, ret, refinedType)
+                return TctExtractCompoundExpr(location, ret, 0,refinedType)
             if (refinedType!=null)
                 return TctVariable(location, ret.sym, refinedType)
         }
@@ -45,25 +46,35 @@ private fun AstExpr.typeCheckRvalue(scope: AstBlock, allowTypes:Boolean=false) :
     return ret
 }
 
-private fun AstExpr.typeCheckLvalue(scope: AstBlock) : TctExpr {
-    val ret = typeCheckExpr(scope)
-    when(ret) {
+private fun TctExpr.checkIsLvalue() {
+    when(this) {
         is TctVariable -> {
-            if(!ret.sym.mutable && ret.sym !in pathContext.uninitializedVariables)
-                Log.error(location, "'${ret.sym}' is not mutable")
-            pathContext = pathContext.initialize(ret.sym)
+            if(!sym.mutable && sym !in pathContext.uninitializedVariables)
+                Log.error(location, "'$sym' is not mutable")
+            pathContext = pathContext.initialize(sym)
         }
 
         is TctIndexExpr -> {
         }
 
         is TctMemberExpr -> {
-            if (!ret.member.mutable)
-                Log.error(location,"Field ${ret.member} is not mutable")
+            if (!member.mutable)
+                Log.error(location,"Field $member is not mutable")
         }
 
-        else -> return TctErrorExpr(location,"expression  is not an Lvalue  $ret")
+        is TctMakeTupleExpr -> {
+            elements.forEach { it.checkIsLvalue() }
+        }
+
+        else -> Log.error(location,"expression  is not an Lvalue")
     }
+
+}
+
+
+private fun AstExpr.typeCheckLvalue(scope: AstBlock) : TctExpr {
+    val ret = typeCheckExpr(scope, isLvalue = true)
+    ret.checkIsLvalue()
     return ret
 }
 
@@ -110,7 +121,7 @@ private fun AstExpr.typeCheckBoolExpr(scope: AstBlock) : BranchPathContext {
 
             if (tcExpr is TctIsExpr)
                 truePath = pathContext.refineType(tcExpr.expr, tcExpr.typeExpr)
-            if (tcExpr is TctIsUnionTypeExpr) {
+            if (tcExpr is TctIsErrableTypeExpr) {
                 val tcType = (tcExpr.expr.type as TypeErrable).okType
                 if (tcExpr.typeIndex == 0) {
                     truePath = pathContext.refineType(tcExpr.expr, tcType)
@@ -154,7 +165,7 @@ private fun AstExpr.typeCheckBoolExpr(scope: AstBlock) : BranchPathContext {
 }
 
 
-private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
+private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : TctExpr {
     return when(this) {
         is AstIntLiteral -> {
             TctConstant(location, IntValue(value, TypeInt))
@@ -169,7 +180,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
         }
 
         is AstIdentifier ->
-            when(val sym = scope.lookupSymbol(name)) {
+            when(val sym = scope.lookupSymbol(name, location)) {
                 null -> {
                     Log.error(location, "'${name}' is not defined")
                     val new = VarSymbol(location, name, TypeError, true)
@@ -285,7 +296,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
                 }
 
                 is TypeClassInstance -> {
-                    when(val field = tctExpr.type.lookup(memberName)) {
+                    when(val field = tctExpr.type.lookup(memberName, location)) {
                         null -> TctErrorExpr(location, "Class '${tctExpr.type.name}' has no member '${memberName}'")
                         is FieldSymbol -> TctMemberExpr(location, tctExpr, field, field.type)
                         is FunctionSymbol -> TctMethodRefExpr(location, tctExpr, field, TypeNothing)
@@ -299,12 +310,22 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
                     val field = tctExpr.type.parameters.find {it.name==memberName}
                     if (field==null)
                         TctErrorExpr(location, "Enum '${tctExpr.type.name}' has no member '${memberName}'")
-                    else
+                    else {
+                        field.references.add(location)
                         TctEnumEntryExpr(location, tctExpr, field, field.type)
+                    }
                 }
 
                 is TypeNullable ->
                     TctErrorExpr(location, "Cannot access member as expression may be null")
+
+                is TypeTuple -> {
+                    val index = memberName.toIntOrNull()
+                    if (index==null || index<0 || index>=tctExpr.type.elementTypes.size)
+                        TctErrorExpr(location, "Tuple type '${tctExpr.type}' has no member '${memberName}'")
+                    else
+                        TctExtractCompoundExpr(location, tctExpr, index, tctExpr.type.elementTypes[index])
+                }
 
                 else -> TctErrorExpr(location, "Cannot access member '${memberName}' of type '${tctExpr.type}'")
             }
@@ -478,9 +499,9 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
             val typeL = if (tctExpr.type is TypeNullable) tctExpr.type.elementType else tctExpr.type
 
             if (typeL is TypeErrable && typeR==errorEnum)
-                return TctIsUnionTypeExpr(location, tctExpr, 1)
+                return TctIsErrableTypeExpr(location, tctExpr, 1)
             if (typeL is TypeErrable && typeR==typeL.okType)
-                return TctIsUnionTypeExpr(location, tctExpr,0)
+                return TctIsErrableTypeExpr(location, tctExpr,0)
 
             if (typeL !is TypeClassInstance)
                 return TctErrorExpr(location, "Got type '${tctExpr.type}' when expecting a class type")
@@ -504,6 +525,8 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
             return if ( (tctExpr.type is TypeEnum && typeR is TypeInt) ||
                 (tctExpr.type is TypeInt && typeR is TypeEnum))
                 TctAsExpr(location, tctExpr, typeR)
+            else if (insideUnsafe)
+                TctAsExpr(location, tctExpr, typeR)
             else
                 TctErrorExpr(location, "Cannot cast type '${tctExpr.type}' to '${typeR.name}'")
         }
@@ -520,6 +543,28 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock) : TctExpr {
                 return TctErrorExpr(location, "Function '${enclosingFunc.name}' must have an errable return type to use 'try'")
             val type = tctExpr.type.okType
             return TctTryExpr(location, tctExpr, type)
+        }
+
+        is AstMakeTupleExpr -> {
+            val exprs = if (isLvalue)
+                elements.map { it.typeCheckLvalue(scope) }
+            else
+                elements.map { it.typeCheckRvalue(scope) }
+            if (exprs.any { it.type is TypeError })
+                return TctErrorExpr(location, "")
+            val badType = exprs.filter { it.type is TypeErrable || it.type is TypeTuple }
+            for(e in badType)
+                Log.error(e.location, "Cannot include type '${e.type}' in a tuple")
+            val type = TypeTuple.create(exprs.map { it.type })
+            TctMakeTupleExpr(location, exprs, type)
+        }
+
+        is AstUnsafeExpr -> {
+            val oldInsideUnsafe = insideUnsafe
+            insideUnsafe = true
+            val tctExpr = expr.typeCheckRvalue(scope)
+            insideUnsafe = oldInsideUnsafe
+            tctExpr
         }
     }
 }
@@ -784,6 +829,10 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
             val rhs = rhs.typeCheckRvalue(scope).checkType(lhs.type)
             if (rhs.type != lhs.type)
                 pathContext = pathContext.refineType(lhs, rhs.type)
+            if (op==TokenKind.PLUSEQ || op==TokenKind.MINUSEQ) {
+                if (lhs.type != TypeInt)
+                    Log.error(location, "Operator '$op' not defined for type '${lhs.type}'")
+            }
             TctAssignStmt(location, op, lhs, rhs)
         }
 
@@ -815,6 +864,32 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
         is AstLambdaExpr -> error("Lambda expressions should not be type checked here, they should be handled in the expression type checking phase")
 
         is AstEnumDefStmt -> TctEmptyStmt(location)
+
+        is AstDestructuringVarDeclStmt -> {
+            val rhs = initializer.typeCheckRvalue(scope)
+            if (rhs.type !is TypeTuple) {
+                Log.error(location, "Destructuring requires a tuple, got ${rhs.type}")
+                return TctEmptyStmt(location)
+            }
+
+            val tupleType = rhs.type
+            if (names.size != tupleType.elementTypes.size) {
+                Log.error(location, "Destructuring expects ${names.size} elements, got ${tupleType.elementTypes.size}")
+                return TctEmptyStmt(location)
+            }
+
+            val syms = mutableListOf<VarSymbol>()
+            for((index,name) in names.withIndex()) {
+                val tt = tupleType.elementTypes[index]
+                val type = name.type?.resolveType(scope) ?: tt
+                val sym = VarSymbol(name.location, name.name, type, mutable)
+                if (!tt.isAssignableTo(type))
+                    Log.error(name.location, "Cannot assign tuple element of type '${tt}' to variable of type '${type}'")
+                scope.addSymbol(sym)
+                syms += sym
+            }
+            return TctDestructuringDeclStmt(location, syms, rhs)
+        }
     }
 }
 
@@ -824,7 +899,7 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
 // ===========================================================================
 
 private fun AstTypeIdentifier.resolve(scope: AstBlock) : Type {
-    return when (val sym = scope.lookupSymbol(name)) {
+    return when (val sym = scope.lookupSymbol(name, location)) {
         null -> reportTypeError(location, "Unresolved identifier: '$name'")
         is TypeNameSymbol -> sym.type
         else -> reportTypeError(location, "'${sym.name}' is a ${sym.getDescription()} not a type")
@@ -869,16 +944,24 @@ private fun AstType.resolveType(scope:AstBlock) : Type {
             val mapping = (genericType.typeParameters zip resolvedArgs).toMap()
             return TypeClassInstance.create(genericType, mapping)
         }
+
+        is AstTupleType -> {
+            val elementTypes = elementTypes.map { it.resolveType(scope) }
+            val badElement = elementTypes.filter { it is TypeErrable || it is TypeTuple }
+            for(e in badElement)
+                Log.error(location, "Cannot include type '${e}' in a tuple")
+            return TypeTuple.create(elementTypes)
+        }
     }
 }
 
 fun TypeClassInstance.isIterable() : Pair<FieldSymbol,FunctionInstance>? {
     // Test to see if a class has an Int field named "length", and a method get(Int)
-    val lengthField = lookup("length")
+    val lengthField = lookup("length", null)
     if (lengthField==null || lengthField !is FieldSymbol || lengthField.type!=TypeInt)
         return null
 
-    val getMethod = lookup("get")
+    val getMethod = lookup("get",null)
     if (getMethod==null || getMethod !is FunctionSymbol)
         return null
     val getOverloads = getMethod.overloads.filter { it.parameters.size==1 && it.parameters[0].type==TypeInt }

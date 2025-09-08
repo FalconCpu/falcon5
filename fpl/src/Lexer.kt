@@ -117,6 +117,8 @@ class Lexer(private val fileHandle:Reader, private val filename: String) {
         if ((c == '<' && currentChar == '=') ||
             (c == '>' && currentChar == '=') ||
             (c == '!' && currentChar == '=') ||
+            (c == '+' && currentChar == '=') ||
+            (c == '-' && currentChar == '=') ||
             (c == '-' && currentChar == '>') ||
             (c == '.' && currentChar == '.') ||
             (c == '?' && currentChar == '?')

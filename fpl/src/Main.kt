@@ -1,3 +1,4 @@
+import java.io.FileReader
 import java.io.FileWriter
 
 val debug = false
@@ -5,21 +6,65 @@ val debug = false
 
 //TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or
 // click the <icon src="AllIcons.Actions.Execute"/> icon in the gutter.
-fun main() {
-    val name = "Kotlin"
-    //TIP Press <shortcut actionId="ShowIntentionActions"/> with your caret at the highlighted text
-    // to see how IntelliJ IDEA suggests fixing it.
-    println("Hello, " + name + "!")
-
-    for (i in 1..5) {
-        //TIP Press <shortcut actionId="Debug"/> to start debugging your code. We have set one <icon src="AllIcons.Debugger.Db_set_breakpoint"/> breakpoint
-        // for you, but you can always add more by pressing <shortcut actionId="ToggleLineBreakpoint"/>.
-        println("i = $i")
+fun main(args: Array<String>) {
+    if (args.isEmpty()) {
+        println("Usage: program [options] <file1> <file2> ...")
+        println("Options: --stop-at=[PARSE|TYPE_CHECK|CODE_GEN|BACKEND|ASSEMBLY|EXECUTE]")
+        return
     }
+
+    var stopAt = StopAt.BINARY
+    val filenames = mutableListOf<String>()
+
+    for (arg in args) {
+        when {
+            arg.startsWith("--stop-at=") -> {
+                val value = arg.substringAfter("=")
+                stopAt = try {
+                    StopAt.valueOf(value)
+                } catch (e: IllegalArgumentException) {
+                    println("Invalid stop-at value: $value")
+                    return
+                }
+            }
+
+            arg.endsWith(".fplprj") -> {
+                try {
+                    val prjFiles = java.io.File(arg).readLines()
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() && !it.startsWith("#") }
+                    filenames.addAll(prjFiles)
+                } catch (e: Exception) {
+                    Log.error(nullLocation, "Failed to read project file: ${e.message}")
+                    return
+                }
+            }
+
+            else -> filenames.add(arg)
+        }
+    }
+
+    if (filenames.isEmpty()) {
+        println("No input files specified.")
+        return
+    }
+
+    val lexers = try {filenames.filter{it.endsWith(".fpl") }.map { Lexer(FileReader(it), it) }}
+    catch (e:Exception) {
+        Log.error(nullLocation, "Failed to open input file: ${e.message}")
+        return
+    }
+
+    val asmFileArg = filenames.filter { it.endsWith(".f32") }
+    if (asmFileArg.isNotEmpty())
+        assemblyFiles = asmFileArg
+
+    val result = compile(lexers, stopAt)
+    println(result)
 }
 
 
-enum class StopAt{PARSE, TYPE_CHECK, CODE_GEN, BACKEND, ASSEMBLY, EXECUTE}
+enum class StopAt{PARSE, TYPE_CHECK, CODE_GEN, BACKEND, ASSEMBLY, BINARY, EXECUTE}
 
 var assemblyFiles = listOf("stdlib/start.f32")
 private var asmFileName = "asm.f32"
@@ -50,6 +95,7 @@ private fun runProgram() : String {
 fun compile(lexers:List<Lexer>, stopAt: StopAt) : String {
     Log.clear()
     allFunctions.clear()
+    allSymbols.clear()
     Value.clear()
     errorEnum = null
 
@@ -61,6 +107,7 @@ fun compile(lexers:List<Lexer>, stopAt: StopAt) : String {
     val tctTop = astTop.typeCheck()
     if (Log.hasErrors()) return Log.getMessages()
     if (stopAt == StopAt.TYPE_CHECK) return tctTop.dump()
+    astTop.writeSymbolMap()
 
     // Run the code generation
     tctTop.codeGen()
@@ -84,6 +131,7 @@ fun compile(lexers:List<Lexer>, stopAt: StopAt) : String {
 
     runAssembler(assemblyFiles + listOf(asmFileName), "-hex")
     if (Log.hasErrors()) return Log.getMessages()
-    return runProgram()
+    if (stopAt == StopAt.BINARY) return "Generated binary file: $executableFileName"
 
+    return runProgram()
 }

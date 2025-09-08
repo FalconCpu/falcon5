@@ -107,13 +107,19 @@ class TypeClassInstance private constructor(val genericType: TypeClass, val type
 
     val constructor by lazy { genericType.constructor.mapTypes(typeArguments) }
 
-    fun lookup(name:String) : Symbol? {
+    fun lookup(name:String, location: Location?) : Symbol? {
         val sym = fields[name]
-        if (sym != null) return sym
+        if (sym != null) {
+            if (location!=null)
+                sym.references += location
+            return sym
+        }
 
         val lok = genericType.lookup(name) ?: return null
         val mapped = lok.mapType(typeArguments)
         fields[name] = mapped
+        if (location!=null)
+            mapped.references += location
         return mapped
     }
 
@@ -134,6 +140,16 @@ class TypeClassInstance private constructor(val genericType: TypeClass, val type
 }
 
 fun TypeClass.toClassInstance() = TypeClassInstance.create(this, emptyMap())
+
+class TypeTuple private constructor(val elementTypes: List<Type>) : Type("(${elementTypes.joinToString(",")})") {
+    companion object {
+        val allTupleTypes = mutableMapOf<List<Type>, TypeTuple>()
+        fun create(elementTypes: List<Type>) = allTupleTypes.getOrPut(elementTypes) {
+            TypeTuple(elementTypes)
+        }
+    }
+}
+
 
 
 
@@ -165,9 +181,9 @@ fun Type.isAssignableTo(other: Type): Boolean {
 fun TctExpr.checkType(expectedType:Type) : TctExpr {
     // Handle wrapping a value into an errable type
     if (expectedType is TypeErrable && this.type==errorEnum)
-        return TctMakeUnionExpr(location, this, 1, expectedType)
+        return TctMakeErrableExpr(location, this, 1, expectedType)
     if (expectedType is TypeErrable && this.type==expectedType.okType)
-        return TctMakeUnionExpr(location, this, 0, expectedType)
+        return TctMakeErrableExpr(location, this, 0, expectedType)
 
     if (!type.isAssignableTo(expectedType))
         return TctErrorExpr(location, "Type mismatch got '$type' when expecting '$expectedType'")
@@ -195,6 +211,7 @@ fun Type.getSize(): Int = when (this) {
     is TypeErrable -> 8
     is TypeGenericParameter -> 4
     is TypeClassInstance -> 4
+    is TypeTuple -> 4*elementTypes.size
 }
 
 // ========================================================================
@@ -217,6 +234,7 @@ fun Type.mapType(typeMap: Map<TypeGenericParameter, Type>): Type {
             val newTypeArgs = typeParameters.associateWith { (typeMap[it] ?: it) }
             TypeClassInstance.create(this, newTypeArgs)
         }
+        is TypeTuple -> TypeTuple.create(elementTypes.map { it.mapType(typeMap) })
         TypeAny,
         TypeBool,
         TypeChar,

@@ -21,22 +21,29 @@ is expressions
 Enums
 Enum with associated data
 error types
+Generics
+varargs functions
+Then (short form if)
++= -=
+casts
+unsafe casts
 
+
+6) Pass tuples as function parameters
+7) Array of tuples
+8) Tuple Class members
 
 TODO - Front end:
 abstract class / abstract functions
 Destructors
-varargs functions
 when statement
-Generics
-Then (short form if)
 if expressions
 ?. ?:
 in range test
+inline arrays
 Local class instances
 const class instances ?
-unsafe blocks
-casts
+unsafe array access
 super.calls to parent class methods
 Function pointers
 

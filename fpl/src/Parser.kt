@@ -15,6 +15,13 @@ class Parser(val lexer: Lexer) {
         throw ParseError(currentToken.location, "Got '$currentToken' when expecting '$kind'")
     }
 
+    private fun expect(kind1: TokenKind, kind2:TokenKind) : Token {
+        if (currentToken.kind == kind1 || currentToken.kind == kind2)
+            return nextToken()
+        throw ParseError(currentToken.location, "Got '$currentToken' when expecting '$kind1' or '$kind2'")
+    }
+
+
     private fun skipToEol() {
         while (currentToken.kind!= EOL && currentToken.kind!= EOF)
             nextToken()
@@ -69,10 +76,16 @@ class Parser(val lexer: Lexer) {
     }
 
     private fun parseParentheses() : AstExpr {
+        val exprs = mutableListOf<AstExpr>()
         expect(OPENB)
-        val expr = parseExpr()
+        do {
+            exprs += parseExpr()
+        } while (canTake(COMMA))
         expect(CLOSEB)
-        return expr
+        return if (exprs.size > 1)
+            AstMakeTupleExpr(currentToken.location, exprs)
+        else
+            exprs[0]
     }
 
     private fun parseReturn() : AstReturnExpr {
@@ -164,21 +177,21 @@ class Parser(val lexer: Lexer) {
     }
 
     private fun parseIndexExpr(array: AstExpr) : AstExpr {
-        expect(OPENSQ) // Consume OPENSQ
+        val tok = expect(OPENSQ) // Consume OPENSQ
         val index = parseExpr()
         expect(CLOSESQ) // Consume CLOSESQ
-        return AstIndexExpr(currentToken.location, array, index)
+        return AstIndexExpr(tok.location, array, index)
     }
 
     private fun parseMemberExpr(objectExpr: AstExpr) : AstExpr {
         expect(DOT) // Consume DOT
-        val memberName = expect(IDENTIFIER)
-        return AstMemberExpr(currentToken.location, objectExpr, memberName.value)
+        val memberName = expect(IDENTIFIER,INTLITERAL)
+        return AstMemberExpr(memberName.location, objectExpr, memberName.value)
     }
 
     private fun parseNullAssertExpr(expr: AstExpr) : AstExpr {
-        expect(QMARKQMARK) // Consume QMARKQMARK
-        return AstNullAssertExpr(currentToken.location, expr)
+        val tok = expect(QMARKQMARK) // Consume QMARKQMARK
+        return AstNullAssertExpr(tok.location, expr)
     }
 
     private fun parsePostfixExpr() : AstExpr {
@@ -205,6 +218,14 @@ class Parser(val lexer: Lexer) {
                 val tok = nextToken() // Consume MINUS
                 val expr = parsePrefixExpr()
                 AstNegateExpr(tok.location, expr)
+            }
+
+            UNSAFE -> {
+                val tok = nextToken() // Consume UNSAFE
+                expect(OPENB)
+                val expr = parseExpr()
+                expect(CLOSEB)
+                AstUnsafeExpr(tok.location, expr)
             }
 
             else ->  parsePostfixExpr()
@@ -331,16 +352,24 @@ class Parser(val lexer: Lexer) {
         return AstArrayType(currentToken.location, elementType)
     }
 
+    private fun parseTypeTuple() : AstType {
+        val elementTypes = mutableListOf<AstType>()
+        expect(OPENB) // Consume OPENB
+        do
+            elementTypes.add(parseType())
+        while (canTake(COMMA))
+        expect(CLOSEB) // Consume CLOSEB
+        return if (elementTypes.size == 1)
+            elementTypes[0]
+        else
+            AstTupleType(currentToken.location, elementTypes)
+    }
+
     private fun parseType() : AstType {
         var ret = when(currentToken.kind) {
             IDENTIFIER -> parseTypeIdentifier()
             ARRAY -> parseTypeArray()
-            OPENB -> {
-                nextToken() // Consume OPENB
-                val type = parseType()
-                expect(CLOSEB) // Consume CLOSEB
-                type
-            }
+            OPENB -> parseTypeTuple()
             else -> throw ParseError(currentToken.location, "Got '$currentToken' when expecting type")
         }
 
@@ -421,30 +450,49 @@ class Parser(val lexer: Lexer) {
         }
     }
 
-    private fun parseVarDecl() : AstVarDeclStmt {
-        val tok = nextToken()
-        val mutable = tok.kind == VAR
+    private fun parseDeclNode() : AstDeclNode {
         val id = expect(IDENTIFIER)
         val typeExpr = if (canTake(COLON)) parseType() else null
-        val initializer = if (canTake(EQ)) parseExpr() else null
-        expectEol()
-        return AstVarDeclStmt(tok.location, id.value, typeExpr, initializer, mutable)
+        return AstDeclNode(id.location, id.value, typeExpr)
+    }
+
+    private fun parseVarDecl() : AstStmt {
+        val tok = nextToken()
+        val mutable = tok.kind == VAR
+        if (currentToken.kind==OPENB) {
+            val ids = mutableListOf<AstDeclNode>()
+            expect(OPENB) // Consume OPENB
+            do {
+                ids += parseDeclNode()
+            } while (canTake(COMMA))
+            expect(CLOSEB) // Consume CLOSEB
+            expect(EQ)
+            val expr = parseExpr()
+            expectEol()
+            return AstDestructuringVarDeclStmt(tok.location, ids, expr, mutable)
+        } else {
+            val id = expect(IDENTIFIER)
+            val typeExpr = if (canTake(COLON)) parseType() else null
+            val initializer = if (canTake(EQ)) parseExpr() else null
+            expectEol()
+            return AstVarDeclStmt(id.location, id.value, typeExpr, initializer, mutable)
+        }
     }
 
     private fun parseFunctionDef() : AstFunctionDefStmt {
         val qualifier = if (currentToken.kind in listOf(EXTERN,OVERRIDE,VIRTUAL)) nextToken().kind else EOL
-        val tok = expect(FUN)
+        expect(FUN)
         val name = expect(IDENTIFIER)
         val params = parseParameterList(false)
         val retType = if (canTake(ARROW)) parseType() else null
         expectEol()
         val body = if (currentToken.kind== INDENT) parseIndentedBlock() else emptyList()
         optionalEnd(FUN)
-        return AstFunctionDefStmt(tok.location, name.value, params, retType, body, qualifier)
+        return AstFunctionDefStmt(name.location, name.value, params, retType, body, qualifier)
     }
 
     private fun parseClassDef() : AstClassDefStmt {
-        val tok = expect(CLASS)
+        expect(CLASS)
         val name = expect(IDENTIFIER)
         val typeParams = if (currentToken.kind==LT) parseTypeParams() else emptyList()
         val constructorArgs = if (currentToken.kind==OPENB) parseParameterList(true) else emptyList()
@@ -453,13 +501,13 @@ class Parser(val lexer: Lexer) {
         expectEol()
         val body = if (currentToken.kind== INDENT) parseIndentedBlock() else emptyList()
         optionalEnd(CLASS)
-        return AstClassDefStmt(tok.location, name.value, typeParams, parentClass, constructorArgs, parentArgs, body)
+        return AstClassDefStmt(name.location, name.value, typeParams, parentClass, constructorArgs, parentArgs, body)
     }
 
     private fun parseExpressionStmt() : AstStmt {
         val loc = currentToken.location
         val expr = parsePrefixExpr()
-        if (currentToken.kind==EQ) {
+        if (currentToken.kind==EQ || currentToken.kind==PLUSEQ || currentToken.kind==MINUSEQ) {
             val op = nextToken()
             val value = parseExpr()
             expectEol()
@@ -504,15 +552,18 @@ class Parser(val lexer: Lexer) {
     private fun parseIfClause() : AstIfClause {
         val tok = nextToken()  // Consume the IF or ELSEIF
         val cond = parseExpr()
-        expectEol()
-        val body = parseIndentedBlock()
+        val body = if (canTake(THEN)) {
+            listOf(parseStmt())
+        } else {
+            expectEol()
+            parseIndentedBlock()
+        }
         return AstIfClause(tok.location, cond, body)
     }
 
     private fun parseElseClause() : AstIfClause {
         val tok = expect(ELSE)
-        expectEol()
-        val body = parseIndentedBlock()
+        val body = if (canTake(EOL)) parseIndentedBlock() else listOf(parseStmt())
         return AstIfClause(tok.location, null, body)
     }
 
@@ -535,7 +586,7 @@ class Parser(val lexer: Lexer) {
     }
 
     private fun parseEnum() : AstEnumDefStmt {
-        val tok = expect(ENUM)
+        expect(ENUM)
         val name = expect(IDENTIFIER)
         val params = if (currentToken.kind==OPENB) parseParameterList(false) else emptyList()
         expect(OPENSQ) // Consume OPENB
@@ -547,7 +598,7 @@ class Parser(val lexer: Lexer) {
             } while (canTake(COMMA))
         expect(CLOSESQ) // Consume CLOSEB
         expectEol()
-        return AstEnumDefStmt(tok.location, name.value, params, values, emptyList())
+        return AstEnumDefStmt(name.location, name.value, params, values, emptyList())
     }
 
     private fun parseStmt() : AstStmt {

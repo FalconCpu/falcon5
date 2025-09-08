@@ -11,14 +11,14 @@ class LiveMap(private val func: Function) {
 
         for(instr in func.prog) {
             val writes = instr.getDestReg()
-            if (writes is UnionReg)
+            if (writes is CompoundReg)
                 error("Internal error: Union register ${writes.name} used in instruction $instr")
             if (writes!=null)
                 kill[instr.index][writes.index] = true
             val reads = instr.getSrcReg()
             // Do a sanity check here to make sure no UnionRegs are being used
             for(reg in reads)
-                if (reg is UnionReg)
+                if (reg is CompoundReg)
                     error("Internal error: Union register ${reg.name} used in instruction $instr")
 
             for(reg in reads)

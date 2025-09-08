@@ -1078,4 +1078,142 @@ class ExecuteTest {
         runTest(prog, expected)
     }
 
+    @Test
+    fun ifThen() {
+        val prog = """
+            extern fun print(s:String)
+    
+            fun main()
+                for i in 0..3
+                    if i < 2 then print("small\n")
+                    else print("big\n")
+        """.trimIndent()
+
+        val expected = """
+            small
+            small
+            big
+            big
+
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun compoundAssign() {
+        val prog = """
+            extern fun print(s:String)
+            extern  fun print(i:Int)
+            extern  fun print(i:Char)
+             
+            fun main()
+                var i = 0
+                while i < 5
+                    i += 1
+                    print(i)
+                    print('\n')
+        """.trimIndent()
+
+        val expected = """
+            1
+            2
+            3
+            4
+            5
+
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun plusEqLocalVar() {
+        val prog = """
+            extern fun print(i:Int)
+
+            fun main()
+                var x = 5
+                x += 3
+                print(x)
+        """.trimIndent()
+
+        runTest(prog, "8")
+    }
+
+    @Test
+    fun minusEqArrayElement() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+            
+            fun main()
+                val arr = new Array<Int>(3)
+                arr[0] = 10
+                arr[1] = 20
+                arr[2] = 30
+                arr[1] -= 5
+                for v in arr
+                    print(v)
+                    print(' ')
+        """.trimIndent()
+
+        runTest(prog, "10 15 30 ")
+    }
+
+    @Test
+    fun plusEqClassField() {
+        val prog = """
+            extern fun print(i:Int)
+
+            class Counter
+                var value = 0
+
+            fun main()
+                val c = new Counter
+                c.value += 42
+                print(c.value)
+        """.trimIndent()
+
+        runTest(prog, "42")
+    }
+
+    @Test
+    fun plusEqOnStringShouldFail() {
+        val prog = """
+            extern fun print(s:String)
+
+            fun main()
+                var s = "Hello"
+                s += "World"
+                print(s)
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:5.5-5.5:  Operator '+=' not defined for type 'String'
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun minusEqOnUnionShouldFail() {
+        val prog = """
+            extern fun print(i:Int)
+
+            fun inc(x:Int!) -> Int!
+                var z = x
+                z += 1
+                return z
+
+            fun main()
+                val a = inc(5)
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:5.5-5.5:  Operator '+=' not defined for type 'Int!'
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
 }

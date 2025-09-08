@@ -1,6 +1,9 @@
 # Constants
 HWREGS_BASE = 0xE0000000
+HWREGS_SEVEN_SEG = 0x00
+HWREGS_LEDR = 0x04
 HWREGS_UART_TX = 0x10
+HWREGS_SIM_MODE = 0x44
 
 SYSVARS_BASE = 0x100
 SYSVARS_HEAP_PTR = 0x00
@@ -15,10 +18,34 @@ jsr initializeMem
 jsr /topLevel
 jsr /main()
 
-# Do a jump to address 0 (not a valid address) to stop the simulator
+# #######################################################################
+#                          Exit
+# #######################################################################
+# On the simulator, we exit by doing a jump to address 0
+
+ld $1, HWREGS_BASE           # Load base address of hardware registers
+ldw $2, $1[HWREGS_SIM_MODE]  # Load simulator mode register
+beq $2, 0, .on_hardware      # If in hardware mode then we have nowhere to return to
+
+# On simulator, so do a jump to address 0 to stop the simulator
 ld R30, 0
 ret
 
+.on_hardware:
+# On hardware, So indicate complete by flashing the LEDs forever
+stw $8, $1[HWREGS_SEVEN_SEG]  # Display the return code on the 7-segment display
+
+ld $1, 0x1
+.forever:
+stw $1, $20[HWREGS_LEDR]  # Flash the LEDs to show we are here
+ld $2, 3000000
+.delay:
+sub $2, 1
+bne $2, 0, .delay
+lsl $1, 1
+lsr $2, $1, 12
+or $1, $2
+jmp .forever  # Loop forever
 
 
 # #######################################################################

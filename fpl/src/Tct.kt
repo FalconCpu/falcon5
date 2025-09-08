@@ -35,11 +35,13 @@ class TctMethodRefExpr(location: Location, val objectExpr: TctExpr, val methodSy
 class TctIsExpr(location: Location, val expr: TctExpr, val typeExpr: TypeClassInstance) : TctExpr(location, TypeBool)
 class TctAsExpr(location: Location, val expr: TctExpr, typeExpr: Type) : TctExpr(location, typeExpr)
 class TctEnumEntryExpr(location: Location, val expr:TctExpr, val field:FieldSymbol, type:Type) : TctExpr(location, type)
-class TctMakeUnionExpr(location: Location, val expr:TctExpr, val typeIndex:Int, type:TypeErrable) : TctExpr(location, type)
-class TctIsUnionTypeExpr(location: Location, val expr:TctExpr, val typeIndex:Int) : TctExpr(location, TypeBool)
-class TctExtractUnionExpr(location: Location, val expr:TctExpr, type:Type) : TctExpr(location, type)
+class TctMakeErrableExpr(location: Location, val expr:TctExpr, val typeIndex:Int, type:TypeErrable) : TctExpr(location, type)
+class TctIsErrableTypeExpr(location: Location, val expr:TctExpr, val typeIndex:Int) : TctExpr(location, TypeBool)
+class TctExtractCompoundExpr(location: Location, val expr:TctExpr, val index:Int, type:Type) : TctExpr(location, type)
 class TctTryExpr(location: Location, val expr: TctExpr, type:Type) : TctExpr(location, type)
 class TctVarargExpr(location: Location, val exprs: List<TctExpr>, type:Type) : TctExpr(location, type)
+class TctMakeTupleExpr(location: Location, val elements: List<TctExpr>, type:TypeTuple) : TctExpr(location, type)
+
 
 class TctErrorExpr(location: Location, val message: String = "") : TctExpr(location, TypeError) {
     init {
@@ -51,6 +53,7 @@ class TctErrorExpr(location: Location, val message: String = "") : TctExpr(locat
 // Statement nodes
 sealed class TctStmt(location: Location) : Tct(location)
 class TctVarDeclStmt(location: Location, val sym:VarSymbol, val initializer: TctExpr?) : TctStmt(location)
+class TctDestructuringDeclStmt(location: Location, val syms: List<VarSymbol>, val initializer: TctExpr) : TctStmt(location)
 class TctEmptyStmt(location: Location) : TctStmt(location)
 class TctExpressionStmt(location: Location, val expr: TctExpr) : TctStmt(location)
 class TctAssignStmt(location: Location, val op:TokenKind, val lhs: TctExpr, val rhs: TctExpr) : TctStmt(location)

@@ -1,5 +1,15 @@
+import java.io.File
+
+val allSymbols = mutableListOf<Symbol>()
+
 sealed class Symbol (val location: Location, val name:String, val type: Type, val mutable: Boolean) {
     override fun toString(): String = name
+
+    init {
+        allSymbols.add(this)
+    }
+
+    val references = mutableSetOf<Location>()
 }
 
 class VarSymbol(location: Location, name: String, type: Type, mutable: Boolean) : Symbol(location, name, type, mutable)
@@ -38,13 +48,20 @@ private fun genPredefinedSymbols(): Map<String, Symbol> {
 
 
 
-fun AstBlock.lookupSymbol(name: String): Symbol? {
-    return predefinedSymbols[name] ?:
+fun AstBlock.lookupSymbol(name: String, location: Location): Symbol? {
+    val ret = predefinedSymbols[name] ?:
            symbols[name]?:
-           parent?.lookupSymbol(name)
+           parent?.lookupSymbol(name, location)
+    ret?.references?.add(location)
+    return ret
 }
 
 fun AstBlock.addSymbol(symbol: Symbol) {
+    if (this is AstFile) {
+        parent!!.addSymbol(symbol)
+        return
+    }
+
     val duplicate = symbols[symbol.name]
     if (duplicate!= null && !secondTypecheckPass)
         Log.error(symbol.location, "Duplicate symbol: ${symbol.name}")
@@ -150,4 +167,39 @@ fun Symbol.mapType(typeMap: Map<TypeGenericParameter, Type>) : Symbol {
         is TypeNameSymbol -> TypeNameSymbol(location, name, type.mapType(typeMap))
         is VarSymbol -> VarSymbol(location, name, type.mapType(typeMap), mutable)
     }
+}
+
+// ============================================================
+//                    SymbolMap
+// ============================================================
+// Output a JSON file containing a list of all symbols with their
+// types and locations.
+
+private fun Symbol.toJson():String {
+    val kind = when (this) {
+        is ConstSymbol -> "constant"
+        is FieldSymbol -> "field"
+        is FunctionSymbol -> "function"
+        is GlobalVarSymbol -> "global"
+        is TypeNameSymbol -> when (type) {
+            is TypeClass -> "class"
+            is TypeClassInstance -> "class"
+            is TypeEnum -> "enum"
+            else -> "type"
+        }
+        is VarSymbol -> "var"
+    }
+
+    val type = if (this is FunctionSymbol) this.overloads[0].returnType else this.type
+
+    return """{"name":"$name", "kind":"$kind", "type":"$type", "definition":${location.toJson()}, "references":[${references.joinToString{ it.toJson() }}], "mutable":$mutable}"""
+}
+
+fun AstTop.writeSymbolMap() {
+    val fh = File("symbol-map.json").bufferedWriter()
+    val json = """{"symbols":[
+        |${allSymbols.joinToString(",\n") { it.toJson() }}
+        |]}""".trimMargin()
+    fh.write(json)
+    fh.close()
 }

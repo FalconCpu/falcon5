@@ -51,14 +51,28 @@ class Function (
 
     fun getReg(sym: VarSymbol): Reg {
         return symToReg.getOrPut(sym) {
-            val ret = UserReg(sym.name)
+            val ret = when(sym.type) {
+                is TypeErrable ->  CompoundReg(listOf(newUserTemp(), newUserTemp()), name)
+                is TypeTuple -> {
+                    val regs = (0..<sym.type.elementTypes.size).map{newUserTemp() }
+                    CompoundReg(regs, name)
+                }
+                else -> UserReg(sym.name)
+            }
             regs += ret
-            if (sym.type is TypeErrable) newUnionReg(newUserTemp(), ret) else ret
+            ret
         }
     }
 
-    fun newUnionReg(typeReg: Reg, valueReg: Reg) : UnionReg {
-        val ret = UnionReg(typeReg, valueReg, "u${tempCount++}")
+    fun newCompoundReg(numElements:Int) : CompoundReg {
+        val regs = (0 until numElements).map { newUserTemp() }
+        val ret = CompoundReg(regs, "u${tempCount++}")
+        return ret
+    }
+
+    fun newCompoundReg(regs:List<Reg>) : CompoundReg {
+        val copy = regs.map{ addCopy(it) }
+        val ret = CompoundReg(copy, "u${tempCount++}")
         return ret
     }
 
