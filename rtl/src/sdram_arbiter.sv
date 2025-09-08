@@ -15,7 +15,6 @@ module sdram_arbiter(
     output logic         m1_rvalid,     // Read data valid
     output logic [25:0]  m1_raddress,   // Address of read data
     output logic [31:0]  m1_rdata,      // Read data
-    output logic [8:0]   m1_rtag,       // Tag for read data
     output logic         m1_complete,   // Burst complete
 
     // Master 2
@@ -29,7 +28,6 @@ module sdram_arbiter(
     output logic         m2_rvalid,     // Read data valid
     output logic [25:0]  m2_raddress,   // Address of read data
     output logic [31:0]  m2_rdata,      // Read data
-    output logic [8:0]   m2_rtag,       // Tag for read data
     output logic         m2_complete,   // Burst complete
 
     // Master 3
@@ -43,7 +41,6 @@ module sdram_arbiter(
     output logic         m3_rvalid,     // Read data valid
     output logic [25:0]  m3_raddress,   // Address of read data
     output logic [31:0]  m3_rdata,      // Read data
-    output logic [8:0]   m3_rtag,       // Tag for read data
     output logic         m3_complete,   // Burst complete
 
     // Master 4
@@ -57,7 +54,6 @@ module sdram_arbiter(
     output logic         m4_rvalid,     // Read data valid
     output logic [25:0]  m4_raddress,   // Address of read data
     output logic [31:0]  m4_rdata,      // Read data
-    output logic [8:0]   m4_rtag,       // Tag for read data
     output logic         m4_complete,   // Burst complete
 
 
@@ -69,7 +65,6 @@ module sdram_arbiter(
     output logic        sdram_burst,        // 1 = burst, 0 = single
     output logic [3:0]  sdram_wstrb,        // For a write, which bytes to write.
     output logic [31:0] sdram_wdata,        // Data to write / tag for read
-    input  logic [8:0]  sdram_rtag,         // Tag of the request that was just completed
     input  logic [25:0] sdram_raddress,     // Address of data that was just read
     input  logic [31:0] sdram_rdata,        // Data read from SDRAM
     input  logic [2:0]  sdram_rvalid,       // Which bus master to send data to
@@ -98,22 +93,18 @@ always_comb begin
     m1_rvalid    = 1'b0;
     m1_raddress  = 26'bx;
     m1_rdata     = 32'hx;
-    m1_rtag      = 9'bx;
     m1_complete  = 1'bx;
     m2_rvalid    = 1'b0;
     m2_raddress  = 26'bx;
     m2_rdata     = 32'hx;
-    m2_rtag      = 9'bx;
     m2_complete  = 1'bx;
     m3_rvalid    = 1'b0;
     m3_raddress  = 26'bx;
     m3_rdata     = 32'hx;
-    m3_rtag      = 9'bx;
     m3_complete  = 1'bx;
     m4_rvalid    = 1'b0;
     m4_raddress  = 26'bx;
     m4_rdata     = 32'hx;
-    m4_rtag      = 9'bx;
     m4_complete  = 1'bx;
 
     if (sdram_ready) begin
@@ -169,25 +160,21 @@ always_comb begin
         m1_rvalid   = 1'b1;
         m1_raddress = sdram_raddress;
         m1_rdata    = sdram_rdata;
-        m1_rtag     = sdram_rtag;
         m1_complete = sdram_complete;
     end else if (sdram_rvalid == 3'h2) begin
         m2_rvalid   = 1'b1;
         m2_raddress = sdram_raddress;
         m2_rdata    = sdram_rdata;
-        m2_rtag     = sdram_rtag;
         m2_complete = sdram_complete;
     end else if (sdram_rvalid == 3'h3) begin
         m3_rvalid   = 1'b1;
         m3_raddress = sdram_raddress;
         m3_rdata    = sdram_rdata;
-        m3_rtag     = sdram_rtag;
         m3_complete = sdram_complete;
     end else if (sdram_rvalid == 3'h4) begin
         m4_rvalid   = 1'b1;
         m4_raddress = sdram_raddress;
         m4_rdata    = sdram_rdata;
-        m4_rtag     = sdram_rtag;
         m4_complete = sdram_complete;
     end
 

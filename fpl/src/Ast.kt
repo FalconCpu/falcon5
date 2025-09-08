@@ -30,10 +30,13 @@ class AstNullAssertExpr(location: Location, val expr: AstExpr) : AstExpr(locatio
 class AstIsExpr(location: Location, val expr: AstExpr, val typeExpr: AstType) : AstExpr(location)
 class AstAsExpr(location: Location, val expr: AstExpr, val typeExpr: AstType) : AstExpr(location)
 class AstTryExpr(location: Location, val expr: AstExpr) : AstExpr(location)
+class AstMakeTupleExpr(location: Location, val elements: List<AstExpr>) : AstExpr(location)
+class AstUnsafeExpr(location: Location, val expr: AstExpr) : AstExpr(location)
 
 // Statement nodes
 sealed class AstStmt(location: Location) : Ast(location)
 class AstVarDeclStmt(location: Location, val name: String, val astType:AstType?, val initializer: AstExpr?, val mutable:Boolean) : AstStmt(location)
+class AstDestructuringVarDeclStmt(location: Location, val names: List<AstDeclNode>, val initializer: AstExpr, val mutable:Boolean) : AstStmt(location)
 class AstEmptyStmt(location: Location) : AstStmt(location)
 class AstExpressionStmt(location: Location, val expr: AstExpr) : AstStmt(location)
 class AstAssignStmt(location: Location, val op:TokenKind, val lhs: AstExpr, val rhs: AstExpr) : AstStmt(location)
@@ -92,10 +95,13 @@ class AstNullableType(location: Location, val elementType: AstType) : AstType(lo
 class AstErrableType(location: Location, val elementType: AstType) : AstType(location)
 class AstTypeIdentifier(location: Location, val name: String) : AstType(location)
 class AstGenericType(location: Location, val baseType: AstTypeIdentifier, val typeArgs: List<AstType>) : AstType(location)
+class AstTupleType(location: Location, val elementTypes: List<AstType>) : AstType(location)
+
 
 // Other nodes
 class AstParameter(location: Location, val kind:TokenKind, val name: String, val type: AstType) : Ast(location)
 class AstEnumEntry(location: Location, val name: String, val args: List<AstExpr>) : Ast(location)
+class AstDeclNode(location: Location, val name: String, val type:AstType?) : Ast(location)
 
 enum class Arena {
     STACK, HEAP, CONST

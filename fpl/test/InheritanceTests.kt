@@ -810,4 +810,45 @@ class InheritanceTests {
 
         runTest(src, expected)
     }
+
+    @Test
+    fun unsafeCastNotAllowed() {
+        val src = """
+            extern fun print(s:String)
+
+            class Animal
+                fun speak()
+                    print("???")
+
+            fun main()
+                var a = (1234 as Animal)        # unsafe cast, should be compile error
+        """.trimIndent()
+
+        val expected = """
+        """.trimIndent()
+
+        runTest(src, expected)
+    }
+
+    @Test
+    fun unsafeCastAllowed() {
+        val src = """
+            extern fun print(s:String)
+
+            class Animal
+                fun speak()
+                    print("???")
+
+            fun main()
+                var a = unsafe(1234 as Animal)     # unsafe cast, should be allowed
+        """.trimIndent()
+
+        val expected = """
+        """.trimIndent()
+
+        runTest(src, expected)
+    }
+
+
+
 }

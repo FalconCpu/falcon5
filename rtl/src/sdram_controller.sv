@@ -11,8 +11,7 @@ module sdram_controller(
     input  logic        sdram_write,        // 1 = write, 0 = read
     input  logic        sdram_burst,        // 1 = burst, 0 = single
     input  logic [3:0]  sdram_wstrb,        // For a write, which bytes to write.
-    input  logic [31:0] sdram_wdata,        // Data to write / tag for read
-    output logic [8:0]  sdram_rtag,         // Tag of the request that was just completed
+    input  logic [31:0] sdram_wdata,        // Data to write
     output logic [31:0] sdram_rdata,        // Data read from SDRAM
     output logic [25:0] sdram_raddress,     // Address of data read from SDRAM
     output logic [2:0]  sdram_rvalid,       // Which bus master to send data to
@@ -68,6 +67,8 @@ logic [12:0] selected_bank_row;
 logic        selected_bank_open;
 
 logic [25:0] next_raddress, this_raddress;
+
+
 logic [25:0] next1_sdram_raddress;
 logic [25:0] next2_sdram_raddress;
 logic [25:0] next3_sdram_raddress;
@@ -107,7 +108,6 @@ logic [14:0] read_pipeline, next_read_pipeline;         // Pipeline showing whic
 logic [3:0] complete_pipeline, next_complete_pipeline;  // Pipeline showing which master each slot belongs to.
 logic [2:0] next_read_master, this_read_master;
 logic [8:0] next_burst_addr, this_burst_addr;
-logic [8:0] next_tag, tag_0, tag_1, tag_2, tag_3, tag_4;              // delay line to align tags with the reads that triggered them
 
 
 always_comb begin
@@ -134,7 +134,6 @@ always_comb begin
     next_complete_pipeline = {complete_pipeline[2:0], 1'b0};
     next_write_pipeline = {write_pipeline[0], 1'b0};
     next_burst_addr = this_burst_addr;
-    next_tag = tag_0;
     next1_sdram_raddress = 26'hx;
     next_raddress = this_raddress;
 
@@ -200,7 +199,6 @@ always_comb begin
                     next_oe   = 1'b1;
                     next_wdata = sdram_wdata[31:16];
                     next_woe   = sdram_wstrb[3      :2];
-                    next_tag   = sdram_wdata[8:0];
                     sdram_ready  = 1'b1;
                     next_state = `STATE_WRITE;
                 end else if (!sdram_write) begin
@@ -211,7 +209,6 @@ always_comb begin
                     next_bank = addr_bank;
                     next_dqm  = 0;
                     next_state = sdram_burst ? `STATE_READ_BURST : `STATE_READ;
-                    next_tag   = sdram_wdata[8:0];
                     sdram_ready  = 1'b1;
                     next_read_pipeline[2:0] = sdram_request;
                     next_read_master = sdram_request;
@@ -348,18 +345,12 @@ always_ff @(posedge clock) begin
     complete_pipeline <= next_complete_pipeline;
     this_burst_addr <= next_burst_addr;
     this_read_master <= next_read_master;
-    tag_0 <= next_tag;
-    tag_1 <= tag_0;
-    tag_2 <= tag_1;
-    tag_3 <= tag_2;
-    tag_4 <= tag_3;
-    sdram_rtag <= tag_4;
     sdram_raddress <= next6_sdram_raddress;
-    next6_sdram_raddress <= next5_sdram_raddress;
-    next5_sdram_raddress <= next4_sdram_raddress;
-    next4_sdram_raddress <= next3_sdram_raddress;
-    next3_sdram_raddress <= next2_sdram_raddress;
-    next2_sdram_raddress <= next1_sdram_raddress;
+    next6_sdram_raddress <= reset ? 26'b0 : next5_sdram_raddress;  // Had to add a reset here to prevent quartus from
+    next5_sdram_raddress <= reset ? 26'b0 : next4_sdram_raddress;  // optimizing these into a block ram.
+    next4_sdram_raddress <= reset ? 26'b0 : next3_sdram_raddress;
+    next3_sdram_raddress <= reset ? 26'b0 : next2_sdram_raddress;
+    next2_sdram_raddress <= reset ? 26'b0 : next1_sdram_raddress;
     this_raddress <= next_raddress;
 end
 

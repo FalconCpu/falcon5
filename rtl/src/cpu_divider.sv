@@ -27,7 +27,7 @@ logic        this_div_mod, next_div_mod;
 logic        next_div_valid;
 logic        prev_div_ready;
 
-logic signed [31:0] n,s;
+logic signed [32:0] n,s;
 
 // div_valid gets asserted when the division is complete
 // div_ready gets asserted when the pipeline has accepted the result
@@ -43,8 +43,8 @@ always_comb begin
     next_div_mod     = this_div_mod;
     next_div_valid   = 1'b0;
     div_ready        = prev_div_ready;
-    n = 32'bx;
-    s = 32'bx;
+    n = 33'bx;
+    s = 33'bx;
 
     if (p3_div_start) begin
         next_sign        = p3_div_sign;
@@ -58,13 +58,13 @@ always_comb begin
         next_div_valid   = 1'b0;
         div_ready        = 1'b0;
     end else if (!div_ready && !div_valid) begin
-        n = {this_remainder[30:0], this_numerator[this_count]};
-        s = n - this_denominator;
-        if (s>=0) begin
-            next_remainder = s;
+        n = {1'b0,this_remainder[30:0], this_numerator[this_count]};
+        s = n - {1'b0,this_denominator};
+        if (s[32]==1'b0) begin
+            next_remainder = s[31:0];
             next_quotient = {this_quotient[30:0], 1'b1};
         end else begin
-            next_remainder = n;
+            next_remainder = n[31:0];
             next_quotient = {this_quotient[30:0], 1'b0};
         end 
         next_count = this_count - 1'b1;

@@ -114,7 +114,7 @@ string mul_names[] = {
 };
 
 string cfg_name[] = {
-    "!varsion",
+    "!version",
     "!epc",
     "!ecause",
     "!edata",

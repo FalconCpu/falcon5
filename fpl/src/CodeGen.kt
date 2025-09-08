@@ -37,13 +37,13 @@ fun TctExpr.codeGenRvalue() : Reg {
 
         is TctReturnExpr -> {
             val retReg = expr?.codeGenRvalue()
-            if (retReg is UnionReg) {
-                // Need to split the union into type and value registers
-                currentFunc.addMov(cpuRegs[7], retReg.typeReg)
-                currentFunc.addMov(cpuRegs[8], retReg.valueReg)
-            } else if (retReg!=null) {
+            var index = 8
+
+            if (retReg is CompoundReg)
+                for(reg in retReg.regs)
+                    currentFunc.addMov(cpuRegs[index--], reg)
+            else if (retReg!=null)
                 currentFunc.addMov(cpuRegs[8], retReg)
-            }
             currentFunc.addJump(currentFunc.endLabel)
             zeroReg  // Dummy return value
         }
@@ -216,25 +216,26 @@ fun TctExpr.codeGenRvalue() : Reg {
             currentFunc.addLoad(size, addrReg, 0)
         }
 
-        is TctMakeUnionExpr -> {
+        is TctMakeErrableExpr -> {
             val valueReg = expr.codeGenRvalue()
             val typeReg = currentFunc.addLdImm(typeIndex)
-            currentFunc.newUnionReg(typeReg, valueReg)
+            currentFunc.newCompoundReg(listOf(typeReg, valueReg))
         }
 
-        is TctIsUnionTypeExpr -> TODO()
+        is TctIsErrableTypeExpr -> TODO()
 
-        is TctExtractUnionExpr -> {
+        is TctExtractCompoundExpr -> {
             val reg = expr.codeGenRvalue()
-            require(reg is UnionReg)
-            reg.valueReg
+            require(reg is CompoundReg)
+            reg.regs[index]
         }
 
         is TctTryExpr -> {
+            require (expr.type is TypeErrable)
             val reg = expr.codeGenRvalue()
-            require(reg is UnionReg)
-            currentFunc.addBranch(BinOp.NE_I, reg.typeReg, zeroReg, currentFunc.endLabel)
-            reg.valueReg
+            require(reg is CompoundReg)
+            currentFunc.addBranch(BinOp.NE_I, reg.regs[1], zeroReg, currentFunc.endLabel)
+            reg.regs[0]
         }
 
         is TctVarargExpr -> {
@@ -246,6 +247,11 @@ fun TctExpr.codeGenRvalue() : Reg {
                 currentFunc.addStore(4, v, ret, i*4)
             }
             ret
+        }
+
+        is TctMakeTupleExpr -> {
+            val regs = elements.map { it.codeGenRvalue() }
+            currentFunc.newCompoundReg(regs)
         }
     }
 }
@@ -377,14 +383,14 @@ fun TctExpr.codeGenBool(trueLabel: Label, falseLabel: Label) {
             currentFunc.addJump(falseLabel)
         }
 
-        is TctIsUnionTypeExpr -> {
+        is TctIsErrableTypeExpr -> {
             val reg = expr.codeGenRvalue()
-            require(reg is UnionReg)
+            require(reg is CompoundReg)
             if (this.typeIndex==0) {
-                currentFunc.addBranch(BinOp.EQ_I, reg.typeReg, zeroReg, trueLabel)
+                currentFunc.addBranch(BinOp.EQ_I, reg.regs[1], zeroReg, trueLabel)
                 currentFunc.addJump(falseLabel)
             } else {
-                currentFunc.addBranch(BinOp.NE_I, reg.typeReg, zeroReg, trueLabel)
+                currentFunc.addBranch(BinOp.NE_I, reg.regs[1], zeroReg, trueLabel)
                 currentFunc.addJump(falseLabel)
             }
         }
@@ -397,19 +403,25 @@ fun TctExpr.codeGenBool(trueLabel: Label, falseLabel: Label) {
     }
 }
 
-fun TctExpr.codeGenLvalue(value:Reg) {
+fun TctExpr.codeGenLvalue(value:Reg, op:TokenKind) {
+    if (value is CompoundReg && op!=TokenKind.EQ)
+        error("Cannot use compound assignment operator '$op' with union types")
+
     when(this) {
         is TctVariable -> {
             val dest = currentFunc.getReg(sym)
-            if (value is UnionReg && dest is UnionReg) {
-                currentFunc.addMov(dest.typeReg, value.typeReg)
-                currentFunc.addMov(dest.valueReg, value.valueReg)
-            } else if (value is UnionReg)
+            if (value is CompoundReg && dest is CompoundReg) {
+                assert(dest.regs.size == value.regs.size)
+                for(i in dest.regs.indices)
+                    currentFunc.addMov(dest.regs[i], value.regs[i])
+            } else if (value is CompoundReg)
                 error("Cannot assign union value to non-union variable '${sym.name}'")
-            else if (dest is UnionReg)
+            else if (dest is CompoundReg)
                 error("Cannot assign non-union value to union variable '${sym.name}'")
-            else
-                currentFunc.addMov(dest, value)
+            else {
+                val newValue = if (op==TokenKind.EQ) value else applyCompoundOp(op, dest, value)
+                currentFunc.addMov(dest, newValue)
+            }
         }
 
         is TctIndexExpr -> {
@@ -421,11 +433,13 @@ fun TctExpr.codeGenLvalue(value:Reg) {
             val bounds = currentFunc.addLoad(arrayReg, lengthSymbol)
             val scaled = currentFunc.addIndex(size, indexReg, bounds)
             val addr = currentFunc.addAlu(BinOp.ADD_I, arrayReg, scaled)
-            if (value is UnionReg) {
-                currentFunc.addStore(4, value.typeReg, addr, 0)
-                currentFunc.addStore(4, value.valueReg, addr, 4)
-            } else
-                currentFunc.addStore(size, value, addr, 0)
+            if (value is CompoundReg) {
+                for(i in value.regs.indices)
+                    currentFunc.addStore(4, value.regs[i], addr, i*4)
+            } else {
+                val newValue = if (op==TokenKind.EQ) value else applyCompoundOp(op, currentFunc.addLoad(size, addr, 0), value)
+                currentFunc.addStore(size, newValue, addr, 0)
+            }
         }
 
         is TctMemberExpr -> {
@@ -433,15 +447,25 @@ fun TctExpr.codeGenLvalue(value:Reg) {
             val size = member.type.getSize()
             if (size == 0)
                 Log.error(location, "Cannot access member '${member.name}' of type '${objectExpr.type}'")
-            if (value is UnionReg) {
-                currentFunc.addStore(4, value.typeReg ,objectReg, member.offset)
-                currentFunc.addStore(4, value.valueReg ,objectReg, member.offset+4)
-            } else
-                currentFunc.addStore(value,objectReg, member)
+            if (value is CompoundReg) {
+                for(i in value.regs.indices)
+                    currentFunc.addStore(4, value.regs[i],objectReg, member.offset+4*i)
+            } else {
+                val newValue = if (op==TokenKind.EQ) value else applyCompoundOp(op, currentFunc.addLoad(objectReg, member), value)
+                currentFunc.addStore(newValue, objectReg, member)
+            }
         }
 
         else ->
             error("Not an lvalue ${this.javaClass}")
+    }
+}
+
+fun applyCompoundOp(op:TokenKind, reg1:Reg, reg2:Reg) : Reg {
+    return when(op) {
+        TokenKind.PLUSEQ -> currentFunc.addAlu(BinOp.ADD_I, reg1, reg2)
+        TokenKind.MINUSEQ -> currentFunc.addAlu(BinOp.SUB_I, reg1, reg2)
+        else -> error("Invalid compound assignment operator '$op'")
     }
 }
 
@@ -455,7 +479,11 @@ fun genCall(func:Function, thisArg:Reg?, args: List<Reg>) : Reg {
     if (func.thisSymbol!=null)
         currentFunc.addMov(cpuRegs[index++], thisArg!!)
     for (arg in args)
-        currentFunc.addMov(cpuRegs[index++], arg)
+        if (arg is CompoundReg)
+            for(reg in arg.regs)
+                currentFunc.addMov(cpuRegs[index++], reg)
+        else
+            currentFunc.addMov(cpuRegs[index++], arg)
     if (func.virtualFunctionNumber==-1)
         currentFunc.addCall(func)
     else
@@ -465,7 +493,14 @@ fun genCall(func:Function, thisArg:Reg?, args: List<Reg>) : Reg {
     return if (func.returnType is TypeErrable) {
         val typeReg = currentFunc.addCopy(cpuRegs[7])
         val valueReg = currentFunc.addCopy(cpuRegs[8])
-        currentFunc.newUnionReg(typeReg, valueReg)
+        currentFunc.newCompoundReg(listOf(typeReg, valueReg))
+    } else if (func.returnType is TypeTuple) {
+        val regs = mutableListOf<Reg>()
+        for(i in func.returnType.elementTypes.indices) {
+            val r = currentFunc.addCopy(cpuRegs[8-i])
+            regs.add(r)
+        }
+        currentFunc.newCompoundReg(regs)
     } else if (func.returnType!= TypeUnit)
         currentFunc.addCopy(resultReg)
     else
@@ -518,14 +553,24 @@ fun TctStmt.codeGenStmt() {
 
         is TctVarDeclStmt -> {
             val regInit = initializer?.codeGenRvalue()
-            if (regInit is UnionReg) {
+            if (regInit is CompoundReg) {
                 val dest = currentFunc.getReg(sym)
-                require(dest is UnionReg)
-                currentFunc.addMov(dest.typeReg, regInit.typeReg)
-                currentFunc.addMov(dest.valueReg, regInit.valueReg)
+                require(dest is CompoundReg)
+                assert(dest.regs.size == regInit.regs.size)
+                for (i in dest.regs.indices)
+                    currentFunc.addMov(dest.regs[i], regInit.regs[i])
             } else if (regInit!= null)
                 currentFunc.addMov(currentFunc.getReg(sym), regInit)
         }
+
+        is TctDestructuringDeclStmt -> {
+            val regInit = initializer.codeGenRvalue()
+            require(regInit is CompoundReg)
+            require(syms.size == regInit.regs.size)
+            for(i in syms.indices)
+                currentFunc.addMov(currentFunc.getReg(syms[i]), regInit.regs[i])
+        }
+
 
         is TctWhileStmt -> {
             val startLabel = currentFunc.newLabel()
@@ -562,7 +607,13 @@ fun TctStmt.codeGenStmt() {
 
         is TctAssignStmt -> {
             val rhsReg = rhs.codeGenRvalue()
-            lhs.codeGenLvalue(rhsReg)
+            if (lhs is TctMakeTupleExpr) {
+                require(rhsReg is CompoundReg)
+                require(lhs.elements.size == rhsReg.regs.size)
+                for(i in lhs.elements.indices)
+                    lhs.elements[i].codeGenLvalue(rhsReg.regs[i], op)
+            } else
+                lhs.codeGenLvalue(rhsReg, op)
         }
 
         is TctIfClause -> TODO()
@@ -712,7 +763,6 @@ fun TctStmt.codeGenStmt() {
             for (stmt in methods)
                 stmt.codeGenStmt()
         }
-
     }
 }
 

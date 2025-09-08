@@ -18,7 +18,7 @@ module cpu_regfile(
 // synthesis translate_off
 integer fh;
 initial begin
-    fh = $fopen("rtl_regs.txt", "w");
+    fh = $fopen("rtl_reg.log", "w");
 end
 // synthesis translate_on
 

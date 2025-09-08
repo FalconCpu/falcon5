@@ -124,7 +124,7 @@ initial begin
     SW = 10'b0;
     $dumpfile("cpu.vcd");
     $dumpvars(5, tb);
-    #80000;
+    #2000000;
     $display("Timeout");
     $finish;
 end

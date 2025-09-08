@@ -1,200 +1,188 @@
-`timescale 1ns/1ns
+`timescale 1ns / 1ps
 
 module cpu_ifetch(
-    input logic       clock,
-    input logic       reset,
-    
-    // Connection to the instruction cache
-    output logic        ifetch_icache_request,
-    input  logic        ifetch_icache_ready,
-    output logic [31:0] ifetch_icache_address,
-    output logic [31:0] ifetch_icache_wdata,
-    input  logic [31:0] ifetch_icache_rdata,
-    input  logic [31:0] ifetch_icache_raddr,
-    input  logic [8:0]  ifetch_icache_rtag,
-    input  logic        ifetch_icache_rvalid,
+    input  logic         clock,
+    input  logic         reset,
 
-    // requests to jump
-    input  logic        p4_jump,
-    input  logic [31:0] p4_jump_address,
+    // CPU interface
+    input  logic         p2_ready,            // CPU is ready for next instruction
+    output logic         p2_valid,            // Instruction is valid
+    output logic [31:0]  p2_instr,            // The instruction
+    output logic [31:0]  p2_pc,               // The program counter of the instruction
 
-    // Connection to the decoder
-    output logic        p2_valid,
-    output logic [31:0] p2_instr,
-    output logic [31:0] p2_pc,
-    input  logic        p2_ready
+    // Jump interface
+    input  logic         p4_jump,              // Jump is valid
+    input  logic [31:0]  p4_jump_addr,         // Address to jump to
+
+    // Instruction cache interface
+    input  logic         cpu_icache_ready,     // ICache is ready for next request
+    output logic         cpu_icache_request,   // Request from CPU to ICache
+    output logic [31:0]  cpu_icache_addr,      // Address to ICache. Tag for read.
+    output logic [8:0]   cpu_icache_tag,       // Tag for read.
+    input  logic         cpu_icache_rvalid,    // Read data is availible
+    input  logic [31:0]  cpu_icache_rdata,     // The read data.
+    input  logic [31:0]  cpu_icache_raddr,     // The address of the read data.
+    input  logic [8:0]   cpu_icache_rtag       // The returned tag of the read data.
 );
 
-logic        prev_ifetch_icache_request;
-logic        prev_ifetch_icache_ready;
-logic [31:0] prev_ifetch_icache_address;
-logic [31:0] prev_ifetch_icache_wdata;
+// hold registers
+logic         prev_cpu_icache_request;
+logic [31:0]  prev_cpu_icache_addr;
+logic [8:0]   prev_cpu_icache_tag;
+logic         prev_cpu_icache_ready;
 
-logic        next_p2_valid;
-logic [31:0] next_p2_instr;
-logic [31:0] next_p2_pc;
-logic        skid1_valid, next_skid1_valid;
-logic [31:0] skid1_instr, next_skid1_instr;
-logic [31:0] skid1_pc, next_skid1_pc;
-logic        skid2_valid, next_skid2_valid;
-logic [31:0] skid2_instr, next_skid2_instr;
-logic [31:0] skid2_pc, next_skid2_pc;
+// skid buffers to hold the returned data
+logic                      next_p2_valid;
+logic [31:0]               next_p2_instr;
+logic [31:0]               next_p2_pc;
+logic         skid1_valid, next_skid1_valid;
+logic [31:0]  skid1_data,  next_skid1_data;
+logic [31:0]  skid1_pc,    next_skid1_pc;
+logic         skid2_valid, next_skid2_valid;
+logic [31:0]  skid2_data,  next_skid2_data;
+logic [31:0]  skid2_pc,    next_skid2_pc;
 
-logic [2:0]  jump_count, prev_jump_count;
-logic [31:0] pc, prev_pc;
-logic [2:0]  pending_count, prev_pending_count;
-
-// Asertions
-logic        error_skid_overflow;
-logic        error_skid_underflow;
+logic         error_skid_overflow;
 
 
+logic [31:0]  pc, prev_pc;
+logic [2:0]   jump_counter, prev_jump_counter;
+
+
+// Combinatorial logic
 always_comb begin
-    // Default values
-    ifetch_icache_request  = prev_ifetch_icache_request;
-    ifetch_icache_address  = prev_ifetch_icache_address;
-    ifetch_icache_wdata    = prev_ifetch_icache_wdata;
-    next_p2_valid          = p2_valid;
-    next_p2_instr          = p2_instr;
-    next_p2_pc             = p2_pc;
-    next_skid1_valid       = skid1_valid;
-    next_skid1_instr       = skid1_instr;
-    next_skid1_pc          = skid1_pc;
-    next_skid2_valid       = skid2_valid;
-    next_skid2_instr       = skid2_instr;
-    next_skid2_pc          = skid2_pc;
-    jump_count             = prev_jump_count;
-    pc                     = prev_pc;
-    pending_count          = prev_pending_count;
-    error_skid_overflow    = 1'b0;
-    error_skid_underflow   = 1'b0;
+    // Defaults
+    cpu_icache_request   = prev_cpu_icache_request;
+    cpu_icache_addr      = prev_cpu_icache_addr;
+    cpu_icache_tag       = prev_cpu_icache_tag;
+    pc                   = prev_pc;
+    jump_counter         = prev_jump_counter;
+    next_p2_valid        = p2_valid;
+    next_p2_instr        = p2_instr;
+    next_p2_pc           = p2_pc;
+    next_skid1_valid     = skid1_valid;
+    next_skid1_data      = skid1_data;
+    next_skid1_pc        = skid1_pc;
+    next_skid2_valid     = skid2_valid;
+    next_skid2_data      = skid2_data;
+    next_skid2_pc        = skid2_pc;
+    error_skid_overflow  = 1'b0;
 
-
-    // Clear the request if it was consumed last cycle
-    if (prev_ifetch_icache_ready) begin
-        ifetch_icache_request = 1'b0;
-        ifetch_icache_address = 32'bx;
-        ifetch_icache_wdata   = 32'bx;
+    // Deassert request if it was accepted
+    if (prev_cpu_icache_ready) begin
+        cpu_icache_request = 1'b0;
+        cpu_icache_addr    = 32'bx;
+        cpu_icache_tag     = 9'bx;
+        // Increment PC if the request was accepted
+        if (prev_cpu_icache_request)
+            pc             = pc + 4 ;
     end
 
-    // update the PC
-    if (p4_jump) begin
-        pc         = p4_jump_address;
-        jump_count = prev_jump_count + 1'b1;
-    end else if (prev_ifetch_icache_ready && prev_ifetch_icache_request) begin
-        pc = pc + 4;
-    end
-
-    // make a request
-    if (ifetch_icache_request==1'b0 && pending_count==0) begin
-        ifetch_icache_request = 1'b1;
-        ifetch_icache_address = pc;
-        ifetch_icache_wdata   = {29'b0, jump_count}; // Tag with jump count
-        pending_count         = pending_count + 1'b1;
-    end
-
-    // Handle the decoder consuming the instruction
+    // Handle the CPU consuming an instruction
     if (p2_ready) begin
         next_p2_valid    = skid1_valid;
-        next_p2_instr    = skid1_instr;
+        next_p2_instr    = skid1_data;
         next_p2_pc       = skid1_pc;
         next_skid1_valid = skid2_valid;
-        next_skid1_instr = skid2_instr;
+        next_skid1_data  = skid2_data;
         next_skid1_pc    = skid2_pc;
         next_skid2_valid = 1'b0;
-        next_skid2_instr = 32'bx;
+        next_skid2_data  = 32'bx;
         next_skid2_pc    = 32'bx;
-
-        if (pending_count==0)
-            error_skid_underflow = 1'b1;
-        pending_count = pending_count - 1'b1;
-
     end
 
-    // Flush the buffers on a jump
+    // Handle recieving new instructions from the cache
+    // Keep a 3 entry skid buffer of instructions ready for the CPU
+    // Clear the skid buffers if there is a jump
+    // We can only accept instructions that match the current jump counter 
+    // (i.e. not from a previous jump)
     if (p4_jump) begin
+        // If there is a jump, invalidate the skid buffers
         next_p2_valid    = 1'b0;
         next_p2_instr    = 32'bx;
-        next_p2_pc       = 32'bx;
+        next_p2_pc       = 32'bx; 
         next_skid1_valid = 1'b0;
-        next_skid1_instr = 32'bx;
+        next_skid1_data  = 32'bx;
         next_skid1_pc    = 32'bx;
         next_skid2_valid = 1'b0;
-        next_skid2_instr = 32'bx;
+        next_skid2_data  = 32'bx;
         next_skid2_pc    = 32'bx;
-        pending_count    = 3'b0;
-    end
 
-    // Handle response from the cache - write it into the appropriate slot in the skid buffer
-    if (ifetch_icache_rvalid && ifetch_icache_rtag[2:0]==jump_count) begin
-        if (next_p2_valid==0) begin
-            next_p2_valid    = 1'b1;
-            next_p2_instr    = ifetch_icache_rdata;
-            next_p2_pc       = ifetch_icache_raddr;
-        end else if (next_skid1_valid==0) begin
+    end else if (cpu_icache_rvalid && cpu_icache_rtag[2:0]==jump_counter) begin
+        if (next_p2_valid==1'b0) begin
+            next_p2_valid = 1'b1;
+            next_p2_instr = cpu_icache_rdata;
+            next_p2_pc    = cpu_icache_raddr;
+        end else if (next_skid1_valid==1'b0) begin
             next_skid1_valid = 1'b1;
-            next_skid1_instr = ifetch_icache_rdata;
-            next_skid1_pc    = ifetch_icache_raddr;
-        end else if (next_skid2_valid==0) begin
+            next_skid1_data  = cpu_icache_rdata;
+            next_skid1_pc    = cpu_icache_raddr;
+        end else if (next_skid2_valid==1'b0) begin
             next_skid2_valid = 1'b1;
-            next_skid2_instr = ifetch_icache_rdata;
-            next_skid2_pc    = ifetch_icache_raddr;
-        end else 
+            next_skid2_data  = cpu_icache_rdata;
+            next_skid2_pc    = cpu_icache_raddr;
+        end else begin
             error_skid_overflow = 1'b1;
+        end
     end
 
+    // If jump taken, set PC to jump address
+    if (p4_jump) begin
+        pc             = p4_jump_addr;
+        jump_counter   = prev_jump_counter + 1'b1;
+    end
 
-    // Reset
+    // If the bus is free, and the skid buffers have space then request the next instruction
+    if (cpu_icache_request==1'b0 && skid1_valid==1'b0) begin
+        cpu_icache_request = 1'b1;
+        cpu_icache_addr    = pc;
+        cpu_icache_tag     = {6'b0, jump_counter};    // Tag the transaction with the jump counter
+    end
+
+    // reset
     if (reset) begin
-        pc                    = 32'hffff0000;
-        ifetch_icache_request = 1'b0;
-        ifetch_icache_address = 32'bx;
-        ifetch_icache_wdata   = 32'bx;
-        next_p2_valid         = 1'b0;
-        next_p2_instr         = 32'bx;
-        next_p2_pc            = 32'bx;
-        next_skid1_valid      = 1'b0;
-        next_skid1_instr      = 32'bx;
-        next_skid1_pc         = 32'bx;
-        next_skid2_valid      = 1'b0;
-        next_skid2_instr      = 32'bx;
-        next_skid2_pc         = 32'bx;
-        pending_count         = 3'b0;
-        jump_count            = 3'b0;
+        pc                 = 32'hFFFF0000;      // Reset vector
+        jump_counter       = 3'b0;
+        cpu_icache_request = 1'b0;       
+        next_p2_valid      = 1'b0;
+        next_skid1_valid   = 1'b0;
+        next_skid2_valid   = 1'b0;
     end
 end
 
-always_ff @(posedge clock) begin
-    prev_ifetch_icache_request <= ifetch_icache_request;
-    prev_ifetch_icache_ready   <= ifetch_icache_ready;
-    prev_ifetch_icache_address <= ifetch_icache_address;
-    prev_ifetch_icache_wdata   <= ifetch_icache_wdata;
-    p2_valid                   <= next_p2_valid;
-    p2_instr                   <= next_p2_instr;
-    p2_pc                      <= next_p2_pc;
-    skid1_valid                <= next_skid1_valid;
-    skid1_instr                <= next_skid1_instr;
-    skid1_pc                   <= next_skid1_pc;
-    skid2_valid                <= next_skid2_valid;
-    skid2_instr                <= next_skid2_instr;
-    skid2_pc                   <= next_skid2_pc;
-    prev_jump_count            <= jump_count;
-    prev_pc                    <= pc;
-    prev_pending_count         <= pending_count;
 
+
+// Registers
+always_ff @(posedge clock) begin
+    prev_cpu_icache_request <= cpu_icache_request;
+    prev_cpu_icache_addr    <= cpu_icache_addr;
+    prev_cpu_icache_tag     <= cpu_icache_tag;
+    prev_cpu_icache_ready   <= cpu_icache_ready;
+    prev_pc                 <= pc;
+    prev_jump_counter       <= jump_counter;
+    p2_valid                <= next_p2_valid;
+    p2_instr                <= next_p2_instr;
+    p2_pc                   <= next_p2_pc;
+    skid1_valid             <= next_skid1_valid;
+    skid1_data              <= next_skid1_data;
+    skid1_pc                <= next_skid1_pc;
+    skid2_valid             <= next_skid2_valid;
+    skid2_data              <= next_skid2_data;
+    skid2_pc                <= next_skid2_pc;
+end
+
+// synthesis translate_off
+always @(posedge clock) begin
     if (error_skid_overflow)
-        $display("ERROR %t: Skid buffer overflow in cpu_ifetch", $time);
-    if (error_skid_underflow)
-        $display("ERROR %t: Skid buffer underflow in cpu_ifetch", $time);
-    // synthesis translate_off
-    if (p4_jump && p4_jump_address==32'h0) begin
-        $display("INFO %t: Simulation completed", $time);
+        $display("Error %t: Instruction fetch skid buffer overflow", $time);
+    if (p4_jump && p4_jump_addr==0) begin
+        $display("Simulation completed at %t", $time);
+        @(posedge clock);
         $finish;
     end
-    // synthesis translate_on
 end
 
-
-wire unused_ok = &{1'b0, ifetch_icache_rtag[8:3]};
+wire unused = &{1'b0, cpu_icache_rtag[8:3]}; // avoid warnings
+// synthesis translate_on
 
 endmodule

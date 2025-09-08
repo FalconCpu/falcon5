@@ -1,3 +1,15 @@
-VGA display
-Exceptions in CPU
+multiplier
+divider
+index instructions
 
+
+CPU:
+instruction cache
+instruction mpu
+branch predictor
+optimise memory readpath timings
+
+System:
+vga display
+blitter
+sound

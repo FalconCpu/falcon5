@@ -1,45 +1,43 @@
-`timescale 1ns/1ns
+`timescale 1ns / 1ns
 
-// Temporary - have a small ROM in place of the ICACHE
+// For now a simple wrapper around a single port RAM. Later this can 
+// be replaced with a proper cache structure.
 
-module cpu_icache (
-    input logic       clock,
+module cpu_icache(
+    input  logic         clock,
+    input  logic         reset,
+
+    // CPU interface
+    input  logic         cpu_icache_request,   // Request from CPU to ICache
+    input  logic [31:0]  cpu_icache_addr,      // Address to ICache. Tag for read.
+    input  logic [8:0]   cpu_icache_tag,       // Tag for read.
+    output logic         cpu_icache_ready,     // ICache is ready for next request
+    output logic         cpu_icache_rvalid,    // Read data is availible
+    output logic [31:0]  cpu_icache_rdata,     // The read data.
+    output logic [31:0]  cpu_icache_raddr,     // The address of the read data.
+    output logic [8:0]   cpu_icache_rtag       // The returned tag of the read data.
+
     
-    // Connection to the instruction fetch
-    input  logic        ifetch_icache_request,
-    output logic        ifetch_icache_ready,
-    input  logic [31:0] ifetch_icache_address,
-    input  logic [31:0] ifetch_icache_wdata,
-    output logic [31:0] ifetch_icache_rdata,
-    output logic [31:0] ifetch_icache_raddr,
-    output logic [8:0]  ifetch_icache_rtag,
-    output logic        ifetch_icache_rvalid,
-
-    // Connection to the IRAM
-    output logic        ifetch_iram_request,
-    input  logic        ifetch_iram_ready,
-    output logic [31:0] ifetch_iram_address,
-    output logic [31:0] ifetch_iram_wdata,
-    input  logic [31:0] ifetch_iram_rdata,
-    input  logic [31:0] ifetch_iram_raddr,
-    input  logic [8:0]  ifetch_iram_rtag,
-    input  logic        ifetch_iram_rvalid
-
-
 );
 
-always_comb begin
-    ifetch_icache_ready = ifetch_iram_ready;
-    ifetch_icache_rdata = ifetch_iram_rdata;
-    ifetch_icache_raddr = ifetch_iram_raddr;
-    ifetch_icache_rtag  = ifetch_iram_rtag;
-    ifetch_icache_rvalid= ifetch_iram_rvalid;
+logic [31:0] mem [0:16383]; // 64KB of instruction memory
 
-    ifetch_iram_request = ifetch_icache_request;
-    ifetch_iram_address = ifetch_icache_address;
-    ifetch_iram_wdata   = ifetch_icache_wdata; // Copy tag from wdata
+logic [31:0] raddr;
+logic [31:0] rdata;
+
+initial begin
+    $readmemh("asm.hex", mem);
 end
 
-wire unused_ok = &{1'b0, clock};
+assign cpu_icache_raddr = cpu_icache_rvalid ? raddr : 32'bx;
+assign cpu_icache_rdata = cpu_icache_rvalid ? rdata : 32'bx;
+
+always_ff @(posedge clock) begin
+    cpu_icache_ready <= 1'b1; // Always ready
+    cpu_icache_rvalid <= cpu_icache_request && !reset;
+    rdata <= mem[cpu_icache_addr[15:2]];
+    raddr <= cpu_icache_addr;
+    cpu_icache_rtag <= cpu_icache_tag;
+end
 
 endmodule

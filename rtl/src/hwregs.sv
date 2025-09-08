@@ -1,5 +1,5 @@
 `timescale 1ns / 1ps
-
+`include "cpu.vh"
 
 // Module for the hardware registers
 //
@@ -17,10 +17,16 @@
 // E0000020  MOUSE_X        R    Mouse X coordinate
 // E0000024  MOUSE_Y        R    Mouse Y coordinate
 // E0000028  MOUSE_BUTTONS  R    Mouse buttons (bit 0 = left, bit 1 = right, bit 2 = middle)
-// E000002C  SIMULATION     R    Reads as 1 in simulation, 0 in hardware
 // E0000030  TIMER          RW   32 bit free running timer
 // E0000034  BLIT_CMD       RW   Write=Blitter Command Read=Fifo full
 // E0000038  BLIT_CTRL      RW   Blitter Control register 
+// E0000044  SIMULATION     R    Reads as 1 in simulation, 0 in hardware
+// E0000048  PERF_CTRL      RW   Performance counter control register
+// E000004C  PERF_COUNT_OK  R    Performance counter: Number of instructions executed successfully
+// E0000050  PERF_COUNT_JMP R    Performance counter: Number of nulls due to jump delay slots
+// E0000054  PERF_COUNT_IF  R    Performance counter: Number of nulls due to instruction fetch stalls
+// E0000058  PERF_COUNT_SB  R    Performance counter: Number of nulls due to scoreboard stalls
+// E000005C  PERF_COUNT_RS  R    Performance counter: Number of nulls due to resource stalls (divider/memory)
 
 // verilator lint_off PINCONNECTEMPTY
 
@@ -32,7 +38,7 @@ module hwregs (
     // Connection to the CPU bus
     input  logic        hwregs_request,     // Request a read or write
     input  logic        hwregs_write,       // 1 = write, 0 = read
-    input  logic [15:0] hwregs_address,     // Address of data to read/write
+    input  logic [15:0] hwregs_addr,        // Address of data to read/write
     input  logic [3:0]  hwregs_wmask,       // For a write, which bytes to write.
     input  logic [31:0] hwregs_wdata,       // Data to write
     output logic        hwregs_rvalid,      // Memory has responded to the request.
@@ -63,7 +69,9 @@ module hwregs (
     inout               PS2_CLK,
     inout               PS2_DAT,
     output logic [9:0]  mouse_x,
-    output logic [9:0]  mouse_y
+    output logic [9:0]  mouse_y,
+
+    input  logic [2:0]  perf_count      // Performance counter output
 );
 
 logic [23:0] seven_seg;
@@ -78,6 +86,15 @@ logic        uart_rx_complete;
 logic [31:0] timer;
 logic [2:0]  mouse_buttons;
 
+logic        perf_reset;
+logic        perf_run;
+logic        perf_div_1024;
+logic [41:0] perf_count_ok;
+logic [41:0] perf_count_jmp;
+logic [41:0] perf_count_if;
+logic [41:0] perf_count_sb;
+logic [41:0] perf_count_rs;
+
 
 // synthesis translate_off
 integer fh;
@@ -91,11 +108,12 @@ always_ff @(posedge clock) begin
     hwregs_rdata <= 32'b0;
     hwregs_blit_valid <= 1'b0;
     hwregs_blit_command <= 32'bx;
+    perf_reset <= 1'b0;
     timer <= timer + 1;
 
     if (hwregs_request && hwregs_write) begin
         // Write to hardware registers
-        case(hwregs_address)
+        case(hwregs_addr)
             16'h0000: begin
                 if (hwregs_wdata[23:0] != seven_seg)
                     $display("[%t] 7SEG = %06X", $time, hwregs_wdata[23:0]);
@@ -142,12 +160,20 @@ always_ff @(posedge clock) begin
                 // Blitter control register - currently unused
                 hwregs_blit_privaledge <= hwregs_wdata[0];
             end
+            16'h0048: begin
+                // Performance counter control register
+                if (hwregs_wmask[0]) begin
+                    perf_reset <= hwregs_wdata[0];
+                    perf_run <= hwregs_wdata[1];
+                    perf_div_1024 <= hwregs_wdata[2];
+                end
+            end
             default: begin end
         endcase
 
     end else if (hwregs_request && !hwregs_write) begin
         // Read from hardware registers
-        case(hwregs_address)
+        case(hwregs_addr)
             16'h0000: hwregs_rdata <= {8'h00, seven_seg}; 
             16'h0004: hwregs_rdata <= {22'b0, LEDR};
             16'h0008: hwregs_rdata <= {22'b0, SW};
@@ -159,17 +185,43 @@ always_ff @(posedge clock) begin
             16'h0020: hwregs_rdata <= {22'b0, mouse_x};
             16'h0024: hwregs_rdata <= {22'b0, mouse_y};
             16'h0028: hwregs_rdata <= {29'b0, mouse_buttons};
-            16'h002C: begin
+            16'h0030: hwregs_rdata <= timer;
+            16'h0034: hwregs_rdata <= {22'b0, blit_fifo_slots_free};
+            16'h0044: begin
                         hwregs_rdata <= 32'h00000000; // SIMULATION register
                         // synthesis translate_off
                         hwregs_rdata <= 32'h00000001;
                         // synthesis translate_on
                       end
-            16'h0030: hwregs_rdata <= timer;
-            16'h0034: hwregs_rdata <= {22'b0, blit_fifo_slots_free};
+            16'h0048: hwregs_rdata <= {29'b0, perf_div_1024, perf_run, perf_reset};
+            16'h004C: hwregs_rdata <= perf_div_1024 ? perf_count_ok[41:10] : perf_count_ok[31:0];
+            16'h0050: hwregs_rdata <= perf_div_1024 ? perf_count_jmp[41:10] : perf_count_jmp[31:0];
+            16'h0054: hwregs_rdata <= perf_div_1024 ? perf_count_if[41:10] : perf_count_if[31:0];
+            16'h0058: hwregs_rdata <= perf_div_1024 ? perf_count_sb[41:10] : perf_count_sb[31:0];
+            16'h005C: hwregs_rdata <= perf_div_1024 ? perf_count_rs[41:10] : perf_count_rs[31:0];
             default:  hwregs_rdata <= 32'bx;
         endcase
     end
+
+
+    // Update performance counters
+    if (reset || perf_reset) begin
+        perf_count_ok  <= 32'b0;
+        perf_count_jmp <= 32'b0;
+        perf_count_if  <= 32'b0;
+        perf_count_sb  <= 32'b0;
+        perf_count_rs  <= 32'b0;
+    end else if (perf_run) begin
+        case(perf_count)
+            `PERF_OK:         perf_count_ok  <= perf_count_ok + 1;
+            `PERF_JUMP:       perf_count_jmp <= perf_count_jmp + 1;
+            `PERF_IFETHCH:    perf_count_if  <= perf_count_if + 1;
+            `PERF_SCOREBOARD: perf_count_sb  <= perf_count_sb + 1;
+            `PERF_RESOURCE:   perf_count_rs  <= perf_count_rs + 1;
+            default: ;
+        endcase
+    end
+
 
     if (reset) begin
         seven_seg <= 24'h000000;
@@ -203,7 +255,7 @@ uart  uart_inst (
     .tx_complete(fifo_tx_complete)
   );
 
-wire tx_strobe = hwregs_request && hwregs_write && hwregs_address[15:0] == 16'h0010;
+wire tx_strobe = hwregs_request && hwregs_write && hwregs_addr[15:0] == 16'h0010;
 
 byte_fifo  uart_tx_fifo (
     .clk(clock),
@@ -216,7 +268,7 @@ byte_fifo  uart_tx_fifo (
     .not_empty(fifo_tx_not_empty)
   );
 
-wire rx_strobe = hwregs_request && !hwregs_write && hwregs_address[15:0] == 16'h0014;
+wire rx_strobe = hwregs_request && !hwregs_write && hwregs_addr[15:0] == 16'h0014;
 
 byte_fifo  uart_rx_fifo (
     .clk(clock),
