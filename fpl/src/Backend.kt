@@ -57,6 +57,9 @@ fun Reg.isConstant() : Int? {
     return null
 }
 
+private fun Int.isPowerOfTwo() = this > 0 && (this and (this - 1)) == 0
+private fun Int.log2() = Integer.numberOfTrailingZeros(this)
+
 var unreachable = false
 
 fun Instr.peephole() {
@@ -90,6 +93,78 @@ fun Instr.peephole() {
                 val lhsConst = src1.isConstant()
                 if (lhsConst != null && lhsConst in -0x1000..0xFFF)
                     return replace(InstrAluLit(op, dest, src2, lhsConst))
+            }
+        }
+
+        is InstrAluLit -> {
+            // Remove an instruction that is never read
+            if (dest.useCount == 0 && dest !is CpuReg)
+                return changeToNop()
+
+            if ((op==BinOp.ADD_I || op==BinOp.OR_I || op==BinOp.XOR_I || op==BinOp.SUB_I ||
+                 op==BinOp.LSL_I || op==BinOp.LSR_I || op==BinOp.ASR_I) && lit==0)
+                    return replace(InstrMov(dest, src))
+            if ((op==BinOp.MUL_I || op==BinOp.DIV_I) && lit==1)
+                return replace(InstrMov(dest, src))
+            if ((op==BinOp.MUL_I || op==BinOp.AND_I) && lit==0)
+                return replace(InstrMovLit(dest, 0))
+            if (op==BinOp.AND_I && lit==-1)
+                return replace(InstrMov(dest, src))
+            if (op==BinOp.MUL_I && lit.isPowerOfTwo())
+                return replace(InstrAluLit(BinOp.LSL_I, dest, src, lit.log2()))
+            if (op==BinOp.DIV_I && lit.isPowerOfTwo())
+                return replace(InstrAluLit(BinOp.ASR_I, dest, src, lit.log2()))
+            if (op==BinOp.MOD_I && lit.isPowerOfTwo())
+                return replace(InstrAluLit(BinOp.AND_I, dest, src, lit - 1))
+            val srcLit = src.isConstant()
+            if (srcLit!=null) {
+                val result = op.evaluate(srcLit, lit)
+                return replace(InstrMovLit(dest, result))
+            }
+        }
+
+        is InstrIndex -> {
+            // Remove an instruction that is never read
+            if (dest.useCount == 0 && dest !is CpuReg)
+                return changeToNop()
+
+            val indexConst = src.isConstant()
+            val boundsConst = bounds.isConstant()
+            if (boundsConst!=null && indexConst!=null) {
+                val offset = indexConst * size
+                if (indexConst !in 0..<boundsConst)
+                    Log.error(nullLocation, "Array index out of bounds: $indexConst not in [0..${boundsConst-1}]")
+                return replace(InstrMovLit(dest, offset))
+            }
+        }
+
+        is InstrMovLit -> {
+            // Remove an instruction that is never read
+            if (dest.useCount == 0 && dest !is CpuReg)
+                return changeToNop()
+        }
+
+        is InstrLoad -> {
+            // Remove an instruction that is never read
+            if (dest.useCount == 0 && dest !is CpuReg)
+                return changeToNop()
+
+            // Look for a sequence 'add t1, x, imm; ld t2, [t1+offset]' and replace it with 'ld t2, [x+offset+imm]'
+            val prevInstr = currentFunction.prog[index-1]
+            if (prevInstr is InstrAluLit && prevInstr.op==BinOp.ADD_I && prevInstr.dest==addr) {
+                val newOffset = prevInstr.lit + offset
+                if (newOffset in -0x800..0x7FF)
+                    return replace(InstrLoad(size, dest, prevInstr.src, newOffset))
+            }
+        }
+
+        is InstrStore -> {
+            // Look for a sequence 'add t1, x, imm; st t2, [t1+offset]' and replace it with 'st t2, [x+offset+imm]'
+            val prevInstr = currentFunction.prog[index-1]
+            if (prevInstr is InstrAluLit && prevInstr.op==BinOp.ADD_I && prevInstr.dest==addr) {
+                val newOffset = prevInstr.lit + offset
+                if (newOffset in -0x800..0x7FF)
+                    return replace(InstrStore(size, src, prevInstr.src, newOffset))
             }
         }
 

@@ -53,10 +53,13 @@ fun TctExpr.codeGenRvalue() : Reg {
         is TctIndexExpr -> {
             val arrayReg = array.codeGenRvalue()
             val indexReg = index.codeGenRvalue()
-            val size = array.type.getSize()
+            val size = type.getSize()
             if (size == 0)
                 Log.error(location, "Cannot index into type '${array.type}'")
-            val bounds = currentFunc.addLoad(arrayReg, lengthSymbol)
+            val bounds = if (array.type is TypeInlineArray)
+                currentFunc.addLdImm(array.type.size)
+            else
+                currentFunc.addLoad(arrayReg, lengthSymbol)
             val scaled = currentFunc.addIndex(size, indexReg, bounds)
             val addr = currentFunc.addAlu(BinOp.ADD_I, arrayReg, scaled)
             currentFunc.addLoad(size, addr, 0)
@@ -64,6 +67,11 @@ fun TctExpr.codeGenRvalue() : Reg {
 
         is TctMemberExpr -> {
             val objectReg = objectExpr.codeGenRvalue()
+
+            // If it's an inline array, just do pointer arithmetic to get the address of the first element
+            if (member.type is TypeInlineArray)
+                return currentFunc.addAlu(BinOp.ADD_I, objectReg, member.offset)
+
             val size = member.type.getSize()
             if (size == 0)
                 Log.error(location, "Cannot access member '${member.name}' of type '${objectExpr.type}'")
@@ -253,6 +261,9 @@ fun TctExpr.codeGenRvalue() : Reg {
             val regs = elements.map { it.codeGenRvalue() }
             currentFunc.newCompoundReg(regs)
         }
+
+        is TctNewInlineArrayExpr ->
+            allocateInlineArray(arena, false, lambda, type as TypeInlineArray)
     }
 }
 
@@ -307,6 +318,49 @@ private fun allocateArray(sizeExpr:TctExpr, elementType:Type, arena:Arena, initi
     return ret
 }
 
+private fun allocateInlineArray(arena:Arena, initialize:Boolean, lambda:TctLambdaExpr?, type:TypeInlineArray) : Reg {
+    val size = type.getSize()
+    val ret = when(arena) {
+        Arena.HEAP -> {
+            currentFunc.addLdImm(cpuRegs[1], size)
+            currentFunc.addCall(Stdlib.malloc)
+            currentFunc.addCopy(resultReg)
+        }
+        Arena.STACK -> {
+            val ret = currentFunc.stackAlloc(size, 0)
+            ret
+        }
+        Arena.CONST -> TODO()
+    }
+
+    if (initialize) {
+        currentFunc.addMov(cpuRegs[1], ret)
+        currentFunc.addLdImm(cpuRegs[2], size)
+        currentFunc.addCall(Stdlib.bzero)
+    }
+
+    if (lambda != null) {
+        val itReg = currentFunc.getReg(lambda.itSym)
+        val ptrReg = currentFunc.newUserTemp()
+        val startLabel = currentFunc.newLabel()
+        val condLabel = currentFunc.newLabel()
+        val sizeReg = currentFunc.addLdImm(type.size)
+        val elementSize = type.elementType.getSize()
+        currentFunc.addMov(ptrReg, ret)
+        currentFunc.addMov(itReg, zeroReg)
+        currentFunc.addJump(condLabel)
+        currentFunc.addLabel(startLabel)
+        val v = lambda.expr.codeGenRvalue()
+        currentFunc.addStore(elementSize, v, ptrReg, 0)
+        val ptrNext = currentFunc.addAlu(BinOp.ADD_I, ptrReg, elementSize)
+        currentFunc.addMov(ptrReg, ptrNext)
+        val itNext = currentFunc.addAlu(BinOp.ADD_I, itReg, 1)
+        currentFunc.addMov(itReg, itNext)
+        currentFunc.addLabel(condLabel)
+        currentFunc.addBranch(BinOp.LT_I, itReg, sizeReg, startLabel)
+    }
+    return ret
+}
 
 
 
@@ -427,10 +481,13 @@ fun TctExpr.codeGenLvalue(value:Reg, op:TokenKind) {
         is TctIndexExpr -> {
             val arrayReg = array.codeGenRvalue()
             val indexReg = index.codeGenRvalue()
-            val size = array.type.getSize()
+            val size = type.getSize()
             if (size == 0)
                 Log.error(location, "Cannot index into type '${array.type}'")
-            val bounds = currentFunc.addLoad(arrayReg, lengthSymbol)
+            val bounds = if (array.type is TypeInlineArray)
+                currentFunc.addLdImm(array.type.size)
+            else
+                currentFunc.addLoad(arrayReg, lengthSymbol)
             val scaled = currentFunc.addIndex(size, indexReg, bounds)
             val addr = currentFunc.addAlu(BinOp.ADD_I, arrayReg, scaled)
             if (value is CompoundReg) {
@@ -678,8 +735,16 @@ fun TctStmt.codeGenStmt() {
             val labelCond = currentFunc.newLabel()
             val labelCont = currentFunc.newLabel()
             val arrayStart = array.codeGenRvalue()
-            val arraySize = currentFunc.addLoad(arrayStart,lengthSymbol)
-            val elementSize = (array.type as TypeArray).elementType.getSize()
+            val arraySize = if (array.type is TypeInlineArray)
+                currentFunc.addLdImm(array.type.size)
+            else
+                currentFunc.addLoad(arrayStart,lengthSymbol)
+            val elementSize = if (array.type is TypeInlineArray)
+                    array.type.elementType.getSize()
+            else if (array.type is TypeArray)
+                    array.type.elementType.getSize()
+            else
+                error("Cannot determine element type")
             val sizeInBytes = currentFunc.addAlu(BinOp.MUL_I, arraySize, elementSize)
             val endReg = currentFunc.addAlu(BinOp.ADD_I, arrayStart, sizeInBytes)
             val ptrReg = currentFunc.newUserTemp()

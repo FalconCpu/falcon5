@@ -62,6 +62,8 @@ private fun TctExpr.checkIsLvalue() {
                 Log.error(location,"Field $member is not mutable")
         }
 
+        is TctErrorExpr -> {}
+
         is TctMakeTupleExpr -> {
             elements.forEach { it.checkIsLvalue() }
         }
@@ -210,6 +212,12 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
             val match = operatorTable.find{it.tokenKind==op && it.lhsType==tctLhs.type && it.rhsType==tctRhs.type}
             if (match==null)
                 return TctErrorExpr(location, "Invalid operator '${op}' for types '${tctLhs.type}' and '${tctRhs.type}'")
+            if (tctLhs is TctConstant && tctRhs is TctConstant) {
+                val lhsValue = (tctLhs.value as IntValue).value
+                val rhsValue = (tctRhs.value as IntValue).value
+                val result = match.resultOp.evaluate(lhsValue, rhsValue)
+                return TctConstant(location, IntValue(result, match.resultType))
+            }
             TctBinaryExpr(location, match.resultOp, tctLhs, tctRhs, match.resultType)
         }
 
@@ -268,9 +276,20 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
             val indexExpr = index.typeCheckRvalue(scope).checkType(TypeInt)
             if (arrayExpr.type is TypeError || indexExpr.type is TypeError)
                 return TctErrorExpr(location, "")
-            if (arrayExpr.type !is TypeArray)
-                return TctErrorExpr(location, "Cannot index type '${arrayExpr.type}'")
-            return TctIndexExpr(location, arrayExpr, indexExpr, arrayExpr.type.elementType)
+            val elementType = when (arrayExpr.type) {
+                is TypeArray -> arrayExpr.type.elementType
+                is TypeString -> TypeChar
+                is TypeInlineArray -> arrayExpr.type.elementType
+                else -> reportTypeError(location, "Cannot index type '${arrayExpr.type}'")
+            }
+            if (arrayExpr.type is TypeInlineArray) {
+                if (indexExpr is TctConstant && indexExpr.value is IntValue) {
+                    val idx = indexExpr.value.value
+                    if (idx < 0 || idx >= arrayExpr.type.size)
+                        Log.error(location, "Index $idx out of bounds for InlineArray of size ${arrayExpr.type.size}")
+                }
+            }
+            return TctIndexExpr(location, arrayExpr, indexExpr, elementType)
         }
 
         is AstMemberExpr -> {
@@ -361,6 +380,17 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
                 }
 
                 is TypeClass -> error("Cannot create new instance of generic class '$type' without type arguments")
+
+                is TypeInlineArray -> {
+                    if (tcArgs.isNotEmpty())
+                        return TctErrorExpr(location, "InlineArray constructor takes no arguments")
+                    if (tcLambda!=null)
+                        return TctErrorExpr(location, "InlineArray constructor cannot have an initializer lambda")
+                    val arrayType = TypeInlineArray.create(type.elementType, type.size)
+                    tcLambda?.checkType(type.elementType)
+
+                    return TctNewInlineArrayExpr(location, arena, tcLambda, arrayType)
+                }
 
                 else -> return TctErrorExpr(location, "Cannot create new instance of type '${type.name}'")
             }
@@ -776,6 +806,7 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
                 is TypeError -> TypeError
                 is TypeRange -> tcRange.type.elementType
                 is TypeArray -> tcRange.type.elementType
+                is TypeInlineArray -> tcRange.type.elementType
                 is TypeClassInstance -> {
                     iterableDesc = tcRange.type.isIterable()
                     iterableDesc?.second?.returnType ?: reportTypeError(location, "Type '${tcRange.type}' is not iterable")
@@ -804,6 +835,13 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
                 TctForRangeStmt(location, sym, tcRange, tcBody)
 
             } else if (tcRange.type is TypeArray) {
+                if (!tcRange.type.elementType.isAssignableTo(type))
+                    reportTypeError(
+                        location,
+                        "Cannot iterate over array of type '${tcRange.type}' with index type '${type}'"
+                    )
+                TctForArrayStmt(location, sym, tcRange, tcBody)
+            } else if (tcRange.type is TypeInlineArray) {
                 if (!tcRange.type.elementType.isAssignableTo(type))
                     reportTypeError(
                         location,
@@ -919,6 +957,18 @@ private fun AstType.resolveType(scope:AstBlock) : Type {
             val elementType = elementType.resolveType(scope)
             return TypeArray.create(elementType)
         }
+
+        is AstInlineArrayType -> {
+            val tcElementType = elementType.resolveType(scope)
+            val tcSize = size.typeCheckRvalue(scope)
+            if (tcSize !is TctConstant || tcSize.value !is IntValue)
+                return reportTypeError(location, "Inline array size must be a constant integer")
+            val intSize = tcSize.value.value
+            if (intSize <= 0)
+                reportTypeError(location, "Inline array must have a positive size")
+            return TypeInlineArray.create(tcElementType, intSize)
+        }
+
         is AstNullableType -> {
             val elementType = elementType.resolveType(scope)
             return TypeNullable.create(elementType)

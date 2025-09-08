@@ -352,6 +352,17 @@ class Parser(val lexer: Lexer) {
         return AstArrayType(currentToken.location, elementType)
     }
 
+    private fun parseInlineArrayType() : AstInlineArrayType {
+        expect(INLINEARRAY) // Consume ARRAY
+        expect(LT)
+        val elementType = parseType()
+        expect(GT)
+        expect(OPENB)
+        val size = parseExpr()
+        expect(CLOSEB) // Consume GT
+        return AstInlineArrayType(currentToken.location, elementType,size)
+    }
+
     private fun parseTypeTuple() : AstType {
         val elementTypes = mutableListOf<AstType>()
         expect(OPENB) // Consume OPENB
@@ -369,6 +380,7 @@ class Parser(val lexer: Lexer) {
         var ret = when(currentToken.kind) {
             IDENTIFIER -> parseTypeIdentifier()
             ARRAY -> parseTypeArray()
+            INLINEARRAY -> parseInlineArrayType()
             OPENB -> parseTypeTuple()
             else -> throw ParseError(currentToken.location, "Got '$currentToken' when expecting type")
         }

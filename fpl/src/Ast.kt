@@ -96,7 +96,7 @@ class AstErrableType(location: Location, val elementType: AstType) : AstType(loc
 class AstTypeIdentifier(location: Location, val name: String) : AstType(location)
 class AstGenericType(location: Location, val baseType: AstTypeIdentifier, val typeArgs: List<AstType>) : AstType(location)
 class AstTupleType(location: Location, val elementTypes: List<AstType>) : AstType(location)
-
+class AstInlineArrayType(location: Location, val elementType: AstType, val size: AstExpr) : AstType(location)
 
 // Other nodes
 class AstParameter(location: Location, val kind:TokenKind, val name: String, val type: AstType) : Ast(location)

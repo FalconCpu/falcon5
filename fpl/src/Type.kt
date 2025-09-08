@@ -150,9 +150,14 @@ class TypeTuple private constructor(val elementTypes: List<Type>) : Type("(${ele
     }
 }
 
-
-
-
+class TypeInlineArray private constructor(val elementType:Type, val size:Int) : Type("InlineArray<$elementType>($size)") {
+    companion object {
+        val allInlineArrayTypes = mutableMapOf<Pair<Type,Int>, TypeInlineArray>()
+        fun create(elementType: Type, size:Int) = allInlineArrayTypes.getOrPut(Pair(elementType,size)) {
+            TypeInlineArray(elementType, size)
+        }
+    }
+}
 
 // Type checking
 fun Type.isAssignableTo(other: Type): Boolean {
@@ -212,6 +217,7 @@ fun Type.getSize(): Int = when (this) {
     is TypeGenericParameter -> 4
     is TypeClassInstance -> 4
     is TypeTuple -> 4*elementTypes.size
+    is TypeInlineArray -> elementType.getSize() * size
 }
 
 // ========================================================================
@@ -246,6 +252,7 @@ fun Type.mapType(typeMap: Map<TypeGenericParameter, Type>): Type {
         TypeReal,
         TypeString,
         TypeUnit -> this
+        is TypeInlineArray -> TypeInlineArray.create(elementType.mapType(typeMap), size)
     }
 }
 

@@ -68,3 +68,24 @@ val operatorTable = listOf(
     Operator(TokenKind.LSR,     TypeInt,   TypeInt, BinOp.LSR_I,  TypeInt),
     Operator(TokenKind.ASR,     TypeInt,   TypeInt, BinOp.ASR_I,  TypeInt)
 )
+
+fun BinOp.evaluate(lhs: Int, rhs: Int) : Int = when(this) {
+    BinOp.ADD_I -> lhs + rhs
+    BinOp.SUB_I -> lhs - rhs
+    BinOp.MUL_I -> lhs * rhs
+    BinOp.DIV_I -> lhs / rhs
+    BinOp.MOD_I -> lhs % rhs
+    BinOp.LT_I  -> if (lhs < rhs) 1 else 0
+    BinOp.GT_I  -> if (lhs > rhs) 1 else 0
+    BinOp.EQ_I  -> if (lhs == rhs) 1 else 0
+    BinOp.NE_I  -> if (lhs != rhs) 1 else 0
+    BinOp.LE_I  -> if (lhs <= rhs) 1 else 0
+    BinOp.GE_I  -> if (lhs >= rhs) 1 else 0
+    BinOp.AND_I -> lhs and rhs
+    BinOp.OR_I  -> lhs or rhs
+    BinOp.XOR_I -> lhs xor rhs
+    BinOp.LSL_I -> lhs shl rhs
+    BinOp.LSR_I -> lhs ushr rhs
+    BinOp.ASR_I -> lhs shr rhs
+    BinOp.LTU_I -> if (lhs.toUInt() < rhs.toUInt()) 1 else 0
+}

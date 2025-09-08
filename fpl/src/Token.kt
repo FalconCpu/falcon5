@@ -72,6 +72,7 @@ enum class TokenKind(val value: String, val lineContinues: Boolean) {
     LOCAL         ("local", true),
     CONST         ("const", true),
     ARRAY         ("Array", false),
+    INLINEARRAY   ("InlineArray", false),
     ENUM          ("enum", true),
     CLASS         ("class", true),
     EXTERN        ("extern", true),
