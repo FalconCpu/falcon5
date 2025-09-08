@@ -1,0 +1,53 @@
+extern fun print(s:String)
+extern fun print(i:Int)
+extern fun printHex(i:Int)
+
+class Task
+    var pc  : Int
+    var r1  : Int
+    var r2  : Int
+    var r3  : Int
+    var r4  : Int
+    var r5  : Int
+    var r6  : Int
+    var r7  : Int
+    var r8  : Int
+    var r9  : Int
+    var r10 : Int
+    var r11 : Int
+    var r12 : Int
+    var r13 : Int
+    var r14 : Int
+    var r15 : Int
+    var r16 : Int
+    var r17 : Int
+    var r18 : Int
+    var r19 : Int
+    var r20 : Int
+    var r21 : Int
+    var r22 : Int
+    var r23 : Int
+    var r24 : Int
+    var r25 : Int
+    var r26 : Int
+    var r27 : Int
+    var r28 : Int
+    var r29 : Int
+    var r30 : Int
+    var sp  : Int
+
+    fun dump() 
+        val x = unsafe((this as Array<Int>))
+        for i in 0..31
+            if i=0
+                print("PC=")
+            elsif i=31
+                print("SP=")
+            else
+                print("$")
+                print(i)
+                if i<10
+                    print(" ")
+                print("=")
+            printHex(x[i])
+

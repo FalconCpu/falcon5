@@ -1,0 +1,96 @@
+# HWREGS base
+HWREGS_BASE         = 0xE0000000
+HWREGS_SEVEN_SEG    = 0x00
+HWREGS_LEDR         = 0x04
+HWREGS_SW           = 0x08
+HWREGS_UART_TX      = 0x10
+HWREGS_SIMULATION   = 0x44
+
+
+jmp start
+
+exception:
+    jmp exit
+
+# =====================================================
+#                    exit handler
+# =====================================================
+# In simulation do a jump to $0 to exit cleanly
+# In hardware flash the LEDs and loop forever
+
+exit:
+bne $21, 0, .jmpz
+ld $1, 0xfff
+.forever:
+stw $1, $20[HWREGS_LEDR]   # LED flash if ever reached
+ld $2, 10000000
+.delay:
+sub $2, $2, 1
+bne $2, 0, .delay
+xor $1, $1, 0xfff
+jmp .forever
+
+.jmpz:
+ld $30, 0
+ret
+
+# =====================================================
+# Randomized Divide Stress Test
+# =====================================================
+start:
+    ld $20, HWREGS_BASE
+    ldw $21, $20[HWREGS_SIMULATION]    # simulation flag
+
+    # Initialize pseudo-random generator (xorshift32)
+    ld  $10, 0x12345678   # seed
+
+    ld  $12, 100        # loop count
+    ld  $13, 0          # sum 
+
+loop:
+    # Generate random dividend
+    jsr rand32
+    ld $1, $23
+
+    # Generate random divisor
+    jsr rand32
+    ld $2, $23
+
+    # ---- Perform HW ops ----
+    divu $3, $1, $2
+    modu $4, $1, $2
+    divs $5, $1, $2
+    mods $6, $1, $2
+
+    add $13, $3
+    add $13, $4
+    add $13, $5
+    add $13, $6
+
+    sub $12, $12, 1
+    bne $12, 0, loop
+
+pass:
+    stw $13, $20[HWREGS_SEVEN_SEG]     # display sum on 7-seg
+    jmp exit
+
+# =====================================================
+# Pseudo-random number generator (xorshift32)
+# Input:  $10 = state
+# Output: $23 = next random number, state updated
+# =====================================================
+rand32:
+    ld $23, $10
+    lsl $23, $23, 13
+    xor $10, $10, $23
+
+    ld $23, $10
+    lsr $23, $23, 17
+    xor $10, $10, $23
+
+    ld $23, $10
+    lsl $23, $23, 5
+    xor $10, $10, $23
+
+    ld $23, $10
+    ret

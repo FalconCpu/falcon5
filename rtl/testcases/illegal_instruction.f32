@@ -1,0 +1,144 @@
+# HWREGS base
+HWREGS_BASE         = 0xE0000000
+HWREGS_SEVEN_SEG    = 0x00
+HWREGS_LEDR         = 0x04
+HWREGS_SW           = 0x08
+HWREGS_UART_TX      = 0x10
+HWREGS_SIMULATION   = 0x44
+HWREGS_PERF_CTRL    = 0x48          # Bit 0=reset, Bit 1=enable Bit 2=divide by 1024
+HWREGS_PERF_COUNT_OK  = 0x4C        # Count of instructions completed
+HWREGS_PERF_COUNT_JMP = 0x50        # Count of cycles lost to jump slots
+HWREGS_PERF_COUNT_IF  = 0x54        # Count of cycles lost to instruction fetch stalls
+HWREGS_PERF_COUNT_SB  = 0x58        # Count of cycles lost to data stalls
+HWREGS_PERF_COUNT_RS  = 0x5C        # Count of cycles lost to resource stalls
+
+
+
+jmp start
+
+# =====================================================
+#             Exception handler
+# =====================================================
+
+exception:
+    ld $1,  message1        # "Exception: CAUSE="
+    jsr     print_string
+    cfg $1, !ecause
+    jsr     print_hex
+    ld $1,  message2        # " PC="
+    jsr     print_string
+    cfg $1, !epc
+    jsr     print_hex
+    ld $1,  message3        # " Data="
+    jsr     print_string
+    cfg $1, !edata
+    jsr     print_hex
+    ld $1,  0xA             # Newline
+    jsr     print_char
+    jmp     exit
+
+# -----------------------------------------------------
+# Flash the LEDs and loop forever
+# -----------------------------------------------------
+exit:
+bne $21, 0, .jmpz  # In a simulation jump to address 0 to exit
+
+ld $1, 0xfff
+.forever:
+stw $1, $20[HWREGS_LEDR]  # Flash the LEDs to show we are here
+ld $2, 10000000
+.delay:
+sub $2, 1
+bne $2, 0, .delay   
+xor $1, 0xfff
+jmp .forever  # Loop forever
+
+.jmpz:
+ld $30, 0
+ret
+
+# -----------------------------------------------------
+                    start:
+# -----------------------------------------------------
+
+ld $20, HWREGS_BASE              # Base address for HW registers
+ldw $21, $20[HWREGS_SIMULATION]  # Check if we are in a simulation
+
+ld $3, 0x1
+dcw 0x12345678                   # Illegal instruction
+
+ld $1, error_msg                 # Load address of error message
+jsr print_string
+jmp exit
+
+
+
+
+# -----------------------------------------------------
+                    print_string:
+# -----------------------------------------------------
+# Print the string pointed to by $1
+bne $21, 0, .skip            # If in a simulation skip polling the UART
+ld $3, 10                    # $3 = required free slots in TX FIFO
+.poll:
+ldw $2, $20[HWREGS_UART_TX]  # Poll UART status
+blt $2, $3, .poll            # Loop until enough free slots
+.skip:
+ldb $2, $1[0]                # Load byte from string
+beq $2, 0, .done             # If zero byte then end of string
+stw $2, $20[HWREGS_UART_TX]   # Send byte to UART
+add $1, 1
+jmp print_string
+.done:
+ret
+
+# -----------------------------------------------------
+                    print_char:
+# -----------------------------------------------------
+# Print the string pointed to by $1
+bne $21, 0, .skip            # If in a simulation skip polling the UART
+ld $3, 10                    # $3 = required free slots in TX FIFO
+.poll:
+ldw $2, $20[HWREGS_UART_TX]  # Poll UART status
+blt $2, $3, .poll            # Loop until enough free slots
+.skip:
+stw $1, $20[HWREGS_UART_TX]   # Send byte to UART
+ret
+
+
+
+
+# -----------------------------------------------------
+                    print_hex:
+# -----------------------------------------------------
+# Print the value in $1 as 8 hex digits
+bne $21, 0, .skip            # If in a simulation skip polling the UART
+ld $3, 10                    # $3 = required free slots in TX FIFO
+.poll:
+ldw $2, $20[HWREGS_UART_TX]  # Poll UART status
+blt $2, $3, .poll            # Loop until enough free slots
+
+.skip:
+ld $2, 8                   # $2 = number of nibbles to print
+ld $4, 10
+.loop2:
+lsr $3, $1, 28              # Get top nibble
+blt $3, $4 , .digit
+add $3, 0x7                # Convert to ASCII letter
+.digit:
+add $3, 0x30               # Convert to ASCII digit
+stw $3, $20[HWREGS_UART_TX]
+lsl $1, 4
+sub $2, 1
+bne $2, 0, .loop2
+ret
+
+
+# =====================================================
+#            strings
+# =====================================================
+
+message1: dcb "Exception: CAUSE=",0
+message2: dcb " PC=",0
+message3: dcb " Data=",0
+error_msg: dcb "Test failed - misaligned store not detected",0

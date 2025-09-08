@@ -1,0 +1,23 @@
+extern fun print(s:String)
+extern fun printHex(i:Int)
+
+enum Exception(text:String) [
+    NONE                     ("No Exception"),
+    INSTRUCTION_ACCESS_FAULT ("Instruction access fault"),
+    ILLEGAL_INSTRUCTION      ("Illegal instruction"),
+    BREAKPOINT               ("Breakpoint"),
+    LOAD_ADDRESS_MISALIGNED  ("Load address misaligned"),
+    LOAD_ACCESS_FAULT        ("Load access fault"),
+    STORE_ADDRESS_MISALIGNED ("Store address misaligned"),
+    STORE_ACCESS_FAULT       ("Store access fault"),
+    SYSTEM_CALL              ("System Call"),
+    INDEX_OVERFLOW           ("Index Overflow") ]
+
+fun exceptionHandler(cause:Exception, data:Int, task:Task)
+    print("EXCEPTION ")
+    print(cause.text)
+    print(" DATA=")
+    printHex(data)
+    print(" EPC=")
+    printHex(task.pc)
+    print("\n")

@@ -1,0 +1,99 @@
+class Hwregs
+    var sevenSeg      : Int   # 6 digit hexadecimal seven segment display
+    var ledr          : Int   # 10 LEDs
+    var sw            : Int   # 10 Switches
+    var key           : Int   # 4 Push buttons
+    var uart_tx       : Int   # Write = byte of data to transmit, read = number of slots free in fifo
+    var uart_rx       : Int   # 1 byte of data from the uart, -1 if no data
+    var gpio0         : Int   # 32 bits of GPIO0
+    var gpio1         : Int   # 32 bits of GPIO1
+    var mouseX        : Int   # Mouse X coordinate
+    var mouseY        : Int   # Mouse Y coordinate
+    var mouse_buttons : Int   # Mouse buttons (bit 0 = left, bit 1 = right, bit 2 = middle)
+    var simulation    : Int   # Reads as 1 in simulation, 0 in hardware
+    var timer         : Int   # 32 bit free running timer
+    var blitCmd       : Int   # Write=Blitter Command Read=Fifo full
+    var blitCtrl      : Int   # Blitter Control register 
+
+const hwregs = unsafe(0xE0000000 as Hwregs)
+
+const BLIT_CMD_SETUP = 0xFF000000
+const BLIT_CMD_NOP   = 0x00000000
+const BLIT_CMD_RECT  = 0x01000000
+const BLIT_CMD_COPY  = 0x02000000
+const BLIT_CMD_TEXT  = 0x03000000
+
+const BLIT_CTRL_PRIVALEDGE = 0x00001
+
+class BlitContext
+    var destBitmap : Int
+    var destStride : Int
+    var destClipX1 : Int
+    var destClipY1 : Int
+    var destClipX2 : Int
+    var destClipY2 : Int
+    var srcBitmap  : Int
+    var srcStride  : Int
+    var offsetX    : Int
+    var offsetY    : Int
+    var fontBitmap : Int
+    var fontWidth  : Int
+    var fontHeight : Int
+
+    fun enable()
+        while hwregs.blitCmd < 8
+            val dummy = 1
+        hwregs.blitCtrl = BLIT_CTRL_PRIVALEDGE
+        hwregs.blitCmd = BLIT_CMD_SETUP | destStride
+        hwregs.blitCmd = destBitmap
+        hwregs.blitCmd = (destClipY1 lsl 16) | (destClipX1 & 0xFFFF)
+        hwregs.blitCmd = (destClipY2 lsl 16) | (destClipX2 & 0xFFFF)
+        hwregs.blitCmd = (offsetY lsl 16) | (offsetX & 0xFFFF)
+        hwregs.blitCmd = srcBitmap
+        hwregs.blitCmd = srcStride
+        hwregs.blitCmd = fontBitmap
+        hwregs.blitCmd = (fontHeight lsl 8) | fontWidth
+        hwregs.blitCtrl = 0
+
+    fun drawRect(x1:Int, y1:Int, x2:Int, y2:Int, color:Int)
+        while hwregs.blitCmd < 3
+            val dummy = 1
+        hwregs.blitCmd = BLIT_CMD_RECT | (color & 0xFF)
+        hwregs.blitCmd = (y1 lsl 16) | (x1 & 0xFFFF)
+        hwregs.blitCmd = (y2 lsl 16) | (x2 & 0xFFFF)
+
+    fun copyRect(x1:Int, y1:Int, x2:Int, y2:Int, srcX:Int, srcY:Int)
+        while hwregs.blitCmd < 4
+            val dummy = 1
+        hwregs.blitCmd = BLIT_CMD_COPY | (color & 0xFF)
+        hwregs.blitCmd = (y1 lsl 16) | (x1 & 0xFFFF)
+        hwregs.blitCmd = (y2 lsl 16) | (x2 & 0xFFFF)
+        hwregs.blitCmd = (srcY lsl 16) | (srcX & 0xFFFF)
+
+    fun drawText(x1:Int, y1:Int, color:Int, text:String)
+        while hwregs.blitCmd < 2
+            val dummy = 1
+        hwregs.blitCmd = BLIT_CMD_TEXT | (color & 0xFF)
+        hwregs.blitCmd = (y1 lsl 16) | (x1 & 0xFFFF)
+        for c in text   
+            while hwregs.blitCmd < 2
+                val dummy = 1
+            hwregs.blitCmd = c as Int
+        # add Null termination
+        while hwregs.blitCmd < 2
+            val dummy = 1
+        hwregs.blitCmd = 0
+
+            
+
+
+        
+
+
+        
+
+
+
+        
+
+

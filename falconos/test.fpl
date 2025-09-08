@@ -1,0 +1,5 @@
+extern fun print(s:String)
+
+fun main()
+    print("Hello")  
+    

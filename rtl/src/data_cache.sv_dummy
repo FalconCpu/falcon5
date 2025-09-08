@@ -1,0 +1,68 @@
+`timescale 1ns/1ns
+
+// Temporary stub for data cache - to be replaced with real cache later
+
+module data_cache(
+    input logic          clock,
+    input logic          reset,
+
+    // CPU interface
+    output logic         cpu_dcache_ready,      // The cache is ready to accept a new request
+    input logic          cpu_dcache_request,    // The CPU is making a request to a cacheable address
+    input logic [25:0]   cpu_dcache_addr,       // The address of the request
+    input logic          cpu_dcache_write,      // Read (0) or write (1)
+    input logic [3:0]    cpu_dcache_wstrb,      // Byte enables for a write 
+    input logic [31:0]   cpu_dcache_wdata,      // The data to write. Tag for read.
+    output logic         cpu_dcache_rvalid,     // Read data is availible
+    output logic [31:0]  cpu_dcache_rdata,      // The read data.
+    output logic [8:0]   cpu_dcache_tag,        // The tag of the read data.
+
+    // SDRAM interface
+    input  logic         dcache_sdram_ready,    // The sdram is ready to accept a new request
+    output logic         dcache_sdram_request,  // The cache is making a request to sdram
+    output logic [25:0]  dcache_sdram_addr,     // The address of the request
+    output logic         dcache_sdram_write,    // Read (0) or write (1)
+    output logic         dcache_sdram_burst,    // 1=16-beat burst, 0=single
+    output logic [3:0]   dcache_sdram_wstrb,    // Byte enables for a write 
+    output logic [31:0]  dcache_sdram_wdata,    // The data to write. Tag for read.
+    input  logic         dcache_sdram_rvalid,   // Read data is availible
+    input  logic [31:0]  dcache_sdram_rdata,    // The read data.
+    input  logic [25:0]  dcache_sdram_raddress, // The address of the read data.
+    input  logic         dcache_sdram_complete  // Set for final beat of burst
+);
+
+logic [31:0] ram [0:16383];
+
+always_ff @(posedge clock) begin
+    cpu_dcache_ready <= 1;
+
+    if (cpu_dcache_request && cpu_dcache_write) begin
+        if (cpu_dcache_wstrb[0]) ram[cpu_dcache_addr[15:2]][7:0]   <= cpu_dcache_wdata[7:0];
+        if (cpu_dcache_wstrb[1]) ram[cpu_dcache_addr[15:2]][15:8]  <= cpu_dcache_wdata[15:8];
+        if (cpu_dcache_wstrb[2]) ram[cpu_dcache_addr[15:2]][23:16] <= cpu_dcache_wdata[23:16];
+        if (cpu_dcache_wstrb[3]) ram[cpu_dcache_addr[15:2]][31:24] <= cpu_dcache_wdata[31:24];
+    end
+    if (cpu_dcache_request && !cpu_dcache_write) begin
+        cpu_dcache_rdata  <= ram[cpu_dcache_addr[15:2]];
+        cpu_dcache_rvalid <= 1;
+        cpu_dcache_tag    <= cpu_dcache_wdata[8:0];
+    end else begin
+        cpu_dcache_rvalid <= 0;
+        cpu_dcache_rdata  <= 32'bx;
+        cpu_dcache_tag    <= 9'bx;
+    end
+end
+
+// synthesis translate_off
+integer fh;
+initial begin
+    fh = $fopen("rtl_mem.log","w");
+end
+always @(posedge clock) begin
+    if (cpu_dcache_request && cpu_dcache_write) begin
+        $fwrite(fh, "[%08x]=%08x %x", cpu_dcache_addr, cpu_dcache_wdata, cpu_dcache_wstrb);
+    end
+end
+// synthesis translate_on
+
+endmodule

@@ -1,0 +1,201 @@
+
+# HWREGS base
+HWREGS_BASE         = 0xE0000000
+HWREGS_SEVEN_SEG    = 0x00
+HWREGS_LEDR         = 0x04
+HWREGS_SW           = 0x08
+HWREGS_UART_TX      = 0x10
+HWREGS_SIMULATION   = 0x44
+HWREGS_PERF_CTRL    = 0x48          # Bit 0=reset, Bit 1=enable Bit 2=divide by 1024
+HWREGS_PERF_COUNT_OK  = 0x4C        # Count of instructions completed
+HWREGS_PERF_COUNT_JMP = 0x50        # Count of cycles lost to jump slots
+HWREGS_PERF_COUNT_IF  = 0x54        # Count of cycles lost to instruction fetch stalls
+HWREGS_PERF_COUNT_SB  = 0x58        # Count of cycles lost to data stalls
+HWREGS_PERF_COUNT_RS  = 0x5C        # Count of cycles lost to resource stalls
+
+
+ld $20, HWREGS_BASE             # $20 = HWREGS base address
+ldw $21, $20[HWREGS_SIMULATION] # $21 = SIMULATION register
+ld $3, 0x7                      # Enable and reset performance counter and divide by 1024
+stw $3, $20[HWREGS_PERF_CTRL]          # Start performance counter
+
+# -----------------------------------------------------
+#  Generate an array of random numbers
+# -----------------------------------------------------
+ld $1, 16                  # $1 = size of array
+bne $21, 0, no_sim_size    # If running in simulation use small size
+ldw $2, $20[HWREGS_SW]     # Use switches to set size in hardware
+and $2, 0xF
+lsl $1, $2
+no_sim_size:
+
+ld $11, 0x2000            # $11 = base address of array
+lsl $1, 2                 # Convert size to bytes
+add $12, $11, $1          # $12 = end address of array
+
+ld $1, 123456789          # Seed value
+ld $4, $11                # $4 = current address in array
+random_loop:
+lsr $2, $1, 30            # PRBS gen - x^31 + x^28 + 1
+lsr $3, $1, 27
+xor $2, $3
+and $2, 1
+lsl $1, 1
+or $1, $2                 # New random value in $1
+stw $1, $4[0]             # Store random bit in array
+add $4, 4
+bne $4, $12, random_loop  # Loop until end of array
+
+# -----------------------------------------------------
+# Bubble sort the array
+# -----------------------------------------------------
+
+ld $13, 0                       # $13 = count of number of passes
+
+bubble_sort_outer:
+add $13, 1
+stw $13, $20[HWREGS_SEVEN_SEG]  # Display pass count on seven-seg display
+ld $1, $11                      # $1 = Current location in array
+ldw $2, $1[0]                   # $2 = current value
+ld $14, 0                       # $14 = swap flag
+add $1, 4
+bubble_sort_inner:
+ldw $3, $1[0]                   # $3 = next value
+bgeu $3, $2, .noswap
+# Swap values
+stw $3, $1[-4]
+stw $2, $1[0]
+ld $14, 1                       # Set swap flag
+ld $3, $2                       
+.noswap:
+ld $2, $3                       # Move next value to current
+add $1, 4
+bne $1, $12, bubble_sort_inner  # Loop until end of array
+bne $14, 0, bubble_sort_outer   # If a swap was made, do another pass
+
+# -----------------------------------------------------
+# Print the array
+# -----------------------------------------------------
+
+print_array:
+# ld $10, $11                # $10 = current address in array
+# .loop:
+# ldw $1, $10[0]             # Load word from array
+# jsr print_hex
+# ld $1, 0xA
+# stw $1, $20[HWREGS_UART_TX]  # Newline
+# add $10, 4
+# bne $10, $12, .loop        # Loop until end of array
+
+# -----------------------------------------------------
+# Finish. In hardware loop forever, in simulation exit.
+# -----------------------------------------------------
+
+ld $1, 0
+beq $21, 0, hw_exit   # If in hardware loop forever
+ld $30,0
+ret
+
+hw_exit:
+
+# -----------------------------------------------------
+# Output the performance counter values
+# -----------------------------------------------------
+ld $3, 0x4                     # Stop performance counters
+stw $3, $20[HWREGS_PERF_CTRL]
+ld  $1, string_ok
+jsr print_string
+ldw $1, $20[HWREGS_PERF_COUNT_OK]
+jsr print_hex
+ld $1, 0xA
+stw $1, $20[HWREGS_UART_TX]  # Newline
+
+ld $1, string_jmp
+jsr print_string
+ldw $1, $20[HWREGS_PERF_COUNT_JMP]
+jsr print_hex
+ld $1, 0xA
+stw $1, $20[HWREGS_UART_TX]  # Newline  
+
+ld $1, string_if
+jsr print_string
+ldw $1, $20[HWREGS_PERF_COUNT_IF]
+jsr print_hex
+ld $1, 0xA
+stw $1, $20[HWREGS_UART_TX]  # Newline
+
+ld $1, string_sb
+jsr print_string
+ldw $1, $20[HWREGS_PERF_COUNT_SB]
+jsr print_hex
+ld $1, 0xA
+stw $1, $20[HWREGS_UART_TX]  # Newline
+
+ld $1, string_rs
+jsr print_string
+ldw $1, $20[HWREGS_PERF_COUNT_RS]
+jsr print_hex
+ld $1, 0xA
+stw $1, $20[HWREGS_UART_TX]  # Newline
+
+
+# -----------------------------------------------------
+# Flash the LEDs and loop forever
+# -----------------------------------------------------
+ld $1, 0xfff
+forever:
+stw $1, $20[HWREGS_LEDR]  # Flash the LEDs to show we are here
+ld $2, 10000000
+.delay:
+sub $2, 1
+bne $2, 0, .delay   
+xor $1, 0xfff
+jmp forever  # Loop forever
+
+
+
+print_string:
+# Print the string pointed to by $1
+bne $21, 0, .skip            # If in a simulation skip polling the UART
+ld $3, 10                    # $3 = required free slots in TX FIFO
+.poll:
+ldw $2, $20[HWREGS_UART_TX]  # Poll UART status
+blt $2, $3, .poll            # Loop until enough free slots
+.skip:
+ldb $2, $1[0]                # Load byte from string
+beq $2, 0, .done             # If zero byte then end of string
+stw $2, $20[HWREGS_UART_TX]   # Send byte to UART
+add $1, 1
+jmp print_string
+.done:
+ret
+
+print_hex:
+# Print the value in $1 as 8 hex digits
+bne $21, 0, .skip            # If in a simulation skip polling the UART
+ld $3, 10                    # $3 = required free slots in TX FIFO
+.poll:
+ldw $2, $20[HWREGS_UART_TX]  # Poll UART status
+blt $2, $3, .poll            # Loop until enough free slots
+
+.skip:
+ld $2, 8                   # $2 = number of nibbles to print
+ld $4, 10
+.loop2:
+lsr $3, $1, 28              # Get top nibble
+blt $3, $4 , .digit
+add $3, 0x7                # Convert to ASCII letter
+.digit:
+add $3, 0x30               # Convert to ASCII digit
+stw $3, $20[HWREGS_UART_TX]
+lsl $1, 4
+sub $2, 1
+bne $2, 0, .loop2
+ret
+
+
+string_ok:  dcb "Completed      = ",0
+string_jmp: dcb "Jump slots     = ",0
+string_if:  dcb "IFetch stall   = ",0
+string_sb:  dcb "Data stall     = ",0
+string_rs:  dcb "Resource stall = ",0

@@ -1,0 +1,6 @@
+extern fun print(s:String)
+
+fun main()
+    val a = new Array<Int>(5)
+
+    val b = a[6]

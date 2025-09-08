@@ -1,0 +1,443 @@
+# Constants
+HWREGS_BASE = 0xE0000000
+HWREGS_SEVEN_SEG = 0x00
+HWREGS_LEDR = 0x04
+HWREGS_UART_TX = 0x10
+HWREGS_SIM_MODE = 0x44
+
+SYSVARS_BASE = 0x100
+SYSVARS_HEAP_PTR = 0x00
+SYSVARS_HEAP_END = 0x04
+
+# #######################################################################
+#                          Entry point
+# #######################################################################
+
+jmp start
+
+# #######################################################################
+#                          Exception Handler
+# #######################################################################
+# This is called on an exception. It saves registers, calls the exception handler
+# function. The cfg register !escratch is used to hold a pointer to the task
+# control block of the current task, which holds the saved registers for that task.
+
+ExceptionHandler:
+    cfg $29, !escratch, $29     # Swap $29 and escratch
+    stw $1, $29[4]              # Save registers
+    stw $2, $29[8]
+    stw $3, $29[12]
+    stw $4, $29[16]
+    stw $5, $29[20]
+    stw $6, $29[24]
+    stw $7, $29[28]
+    stw $8, $29[32]
+    stw $9, $29[36]
+    stw $10, $29[40]
+    stw $11, $29[44]
+    stw $12, $29[48]
+    stw $13, $29[52]
+    stw $14, $29[56]
+    stw $15, $29[60]
+    stw $16, $29[64]
+    stw $17, $29[68]
+    stw $18, $29[72]    
+    stw $19, $29[76]
+    stw $20, $29[80]
+    stw $21, $29[84]
+    stw $22, $29[88]
+    stw $23, $29[92]
+    stw $24, $29[96]
+    stw $25, $29[100]
+    stw $26, $29[104]
+    stw $27, $29[108]
+    stw $28, $29[112]
+    stw $30, $29[120]
+    stw $31, $29[124]
+    cfg $1, !escratch, $29     # Swap $29 and escratch back (now !escratch has TCB pointer again)
+    stw $1, $29[116]           # Save updated TCB pointer
+
+    cfg $1, !epc
+    stw $1, $29[0]             # Save EPC into task control block
+
+    cfg $1, !ecause
+    cfg $2, !edata
+    ld $31, 0x4000000           # Set up stack pointer for calling fpl function
+    ld $29, 0x1000              # Setup global pointer for calling fpl function
+    jsr /exceptionHandler(Exception,Int,Task)
+    jmp /exit()
+
+# #######################################################################
+#                          Run task
+# #######################################################################
+# Resume (or start) a task. The task control block pointer is in $1
+
+/runTask(Task):
+    ldw $29, $1[116]            # Get the task's $29
+    cfg !escratch, $29          # Temporarily store $29 in escratch
+    ld $29, $1                  # Set $29 to point to the task control block
+
+    ldw $1, $29[0]               # Load EPC from task control block
+    cfg !epc, $1                # Set EPC
+
+    ldw $1,  $29[4]               # Load the registers
+    ldw $2,  $29[8]
+    ldw $3,  $29[12]
+    ldw $4,  $29[16]
+    ldw $5,  $29[20]
+    ldw $6,  $29[24]
+    ldw $7,  $29[28]
+    ldw $8,  $29[32]
+    ldw $9,  $29[36]
+    ldw $10, $29[40]
+    ldw $11, $29[44]
+    ldw $12, $29[48]
+    ldw $13, $29[52]
+    ldw $14, $29[56]
+    ldw $15, $29[60]
+    ldw $16, $29[64]
+    ldw $17, $29[68]
+    ldw $18, $29[72]    
+    ldw $19, $29[76]
+    ldw $20, $29[80]
+    ldw $21, $29[84]
+    ldw $22, $29[88]
+    ldw $23, $29[92]
+    ldw $24, $29[96]
+    ldw $25, $29[100]
+    ldw $26, $29[104]
+    ldw $27, $29[108]
+    ldw $28, $29[112]
+    ldw $30, $29[120]
+    ldw $31, $29[124]
+    cfg $29, !escratch, $29    # Swap $29 and escratch. 
+    rte                        # Return from exception (will jump to EPC)
+
+
+# #######################################################################
+#                          Start of program
+# #######################################################################
+start:
+ld SP, 0x4000000
+jsr initializeMem
+jsr /topLevel
+jsr /main()
+
+# #######################################################################
+#                          Exit
+# #######################################################################
+# On the simulator, we exit by doing a jump to address 0
+/exit():
+
+ld $1, HWREGS_BASE           # Load base address of hardware registers
+ldw $2, $1[HWREGS_SIM_MODE]  # Load simulator mode register
+beq $2, 0, .on_hardware      # If in hardware mode then we have nowhere to return to
+
+# On simulator, so do a jump to address 0 to stop the simulator
+ld R30, 0
+ret
+
+.on_hardware:
+# On hardware, So indicate complete by flashing the LEDs forever
+stw $8, $1[HWREGS_SEVEN_SEG]  # Display the return code on the 7-segment display
+
+ld $1, 0x1
+.forever:
+stw $1, $20[HWREGS_LEDR]  # Flash the LEDs to show we are here
+ld $2, 3000000
+.delay:
+sub $2, 1
+bne $2, 0, .delay
+lsl $1, 1
+lsr $2, $1, 12
+or $1, $2
+jmp .forever  # Loop forever
+
+
+# #######################################################################
+#                          Print Function
+# #######################################################################
+# $1 = string to print   (length prefix format)
+
+/print(String):
+    ld $7, HWREGS_BASE         # Load base address of hardware registers
+    ldw $2, $1[-4]             # Load length of string
+    add $2, $1                 # Pointer to just past the end of string
+    jmp .cond
+
+.loop:
+    ldb $3, $1[0]               # Load character from string
+    stw $3, $7[HWREGS_UART_TX]  # Print the character
+    add $1, 1                   # Increment string pointer
+.cond:
+    bne $1, $2, .loop           # Repeat until string pointer is at end
+    ret
+
+
+# ==========================================================
+                    /printHex(Int):
+# ==========================================================
+# Print the value in $1 as 8 hex digits
+bne $21, 0, .skip            # If in a simulation skip polling the UART
+ld $3, 10                    # $3 = required free slots in TX FIFO
+.poll:
+ldw $2, $20[HWREGS_UART_TX]  # Poll UART status
+blt $2, $3, .poll            # Loop until enough free slots
+
+.skip:
+ld $2, 8                     # $2 = number of nibbles to print
+ld $4, 10
+.loop2:
+lsr $3, $1, 28               # Get top nibble
+blt $3, $4 , .digit
+add $3, 0x7                 # Convert to ASCII letter
+.digit:
+add $3, 0x30               # Convert to ASCII digit
+stw $3, $20[HWREGS_UART_TX]
+lsl $1, 4
+sub $2, 1
+bne $2, 0, .loop2
+ret
+
+
+# ==========================================================
+#                     printInt
+# ==========================================================
+# $1 = value to print
+
+/print(Int):
+    sub $31, 16                # Allocate 16 bytes of stack space
+    ld $7, HWREGS_BASE         # Load base address of hardware registers
+    bge $1, 0, .positive       # If value is positive, skip
+    ld  $2, '-'                # Print the '-' character
+    stw $2, $7[HWREGS_UART_TX]
+    sub $1, 0, $1              # Negate the value
+
+.positive:
+    ld $6, $31                 # $6 = pointer to work space
+
+.loop:
+    modu $2, $1, 10            # $2 = $1 % 10
+    divu $1, $1, 10            # $1 = $1 / 10
+    add $2, '0'                # Convert digit to ASCII
+    stb $2, $6[0]              # Store digit in work space
+    add $6, 1                  # Increment work space pointer
+    bne $1, 0, .loop           # Repeat until $1 is 0
+
+.print:
+    sub $6, 1                   # Decrement work space pointer
+    ldb $2, $6[0]               # Load digit from work space
+    stw $2, $7[HWREGS_UART_TX] # Print the digit
+    bne $6, $31, .print         # Repeat until work space pointer is at base
+
+.end:
+    add $31, 16
+    ret
+
+# ==========================================================
+#                     printChar
+# ==========================================================
+# $1 = character to print
+
+/print(Char):
+    ld $7, HWREGS_BASE         # Load base address of hardware registers
+    stw $1, $7[HWREGS_UART_TX] # Print the character
+    ret
+
+# ==========================================================
+#                     printBoolean
+# ==========================================================
+# $1 = value to print
+
+/print(Bool):
+    ld $7, HWREGS_BASE         # Load base address of hardware registers
+    beq $1, 0, .false          # If value is 0, print "false"
+    ld $2, 't'                # Print the 't' character
+    stw $2, $7[HWREGS_UART_TX]
+    ld $2, 'r'                # Print the 'r' character
+    stw $2, $7[HWREGS_UART_TX]
+    ld $2, 'u'                # Print the 'u' character
+    stw $2, $7[HWREGS_UART_TX]
+    ld $2, 'e'                # Print the 'e' character
+    stw $2, $7[HWREGS_UART_TX]
+    ret
+.false:
+    ld $2, 'f'                # Print the 'f' character
+    stw $2, $7[HWREGS_UART_TX]
+    ld $2, 'a'                # Print the 'a' character
+    stw $2, $7[HWREGS_UART_TX]
+    ld $2, 'l'                # Print the 'l' character
+    stw $2, $7[HWREGS_UART_TX]
+    ld $2, 's'                # Print the 's' character
+    stw $2, $7[HWREGS_UART_TX]
+    ld $2, 'e'                # Print the 'e' character
+    stw $2, $7[HWREGS_UART_TX]
+    ret
+
+# ==========================================================
+#                     initializeMem
+# ==========================================================
+initializeMem:
+ld $1, SYSVARS_BASE          # Load base address of system variables
+ld $2, 0x1000                # Set Start of heap to address 4096 byte
+stw $2, $1[SYSVARS_HEAP_PTR] # Store end of heap in system variables
+ld $2, 0x3f00000             # Set end of heap to address 0x3f00000
+stw $2, $1[SYSVARS_HEAP_END] # Store end of heap
+ret
+
+# ==========================================================
+#                     malloc
+# ==========================================================
+# $1 = size in bytes to allocate
+malloc:
+ld $4, SYSVARS_BASE          # Load base address of system variables
+ldw $2, $4[SYSVARS_HEAP_PTR] # Load current heap pointer
+ldw $3, $4[SYSVARS_HEAP_END]  # Load end of heap
+
+add $1,3                     # Round size up to multiple of 4 bytes
+and $1, 0xFFFFFFFC
+ld $8, $2                    # Save original heap pointer for return value
+add $2, $1                   # Bump pointer
+bge $2, $3, .outOfMemory     # Check if we have enough space
+stw $2, $4[SYSVARS_HEAP_PTR] # Update heap pointer
+ret
+
+.outOfMemory:
+ld $8, 0                     # Set return value to 0 (null pointer)
+ret
+
+# ==========================================================
+#                     malloc Array
+# ==========================================================
+# $1 = number of elements
+# $2 = size of each element in bytes
+/mallocArray:
+sub $sp, 8                # Allocate space on stack for two variables
+stw $9, $sp[0]
+stw $30, $sp[4]
+ld $9, $1                 # Keep number of elements in $9
+mul $1, $2                # Calculate total size in bytes
+add $1, 4                 # Add space for header (length prefix)
+jsr malloc                # Call malloc to allocate memory
+beq $8, 0, .end           # Check if malloc failed
+add $8, 4                 # Update pointer to point to first element
+stw $9, $8[-4]            # Store number of elements at the start of
+.end:
+ldw $30, $sp[4]           # Teardown stack frame
+ldw $9, $sp[0]
+add $sp, 8              # Restore stack pointer
+ret
+
+# ==========================================================
+#                     malloc Object
+# ==========================================================
+# $1 = class descriptor
+
+/mallocObject:
+sub $sp, 8                # Allocate space on stack for two variables
+stw $9, $sp[0]
+stw $30, $sp[4]
+ld $9, $1                 # $9 = Class descriptor
+ldw $1, $9[0]             # Load size of class from descriptor
+add $1, 4                 # Add space for header (length prefix)
+jsr malloc                # Call malloc to allocate memory
+beq $8, 0, .end           # Check if malloc failed
+add $8, 4                 # Update pointer to point to first field
+stw $9, $8[-4]            # Store class descriptor at the start of object
+.end:
+ldw $30, $sp[4]           # Teardown stack frame
+ldw $9, $sp[0]
+add $sp, 8              # Restore stack pointer
+ret
+
+
+
+
+# ==========================================================
+#                     bzero
+# ==========================================================
+# $1 = pointer to memory
+# $2 = size in bytes to clear
+/bzero:
+beq $2, 0, .done         # If size is 0, nothing to do
+add $4, $1, $2           # Calculate end pointer
+or $3, $1, $4            # Check the start and end pointers are aligned
+and $3, 3
+bne $3, 0, .unaligned
+.loop:
+stw 0, $1[0]          # Store 0 at the current
+add $1, 4
+bne $1, $4, .loop      # Repeat until we reach the end
+.done:
+ret
+.unaligned:
+stb 0, $1[0]          # Store 0 at the current byte
+add $1, 1
+bne $1, $4, .unaligned # Repeat until we reach the end
+ret
+
+
+# ==========================================================
+#                     strcmp
+# ==========================================================
+# Compare two strings lexicographically
+# $1 = pointer to string 1
+# $2 = pointer to string 2
+# returns:
+# $8 negative if string 1 < string 2, 0 if equal, positive if string 1 > string 2
+
+/strcmp:
+    ldw $3, $1[-4]       # get the length of string 1
+    ldw $4, $2[-4]       # get the length of string 2
+
+    ld $5, $3           # get the length of the shorter string
+    blt $3, $4, .skip1
+    ld $5, $4
+.skip1:
+    add $5, $5, $1       # point to end of shorter string
+    jmp .check_end       # jump to compare point (in case both strings are empty)
+
+.loop:
+    ldb $8, $1[0]        # get a character from string 1
+    ldb $6, $2[0]        # get a character from string 2
+    sub $8, $6           # subtract the characters
+    bne $8, 0, .done     # if they are not equal, we are done
+    add $1, 1            # increment string 1 pointer
+    add $2, 1            # increment string 2 pointer
+.check_end:
+    blt $1, $5, .loop    # if we have not reached the end of shorter string then loop
+
+    sub $8, $3, $4       # set $8 indicate which string is longer
+.done:
+    ret
+
+
+# ==========================================================
+#                     strequal
+# ==========================================================
+# Compare two strings for equality
+# $1 = pointer to string 1
+# $2 = pointer to string 2
+# returns:
+# $8 = 1 if equal, 0 if not equal
+#
+# This makes use of the fact strings are word-aligned, and padded with 0 to a multiple of 4 bytes
+
+/strequal:
+    ldw $3, $1[-4]          # get the length of string 1
+    ldw $4, $2[-4]          # get the length of string 2
+    ld $8, 0               # set $8 to 0 - default return value
+    bne $3, $4, .done      # if the lengths are not equal, we are done
+    add $3, $1             # point to end of string 1  (Note since we know both strings are the same length,
+                           # we don't need to calculate which is shorter
+.loop:
+    ldw $4, $1[0]          # get a word
+    ldw $5, $2[0]          # get a word
+    bne $4, $5, .done      # if the words are not equal, we are done
+    add $1, 4              # increment string 1 pointer
+    add $2, 4              # increment string 2 pointer
+    blt $1, $3, .loop      # if we have not reached the end of the strings then loop
+    ld $8, 1               # set $8 to 1 (true)
+.done:
+    ret
+

@@ -1,0 +1,44 @@
+# Fill multiple cache lines
+ld $1, 0xC001
+ld $2, 0x1000
+stw $1, $2[0]     # line 0
+ldw $3, $2[0]     # should be a hit
+
+ld $1, 0xC002
+ld $2, 0x2000
+stw $1, $2[0]     # line 1
+ldw $4, $2[0]     # should be a hit
+
+ld $1, 0xC002
+ld $2, 0x3000
+stw $1, $2[0]     # line 2
+ldw $5, $2[0]     # should be a hit
+
+ld $1, 0xC003
+ld $2, 0x4000
+stw $1, $2[0]     # line 3
+ldw $6, $2[0]     # should be a hit
+
+# Overwrite first line to force eviction if cache is small
+# This should cause a write-back if that line was dirty
+ld $1, 0xC004
+ld $2, 0x5000
+stw $1, $2[0]     # line 0
+ldw $7, $2[0]     # should be a hit
+
+
+add $8, $7, 1     # use the loaded value to make sure the load completed
+ret
+
+# # Read back multiple lines
+# ldw $10, 0x1000    # should trigger a read if evicted
+# ldw $11, 0x2000    # hit or miss depending on replacement
+# ldw $12, 0x3000
+
+# # Randomized accesses within multiple lines
+# ld $20, 0x5000
+# stw $20, 0x5000
+# ld $21, 0x6000
+# stw $21, 0x6000
+# ldw $22, 0x5000
+# ldw $23, 0x6000

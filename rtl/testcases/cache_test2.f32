@@ -1,0 +1,78 @@
+# HWREGS base
+HWREGS_BASE         = 0xE0000000
+HWREGS_SEVEN_SEG    = 0x00
+HWREGS_LEDR         = 0x04
+HWREGS_SW           = 0x08
+HWREGS_KEY          = 0x0C
+HWREGS_UART_TX      = 0x10
+HWREGS_UART_RX      = 0x14
+HWREGS_GPIO0        = 0x18
+HWREGS_GPIO1        = 0x1C
+HWREGS_MOUSE_X      = 0x20
+HWREGS_MOUSE_Y      = 0x24
+HWREGS_MOUSE_BUTTONS= 0x28
+HWREGS_SIMULATION   = 0x2C
+HWREGS_TIMER        = 0x30
+HWREGS_BLIT_CMD     = 0x34
+HWREGS_BLIT_CTRL    = 0x38
+
+
+# ---------------------------------------------------
+# Cache Stress Test
+# ---------------------------------------------------
+
+# Constants
+ld $1, 0x0000        # Base SDRAM address
+ld $2, 0xA5A5A5A5    # Test pattern
+ld $3, 4096          # Total words (256 lines * 16 words)
+
+# ---------------------------------------------------
+# Phase 1: Fill all cache lines sequentially
+# ---------------------------------------------------
+fill_cache:
+stw $2, $1[0]     # Write pattern to memory
+add $2, 1          # Change pattern for next write
+add $1, 4          # Next word
+sub $3, 1
+bne $3, 0, fill_cache
+
+# ---------------------------------------------------
+# Phase 2: Pseudo-random accesses
+# ---------------------------------------------------
+# r0 = base, r3 = remaining words
+ld $1, 0x0000
+ld $3, 4096
+ld $7, 0x3FFF  # Mask for address generation
+
+pseudo_random_loop:
+    # Simple pseudo-random address generator (linear congruential)
+    add $1, 0x124       # deterministic increment
+    and $4, $1, $7      # wrap within range
+    ldw $5, $4[0]       # Read the word
+    add $5, 1
+    sub $3, 1
+    stw $5, $4[0]       # write back
+    bne $3, 0, pseudo_random_loop
+
+# ---------------------------------------------------
+# Phase 3: Compute checksum of entire memory region
+# ---------------------------------------------------
+ld $1, 0x0000
+ld $3, 4096
+ld $5, 0           # checksum
+
+checksum_loop:
+    ldw $4, $1[0]
+    add $1, 4
+    sub $3, 1
+    add $5, $4
+    bne $3, 0, checksum_loop
+
+# ---------------------------------------------------
+# Phase 4: Output checksum to Seven-Segment Display
+# ---------------------------------------------------
+ld $7,  HWREGS_BASE
+stw $5, $7[HWREGS_SEVEN_SEG] 
+
+# Done
+ret

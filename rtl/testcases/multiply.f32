@@ -1,0 +1,8 @@
+
+ld $1, 10
+ld $2, 20
+mul $3, $1, $2      # do a 32-bit multiply
+mul $4, $3, 3       # do another multiply to test pipelining
+ld $5, $4           # try to use the result immediately - should stall
+
+ret

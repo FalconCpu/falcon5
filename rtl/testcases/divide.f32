@@ -1,0 +1,139 @@
+# HWREGS base
+HWREGS_BASE         = 0xE0000000
+HWREGS_SEVEN_SEG    = 0x00
+HWREGS_LEDR         = 0x04
+HWREGS_SW           = 0x08
+HWREGS_UART_TX      = 0x10
+HWREGS_SIMULATION   = 0x44
+
+
+jmp start
+
+# =====================================================
+#                Exception handler (stub)
+# =====================================================
+exception:
+    jmp exit
+
+exit:
+bne $21, 0, .jmpz
+ld $1, 0xfff
+.forever:
+stw $1, $20[0x04]   # LED flash if ever reached
+jmp .forever
+.jmpz:
+ld $30, 0
+ret
+
+# =====================================================
+#                Test code
+# =====================================================
+start:
+    ld $20, HWREGS_BASE
+    ldw $21, $20[HWREGS_SIMULATION]  # simulation flag
+
+    # -----------------------------
+    # Unsigned divide (20 / 6 = 3 rem 2)
+    # -----------------------------
+    ld  $1, 20
+    ld  $2, 6
+    divu $3, $1, $2     # $3 = quotient
+    modu $4, $1, $2     # $4 = remainder
+
+    # Expect $3=3, $4=2
+    sub $5, $3, 3
+    bne $5, 0, fail
+    sub $5, $4, 2
+    bne $5, 0, fail
+
+    # -----------------------------
+    # Signed divide (+20 / -6 = -3 rem +2)
+    # -----------------------------
+    ld  $1, 20
+    ld  $2, -6
+    divs $3, $1, $2
+    mods $4, $1, $2
+
+    # Expect $3=-3, $4=2
+    sub $5, $3, -3
+    bne $5, 0, fail
+    sub $5, $4, 2
+    bne $5, 0, fail
+
+    # -----------------------------
+    # Signed divide (-20 / +6 = -3 rem -2)
+    # -----------------------------
+    ld  $1, -20
+    ld  $2, 6
+    divs $3, $1, $2
+    mods $4, $1, $2
+
+    # Expect $3=-3, $4=-2
+    sub $5, $3, -3
+    bne $5, 0, fail
+    sub $5, $4, -2
+    bne $5, 0, fail
+
+    # -----------------------------
+    # Unsigned big values (0xFFFFFFFE / 2 = 0x7FFFFFFF rem 0)
+    # -----------------------------
+    ld  $1, 0xFFFFFFFE
+    ld  $2, 2
+    divu $3, $1, $2
+    modu $4, $1, $2
+
+    ld  $6, 0x7FFFFFFF
+    sub $5, $3, $6
+    bne $5, 0, fail
+    sub $5, $4, 0
+    bne $5, 0, fail
+
+    # -----------------------------
+    # Divide by zero cases
+    # -----------------------------
+    # DIVU: 123 / 0
+    ld  $1, 123
+    ld  $2, 0
+    divu $3, $1, $2
+    modu $4, $1, $2
+    ld  $6, 0xFFFFFFFF
+    sub $5, $3, $6
+    bne $5, 0, fail
+    sub $5, $4, $1   # remainder = dividend
+    bne $5, 0, fail
+
+    # DIVS: -123 / 0
+    ld  $1, -123
+    ld  $2, 0
+    divs $3, $1, $2
+    mods $4, $1, $2
+    ld  $6, 0xFFFFFFFF
+    sub $5, $3, $6
+    bne $5, 0, fail
+    sub $5, $4, $1   # remainder = dividend
+    bne $5, 0, fail
+
+    # -----------------------------
+    # Signed overflow: -2^31 / -1
+    # Expected: quotient = -2^31, remainder = 0
+    # -----------------------------
+    ld  $1, 0x80000000   # -2^31
+    ld  $2, -1
+    divs $3, $1, $2
+    mods $4, $1, $2
+    sub $5, $3, $1
+    bne $5, 0, fail
+    sub $5, $4, 0
+    bne $5, 0, fail
+
+pass:
+    # Indicate success (write 0x1234 on Seven Segment display)
+    ld $1, 0x1234
+    stw $1, $20[HWREGS_SEVEN_SEG]
+    jmp exit
+
+fail:
+    # Indicate failure (write 0xDEAD to SIM register)
+    ld $1, 0xDEAD
+    stw $1, $20[HWREGS_SEVEN_SEG]
+    jmp exit

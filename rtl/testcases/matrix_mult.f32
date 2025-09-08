@@ -1,0 +1,157 @@
+# HWREGS base
+HWREGS_BASE         = 0xE0000000
+HWREGS_SEVEN_SEG    = 0x00
+HWREGS_LEDR         = 0x04
+HWREGS_SW           = 0x08
+HWREGS_UART_TX      = 0x10
+HWREGS_SIMULATION   = 0x44
+
+ld   $20, HWREGS_BASE
+ldw  $21, $20[HWREGS_SIMULATION]
+
+# -----------------------------------------------------
+# Matrix sizes
+# -----------------------------------------------------
+ld   $1, 16                 # Default N = 16
+bne  $21, 0, .no_hw_size
+ldw  $2, $20[HWREGS_SW]     # Use switches in hardware
+and  $2, 0x3F               # Mask for <= 64
+bne  $2, 0, .use_sw
+jmp  .no_hw_size
+.use_sw:
+ld   $1, $2
+.no_hw_size:
+
+# $1 = N
+ld   $22, $1                # Save N
+mul  $23, $22, $22          # N*N
+lsl  $23, 2                 # Bytes for one matrix
+
+# Base addresses
+ld   $11, 0x2000            # A base
+add  $12, $11, $23          # B base
+add  $13, $12, $23          # C base
+
+# -----------------------------------------------------
+# Init matrices A and B with random values
+# -----------------------------------------------------
+ld   $4, $11                # Current = A base
+add  $5, $12, $23           # End = C base
+ld   $1, 123456789          # Seed
+
+.init_loop:
+lsr  $2, $1, 30
+lsr  $3, $1, 27
+xor  $2, $3
+and  $2, 1
+lsl  $1, 1
+or   $1, $2
+stw  $1, $4[0]
+add  $4, 4
+bne  $4, $5, .init_loop
+
+# -----------------------------------------------------
+# Zero C
+# -----------------------------------------------------
+ld   $4, $13
+add  $5, $13, $23
+ld   $1, 0
+.zero_loop:
+stw  $1, $4[0]
+add  $4, 4
+bne  $4, $5, .zero_loop
+
+# -----------------------------------------------------
+# Matrix multiply
+# -----------------------------------------------------
+ld   $24, 0                 # i = 0
+.outer_i:
+stw  $24, $20[HWREGS_SEVEN_SEG]   # Show i on seven-seg
+
+ld   $25, 0                 # j = 0
+.outer_j:
+ld   $26, 0                 # sum = 0
+ld   $27, 0                 # k = 0
+
+.inner_k:
+# load A[i][k]
+mul  $2, $24, $22           # i*N
+add  $2, $2, $27            # + k
+lsl  $2, 2
+add  $2, $11, $2
+ldw  $2, $2[0]
+
+# load B[k][j]
+mul  $3, $27, $22           # k*N
+add  $3, $3, $25
+lsl  $3, 2
+add  $3, $12, $3
+ldw  $3, $3[0]
+
+mul  $2, $2, $3
+add  $26, $26, $2           # sum += A*B
+
+add  $27, 1
+blt  $27, $22, .inner_k
+
+# store C[i][j]
+mul  $2, $24, $22
+add  $2, $2, $25
+lsl  $2, 2
+add  $2, $13, $2
+stw  $26, $2[0]
+
+add  $25, 1
+blt  $25, $22, .outer_j
+
+add  $24, 1
+blt  $24, $22, .outer_i
+
+# -----------------------------------------------------
+# Compute checksum of C
+# -----------------------------------------------------
+ld   $4, $13
+add  $5, $13, $23
+ld   $1, 0
+.checksum_loop:
+ldw  $2, $4[0]
+add  $1, $1, $2
+add  $4, 4
+bne  $4, $5, .checksum_loop
+
+# Print checksum
+jsr  print_hex
+ld   $1, 0xA
+stw  $1, $20[HWREGS_UART_TX]
+
+# Exit / loop
+beq  $21, 0, hw_exit
+ld   $30, 0
+ret
+
+hw_exit:
+jmp hw_exit
+
+# -----------------------------------------------------
+# Print hex subroutine (as before)
+# -----------------------------------------------------
+print_hex:
+bne $21, 0, .skip
+ld  $3, 10
+.poll:
+ldw $2, $20[HWREGS_UART_TX]
+blt $2, $3, .poll
+.skip:
+ld  $2, 8
+ld  $4, 10
+.loop2:
+lsr $3, $1, 28
+blt $3, $4, .digit
+add $3, 0x7
+.digit:
+add $3, 0x30
+stw $3, $20[HWREGS_UART_TX]
+lsl $1, 4
+sub $2, 1
+bne $2, 0, .loop2
+ret
