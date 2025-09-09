@@ -1250,4 +1250,33 @@ class ExecuteTest {
         runTest(prog, expected)
     }
 
+
+    @Test
+    fun abortTest() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+
+            fun main()
+                for i in 0..10
+                    if i = 5
+                        abort 0x1234
+                    print(i)
+                    print('\n')
+        """.trimIndent()
+
+        val expected = """
+            0
+            1
+            2
+            3
+            4
+            7-Segment = 001234
+            Abort called with code 00001234 at FFFF036C
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+
 }

@@ -1,4 +1,9 @@
 start.f32
+hwregs.fpl
+errors.fpl
 exceptions.fpl
 task.fpl
+kprintf.fpl
+list.fpl
+buddyAllocator.fpl
 main.fpl

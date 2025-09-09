@@ -42,7 +42,7 @@ class TctExtractCompoundExpr(location: Location, val expr:TctExpr, val index:Int
 class TctTryExpr(location: Location, val expr: TctExpr, type:Type) : TctExpr(location, type)
 class TctVarargExpr(location: Location, val exprs: List<TctExpr>, type:Type) : TctExpr(location, type)
 class TctMakeTupleExpr(location: Location, val elements: List<TctExpr>, type:TypeTuple) : TctExpr(location, type)
-
+class TctAbortExpr(location: Location, val abortCode: TctExpr) : TctExpr(location, TypeNothing)
 
 class TctErrorExpr(location: Location, val message: String = "") : TctExpr(location, TypeError) {
     init {

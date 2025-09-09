@@ -32,6 +32,7 @@ class AstAsExpr(location: Location, val expr: AstExpr, val typeExpr: AstType) : 
 class AstTryExpr(location: Location, val expr: AstExpr) : AstExpr(location)
 class AstMakeTupleExpr(location: Location, val elements: List<AstExpr>) : AstExpr(location)
 class AstUnsafeExpr(location: Location, val expr: AstExpr) : AstExpr(location)
+class AstAbortExpr(location: Location, val abortCode: AstExpr) : AstExpr(location)
 
 // Statement nodes
 sealed class AstStmt(location: Location) : Ast(location)

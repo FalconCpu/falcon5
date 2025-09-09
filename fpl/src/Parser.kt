@@ -97,6 +97,12 @@ class Parser(val lexer: Lexer) {
         return AstReturnExpr(loc.location, expr)
     }
 
+    private fun parseAbort() : AstAbortExpr {
+        val loc = expect(ABORT)
+        val expr = parseExpr()
+        return AstAbortExpr(loc.location, expr)
+    }
+
     private fun parseTry() : AstTryExpr {
         val loc = expect(TRY)
         val expr = parseExpr()
@@ -144,6 +150,7 @@ class Parser(val lexer: Lexer) {
             TRY -> parseTry()
             BREAK -> parseBreak()
             CONTINUE -> parseContinue()
+            ABORT -> parseAbort()
             OPENB -> parseParentheses()
             NEW, LOCAL, CONST -> parseNew()
             else -> throw ParseError(currentToken.location, "Got '$currentToken' when expecting primary expression")
@@ -650,7 +657,7 @@ class Parser(val lexer: Lexer) {
                 ELSIF -> throw ParseError(currentToken.location, "ELSIF without IF")
                 ELSE -> throw ParseError(currentToken.location, "ELSE without IF")
                 END -> throw ParseError(currentToken.location, "END without IF, WHILE, REPEAT or FUN")
-                IDENTIFIER, OPENB, RETURN, BREAK, CONTINUE -> parseExpressionStmt()
+                IDENTIFIER, OPENB, RETURN, BREAK, CONTINUE, ABORT -> parseExpressionStmt()
                 else -> throw ParseError(currentToken.location, "Got '$currentToken' when expecting statement")
             }
         } catch (e: ParseError) {

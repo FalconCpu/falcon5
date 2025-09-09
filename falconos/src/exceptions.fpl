@@ -1,5 +1,3 @@
-extern fun print(s:String)
-extern fun printHex(i:Int)
 
 enum Exception(text:String) [
     NONE                     ("No Exception"),

@@ -268,6 +268,13 @@ fun TctExpr.codeGenRvalue() : Reg {
 
         is TctNewInlineArrayExpr ->
             allocateInlineArray(arena, false, lambda, type as TypeInlineArray)
+
+        is TctAbortExpr -> {
+            val codeReg = abortCode.codeGenRvalue()
+            currentFunc.addMov(cpuRegs[1], codeReg)
+            currentFunc.addCall(Stdlib.abort)
+            zeroReg
+        }
     }
 }
 

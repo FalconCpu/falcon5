@@ -1,6 +1,9 @@
-extern fun print(s:String)
 
 fun main()
-    val a = new Array<Int>(5)
+    val msg = "world"
+    kprintf("Hello %8x X\n", 12345)
+    kprintf("Hello %08x X\n", 12345)
+    kprintf("Hello %-8x X\n", 12345)
 
-    val b = a[6]
+    kprintf("Hello %8s X\n",  msg)
+    kprintf("Hello %-8s X\n", msg)

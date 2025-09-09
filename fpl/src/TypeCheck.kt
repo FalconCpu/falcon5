@@ -610,6 +610,12 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
             insideUnsafe = oldInsideUnsafe
             tctExpr
         }
+
+        is AstAbortExpr -> {
+            val tcAbortExpr = abortCode.typeCheckRvalue(scope).checkType(TypeInt)
+            pathContext = unreachablePathContext
+            TctAbortExpr(location, tcAbortExpr)
+        }
     }
 }
 
