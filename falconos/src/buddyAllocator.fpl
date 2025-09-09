@@ -1,0 +1,109 @@
+# ###################################################################
+#                      Buddy allocator
+# ###################################################################
+# The buddy allocator is used to allocate large blocks of memory.
+# Blocks are always allocated power of 2 multiples of 4kB.
+#
+# Blocks are represented as Integers, with the The low 4 bits show
+# the size of the block as a power of 2 times 4kB (0=4k, 1=8k, 2=16k, ...)
+# and the upper 20 bits show the address of the block.
+#
+# The maximum size of a block is 2^15 * 4kB = 128MB.
+#
+# So for example a integer 0x12345003 represents a block of 32kB at address 0x12345000.
+
+const BUDDY_MASK_ADDRESS = 0xFFFFF000
+const BUDDY_MASK_SIZE    = 0x0000000F
+
+# Keep a list of free blocks of each size:-
+var freeBlocks : InlineArray< List<Int> >(16)
+
+# Get the buddy block of the given block
+fun getBuddy(blk:Int) -> Int
+    val size = blk & BUDDY_MASK_SIZE
+    return blk ^ (0x1000 lsl size)
+
+# Merge the given block with its buddy to form a larger block
+fun mergeBuddy(blk:Int) -> Int
+    val size = blk & BUDDY_MASK_SIZE
+    val base = blk & ( 0xFFFFE000 lsl size)
+    return base | (size+1)
+
+
+# Find the block size needed to hold the given size
+fun buddyLog2(size:Int) -> Int
+    var s = size
+    var logSize = 0
+    while s>4096
+        s = s lsr 1
+        logSize += 1
+    return logSize
+
+
+# ###################################################################
+#                          freeBlock
+# ###################################################################
+# Free a block of memory given its block ID
+
+fun freeBlock(b:Int)
+    var blk = b
+    # Look to see if the buddy is free - if so merge the two blocks to form a larger block and repeat
+    while freeBlocks[blk&BUDDY_MASK_SIZE].remove( getBuddy(blk) )
+        blk = mergeBuddy(blk)
+    freeBlocks[blk&BUDDY_MASK_SIZE].add(blk)
+
+
+# ###################################################################
+#                          allocateBlock
+# ###################################################################
+# Allocates a block of memory of the requested size
+# returns a block ID (address or'd with logSize)
+
+fun allocateBlock(size:Int) -> Int
+    val logSize = buddyLog2(size) 
+    
+    # find the first block equal to or larger than the requested size
+    var slot = logSize
+    while freeBlocks[slot].isEmpty()
+        slot += 1
+        if slot=16 
+            panic("Out of memory", Error.OUT_OF_MEMORY)
+
+    var blk = freeBlocks[slot].take()
+
+    # split blocks down until we get to the requested size
+    while (blk&BUDDY_MASK_SIZE)>logSize
+        blk -= 1      # decrement -> cut the block in half
+        freeBlocks[blk&0xF].add(getBuddy(blk))
+
+    return blk
+
+# ###################################################################
+#                    initializeBuddyAllocator
+# ###################################################################
+# Initialize the buddy allocator - add all memory in the range to the free lists
+
+fun initializeBuddyAllocator()
+    # Initialize the free block lists. 
+    freeBlocks = new InlineArray<List<Int>>(16){ new List<Int>() }
+
+    # Add all memory in the range to the free lists
+    const startOfBuddyAllocator = 0x10004
+    const endOfBuddyAllocator = 0x4000000
+    var blk = startOfBuddyAllocator
+    while blk < endOfBuddyAllocator
+        freeBlock(blk)
+        blk = (blk & BUDDY_MASK_ADDRESS)*2 + (blk & 0x0f)+1
+
+# ###################################################################
+#                       dumpBuddyAllocator
+# ###################################################################
+# Print out the contents of the buddy allocator free lists
+
+fun dumpBuddyAllocator()
+    kprintf("Buddy allocator dump\n")
+    for i in 0..<16
+        kprintf("Size=%x: ",i)
+        for blk in freeBlocks[i]
+            kprintf("%08x ",blk)
+        kprintf("\n")

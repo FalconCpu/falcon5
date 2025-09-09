@@ -1,0 +1,84 @@
+class List<T>
+    var size = 0
+    var array = new Array<T>(8)
+
+    fun add(item: T)
+        if size >= array.size
+            var oldArray = array
+            array = new Array<T>(array.size * 2)
+            for i in 0..<oldArray.size
+                array[i] = oldArray[i]
+            free oldArray
+        array[size] = item
+        size+=1
+
+    fun get(index: Int) -> T
+        return array[index]
+
+    fun set(index:Int, item: T)
+        array[index] = item
+
+    fun isEmpty() -> Bool
+        return size = 0
+
+    fun isNotEmpty() -> Bool
+        return size > 0
+
+    fun take() -> T
+        if size = 0
+            abort ABORT_INVALID_ARGUMENT
+        size -= 1
+        return array[size]
+
+    fun clear()
+        size = 0
+
+    fun removeAt(index: Int) -> T
+        var ret = array[index]
+        for i in index..<size-1
+            array[i] = array[i+1]
+        size-=1
+        return ret
+
+    fun remove(item:T) -> Bool
+        for i in 0..<size
+            if array[i] = item
+                for j in i..<size-1
+                    array[j] = array[j+1]
+                size-=1
+                return true
+        return false
+
+    fun indexOf(item:T) -> Int
+        for i in 0..<size
+            if array[i] = item
+                return i
+        return -1
+
+    fun addAt(index: Int, item: T)
+        if size >= array.size
+            var oldArray = array
+            array = new Array<T>(array.size * 2)
+            for i in 0..<oldArray.size
+                array[i] = oldArray[i]
+            free oldArray
+        for i in size-1..>=index
+            array[i+1] = array[i]
+        array[index] = item
+        size+=1
+
+    fun contains(item:T) -> Bool
+        for i in 0..<size
+            if array[i] = item
+                return true
+        return false
+
+    fun last() -> T?
+        if size = 0
+            return null
+        return array[size-1]
+
+    fun first() -> T?
+        if size = 0
+            return null
+        return array[0]

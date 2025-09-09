@@ -1,0 +1,99 @@
+
+
+fun kprintString(s:String, width:Int, align:Int)
+    if align=1  # Right
+        for j in 0 ..< width-s.length
+            uartTx(' ')
+    for c in s
+        uartTx(c)
+    if align=0  # Left
+        for j in 0 ..< width-s.length
+            uartTx(' ')
+
+fun kprintField(ary:Array<Char>, length:Int, width:Int, align:Int)
+    if align=1  # Right
+        for j in 0 ..< width-length
+            uartTx(' ')
+    if align=2  # Pad with zeros
+        for j in 0 ..< width-length
+            uartTx('0')
+    for j in (length-1) ..>= 0
+        uartTx(ary[j])
+    if align=0  # Left
+        for j in 0 ..< width-length
+            uartTx(' ')
+
+fun kprintInt(i:Int, width:Int,align:Int) 
+    val arry = local Array<Char>(16)
+    var index = 0
+    var n = i
+    if n<0
+        uartTx('-')
+        n=-n
+    repeat
+        val digit = n % 10
+        arry[index] = ((digit+('0' as Int)) as Char)
+        index += 1
+        n = n / 10
+    until n=0
+    kprintField(arry, index, width, align)
+
+fun kprintHex(i:Int, width:Int, align:Int) 
+    val arry = local Array<Char>(8)
+    var index = 0
+    var n = i
+    repeat
+        val digit = n & 0xF
+        if digit<10
+            arry[index] = ((digit+('0' as Int)) as Char)
+        else
+            arry[index] = ((digit-10+('A' as Int)) as Char)
+        index += 1
+        n = n lsr 4
+    until n=0
+    kprintField(arry, index, width,align)
+
+fun kprintf(format:String, vararg arg:Any)
+    var index = 0
+    var inFormat = false
+    var width = 0
+    var align = 1  # 0:Left, 1:Right 2:Pad with zeros
+    for c in format
+        if not inFormat 
+            width = 0
+            align = 1
+
+        if inFormat 
+            if c='0' and width=0
+                align = 2  # Pad with zeros
+            elsif c='-' and width=0
+                align = 0  # Left
+            elsif c>='0' and c<='9'
+                width = width*10 + (c as Int) - ('0' as Int)
+            elsif c='s'
+                kprintString(arg[index] as String, width, align)
+                index += 1
+                inFormat = false
+            elsif c='d'
+                kprintInt(arg[index] as Int, width, align)
+                index += 1
+                inFormat = false
+            elsif c='x'
+                kprintHex(arg[index] as Int, width, align)
+                index += 1
+                inFormat = false
+            elsif c='c'
+                uartTx(arg[index] as Char)
+                index += 1
+                inFormat = false
+            elsif c='p'
+                kprintHex(arg[index] as Int, 8, 2)
+                index += 1
+                inFormat = false
+            else
+                uartTx(c)
+                inFormat = false
+        else if c='%'
+            inFormat = true
+        else
+            uartTx(c)

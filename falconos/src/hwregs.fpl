@@ -1,0 +1,33 @@
+
+class HwRegs 
+    var seven_seg      : Int  # 6 digit hexadecimal seven segment display
+    var ledr           : Int  # 10 LEDs
+    var sw             : Int  # 10 Switches
+    var key            : Int  # 4 Push buttons
+    var uart_tx        : Int  # Write = byte of data to transmit, read = number of slots free in fifo
+    var uart_rx        : Int  # 1 byte of data from the uart, -1 if no data
+    var gpio0          : Int  # 32 bits of GPIO0
+    var gpio1          : Int  # 32 bits of GPIO1
+    var mouse_x        : Int  # Mouse X coordinate
+    var mouse_y        : Int  # Mouse Y coordinate
+    var mouse_buttons  : Int  # Mouse buttons (bit 0 = left, bit 1 = right, bit 2 = middle)
+    var reserved       : Int  #
+    var timer          : Int  # 32 bit free running timer
+    var blit_cmd       : Int  # Write=Blitter Command Read=Fifo full
+    var blit_ctrl      : Int  # Blitter Control register 
+    var reserved2      : Int  # 
+    var simulation     : Int  # Reads as 1 in simulation, 0 in hardware
+    var perf_ctrl      : Int  # Performance counter control register
+    var perf_count_ok  : Int  # Performance counter: Number of instructions executed successfully
+    var perf_count_jmp : Int  # Performance counter: Number of nulls due to jump delay slots
+    var perf_count_if  : Int  # Performance counter: Number of nulls due to instruction fetch stalls
+    var perf_count_sb  : Int  # Performance counter: Number of nulls due to scoreboard stalls
+    var perf_count_rs  : Int  # Performance counter: Number of nulls due to resource stalls (divider/memory)
+
+const hwregs = unsafe(0xE0000000 as HwRegs)
+
+fun uartTx(c:Char)
+    # wait for space in tx fifo
+    while hwregs.uart_tx=0
+        val dummy = 0
+    hwregs.uart_tx = (c as Int)
