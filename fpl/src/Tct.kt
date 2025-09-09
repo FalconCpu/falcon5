@@ -59,6 +59,7 @@ class TctEmptyStmt(location: Location) : TctStmt(location)
 class TctExpressionStmt(location: Location, val expr: TctExpr) : TctStmt(location)
 class TctAssignStmt(location: Location, val op:TokenKind, val lhs: TctExpr, val rhs: TctExpr) : TctStmt(location)
 class TctClassDefStmt(location: Location, val klass: TypeClass, val initializers: List<TctFieldInitializer>, val methods:List<TctFunctionDefStmt>) : TctStmt(location)
+class TctFreeStmt(location: Location, val expr: TctExpr) : TctStmt(location)
 
 // Statement Block nodes
 sealed class TctBlock(location: Location, val body:List<TctStmt>) : TctStmt(location)

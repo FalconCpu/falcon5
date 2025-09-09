@@ -27,11 +27,9 @@ Then (short form if)
 += -=
 casts
 unsafe casts
+inline arrays
 
 
-6) Pass tuples as function parameters
-7) Array of tuples
-8) Tuple Class members
 
 TODO - Front end:
 abstract class / abstract functions
@@ -40,12 +38,12 @@ when statement
 if expressions
 ?. ?:
 in range test
-inline arrays
 Local class instances
 const class instances ?
 unsafe array access
 super.calls to parent class methods
 Function pointers
+public/private/protected
 
 
 Backend:

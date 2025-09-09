@@ -439,7 +439,7 @@ class TypeCheckTest {
         """.trimIndent()
 
         val expectedError = """
-            input.fpl:7.16-7.16:  Class 'Dog' has no member 'age'
+            input.fpl:7.13-7.15:  Class 'Dog' has no member 'age'
         """.trimIndent()
 
         runTest(prog, expectedError)
@@ -467,7 +467,7 @@ class TypeCheckTest {
         """.trimIndent()
 
         val expectedError = """
-            input.fpl:2.5-2.7:  Duplicate symbol: x
+            input.fpl:2.9-2.9:  Duplicate symbol: x
         """.trimIndent()
 
         runTest(prog, expectedError)

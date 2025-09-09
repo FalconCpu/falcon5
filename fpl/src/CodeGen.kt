@@ -140,7 +140,11 @@ fun TctExpr.codeGenRvalue() : Reg {
             currentFunc.addAlu(op, lhsReg, rhsReg)
         }
 
-        is TctNegateExpr -> TODO()
+        is TctNegateExpr -> {
+            val reg = expr.codeGenRvalue()
+            currentFunc.addAlu(BinOp.SUB_I, zeroReg, reg)
+        }
+
         is TctLambdaExpr -> TODO()
         is TctRangeExpr -> TODO()
 
@@ -586,7 +590,11 @@ fun TctStmt.codeGenStmt() {
             if (function.thisSymbol!=null)
                 currentFunc.addMov(currentFunc.getReg(function.thisSymbol), cpuRegs[index++]) // 'this' pointer
             for(param in function.parameters)
-                currentFunc.addMov( currentFunc.getReg(param), cpuRegs[index++])
+                if (param.type is TypeTuple) {
+                    val regs = param.type.elementTypes.map { currentFunc.addCopy(cpuRegs[index++]) }
+                    currentFunc.symToReg[param] = currentFunc.newCompoundReg(regs)
+                } else
+                    currentFunc.addMov( currentFunc.getReg(param), cpuRegs[index++])
             // Generate code for the function body
             for(stmt in body)
                 stmt.codeGenStmt()
@@ -739,12 +747,12 @@ fun TctStmt.codeGenStmt() {
                 currentFunc.addLdImm(array.type.size)
             else
                 currentFunc.addLoad(arrayStart,lengthSymbol)
-            val elementSize = if (array.type is TypeInlineArray)
-                    array.type.elementType.getSize()
-            else if (array.type is TypeArray)
-                    array.type.elementType.getSize()
-            else
-                error("Cannot determine element type")
+            val elementSize = when(array.type) {
+                is TypeInlineArray -> array.type.elementType.getSize()
+                is TypeArray -> array.type.elementType.getSize()
+                is TypeString -> 1
+                else -> error("Cannot determine element type")
+            }
             val sizeInBytes = currentFunc.addAlu(BinOp.MUL_I, arraySize, elementSize)
             val endReg = currentFunc.addAlu(BinOp.ADD_I, arrayStart, sizeInBytes)
             val ptrReg = currentFunc.newUserTemp()
@@ -827,6 +835,29 @@ fun TctStmt.codeGenStmt() {
             // Look for any methods
             for (stmt in methods)
                 stmt.codeGenStmt()
+        }
+
+        is TctFreeStmt -> {
+            val reg = expr.codeGenRvalue()
+            val label = currentFunc.newLabel()
+
+
+            if (expr.type is TypeNullable)
+                currentFunc.addBranch(BinOp.EQ_I, reg, zeroReg, label)
+
+            // Call the destructor if there is one
+            val tt = if (expr.type is TypeNullable) expr.type.elementType else expr.type
+            if (tt is TypeClassInstance) {
+                val destructor = tt.genericType.destructor
+                if (destructor!=null) {
+                    currentFunc.addMov(cpuRegs[1], reg)
+                    currentFunc.addCall(destructor.function)
+                }
+            }
+
+            currentFunc.addMov(cpuRegs[1], reg)
+            currentFunc.addCall(Stdlib.free)
+            currentFunc.addLabel(label)
         }
     }
 }

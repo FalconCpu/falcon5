@@ -178,10 +178,10 @@ jmp .forever  # Loop forever
                     /printHex(Int):
 # ==========================================================
 # Print the value in $1 as 8 hex digits
-bne $21, 0, .skip            # If in a simulation skip polling the UART
+ld $7, HWREGS_BASE           # Load base address of hardware registers
 ld $3, 10                    # $3 = required free slots in TX FIFO
 .poll:
-ldw $2, $20[HWREGS_UART_TX]  # Poll UART status
+ldw $2, $7[HWREGS_UART_TX]  # Poll UART status
 blt $2, $3, .poll            # Loop until enough free slots
 
 .skip:
@@ -193,7 +193,7 @@ blt $3, $4 , .digit
 add $3, 0x7                 # Convert to ASCII letter
 .digit:
 add $3, 0x30               # Convert to ASCII digit
-stw $3, $20[HWREGS_UART_TX]
+stw $3, $7[HWREGS_UART_TX]
 lsl $1, 4
 sub $2, 1
 bne $2, 0, .loop2

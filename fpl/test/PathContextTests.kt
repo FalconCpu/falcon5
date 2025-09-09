@@ -353,7 +353,7 @@ class PathContextTests {
         """.trimIndent()
 
         val expected = """
-            input.fpl:7.19-7.19:  Cannot access member as expression may be null
+            input.fpl:7.15-7.18:  Cannot access member as expression may be null
         """.trimIndent()
 
         runTest(prog, expected)
@@ -468,7 +468,7 @@ class PathContextTests {
         """.trimIndent()
 
         val expected = """
-            input.fpl:6.21-6.21:  Cannot access member as expression may be null
+            input.fpl:6.17-6.20:  Cannot access member as expression may be null
         """.trimIndent()
 
         runTest(prog, expected)
@@ -547,7 +547,7 @@ class PathContextTests {
         """.trimIndent()
 
         val expected = """
-            input.fpl:9.17-9.17:  Cannot access member 'name' of type 'Null'
+            input.fpl:9.13-9.16:  Cannot access member 'name' of type 'Null'
         """.trimIndent()
 
         runTest(prog, expected)
@@ -593,7 +593,7 @@ class PathContextTests {
         """.trimIndent()
 
         val expected = """
-            input.fpl:12.17-12.17:  Cannot access member 'name' of type 'Null'
+            input.fpl:12.13-12.16:  Cannot access member 'name' of type 'Null'
         """.trimIndent()
 
         runTest(prog, expected)
@@ -666,7 +666,7 @@ class PathContextTests {
         """.trimIndent()
 
         val expected = """
-            input.fpl:12.17-12.17:  Cannot access member as expression may be null
+            input.fpl:12.13-12.16:  Cannot access member as expression may be null
         """.trimIndent()
 
         runTest(prog, expected)
@@ -724,7 +724,7 @@ class PathContextTests {
         """.trimIndent()
 
         val expected = """
-            input.fpl:13.17-13.17:  Cannot access member as expression may be null
+            input.fpl:13.13-13.16:  Cannot access member as expression may be null
         """.trimIndent()
 
         runTest(prog, expected)
@@ -761,7 +761,7 @@ class PathContextTests {
         """.trimIndent()
 
         val expected = """
-            input.fpl:2.1-2.3:  Function 'foo' must return a value along all paths
+            input.fpl:2.5-2.7:  Function 'foo' must return a value along all paths
         """.trimIndent()
 
         runTest(prog, expected)
@@ -803,7 +803,7 @@ class PathContextTests {
         """.trimIndent()
 
         val expected = """
-            input.fpl:2.1-2.3:  Function 'foo' must return a value along all paths
+            input.fpl:2.5-2.7:  Function 'foo' must return a value along all paths
         """.trimIndent()
 
         runTest(prog, expected)
@@ -824,7 +824,7 @@ class PathContextTests {
         """.trimIndent()
 
         val expected = """
-            input.fpl:2.1-2.3:  Function 'foo' must return a value along all paths
+            input.fpl:2.5-2.7:  Function 'foo' must return a value along all paths
         """.trimIndent()
 
         runTest(prog, expected)
@@ -886,7 +886,7 @@ class PathContextTests {
         """.trimIndent()
 
         val expected = """
-            input.fpl:2.1-2.3:  Function 'foo' must return a value along all paths
+            input.fpl:2.5-2.7:  Function 'foo' must return a value along all paths
         """.trimIndent()
 
         runTest(prog, expected)

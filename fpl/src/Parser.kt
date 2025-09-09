@@ -51,7 +51,10 @@ class Parser(val lexer: Lexer) {
     private fun parseIntLit() : AstIntLiteral {
         val tok = expect(INTLITERAL)
         try {
-            val value = Integer.parseInt(tok.value)
+            val value = if (tok.value.startsWith("0x",ignoreCase = true))
+                    Integer.parseUnsignedInt(tok.value.substring(2), 16)
+                else
+                    Integer.parseInt(tok.value)
             return AstIntLiteral(tok.location, value)
         } catch(_: NumberFormatException) {
             Log.error(tok.location, "Malformed integer literal: '$tok'")
@@ -491,10 +494,20 @@ class Parser(val lexer: Lexer) {
         }
     }
 
+    private fun parseConstDecl() : AstStmt {
+        expect(CONST)
+        val id = expect(IDENTIFIER)
+        val astType = if (canTake(COLON)) parseType() else null
+        expect(EQ)
+        val expr = parseExpr()
+        expectEol()
+        return AstConstDecl(id.location, id.value, astType, expr)
+    }
+
     private fun parseFunctionDef() : AstFunctionDefStmt {
         val qualifier = if (currentToken.kind in listOf(EXTERN,OVERRIDE,VIRTUAL)) nextToken().kind else EOL
         expect(FUN)
-        val name = expect(IDENTIFIER)
+        val name = expect(IDENTIFIER, FREE)
         val params = parseParameterList(false)
         val retType = if (canTake(ARROW)) parseType() else null
         expectEol()
@@ -613,18 +626,27 @@ class Parser(val lexer: Lexer) {
         return AstEnumDefStmt(name.location, name.value, params, values, emptyList())
     }
 
+    private fun parseFreeStmt() : AstStmt {
+        val tok = expect(FREE)
+        val expr = parseExpr()
+        expectEol()
+        return AstFreeStmt(tok.location, expr)
+    }
+
     private fun parseStmt() : AstStmt {
         val loc = currentToken.location
         return try {
             when (currentToken.kind) {
                 EXTERN, OVERRIDE, VIRTUAL, FUN -> parseFunctionDef()
                 VAL, VAR -> parseVarDecl()
+                CONST -> parseConstDecl()
                 WHILE -> parseWhileStmt()
                 REPEAT -> parseRepeatStmt()
                 IF -> parseIfStmt()
                 FOR -> parseForStmt()
                 CLASS -> parseClassDef()
                 ENUM -> parseEnum()
+                FREE -> parseFreeStmt()
                 ELSIF -> throw ParseError(currentToken.location, "ELSIF without IF")
                 ELSE -> throw ParseError(currentToken.location, "ELSE without IF")
                 END -> throw ParseError(currentToken.location, "END without IF, WHILE, REPEAT or FUN")

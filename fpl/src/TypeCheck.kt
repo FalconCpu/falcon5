@@ -384,8 +384,6 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
                 is TypeInlineArray -> {
                     if (tcArgs.isNotEmpty())
                         return TctErrorExpr(location, "InlineArray constructor takes no arguments")
-                    if (tcLambda!=null)
-                        return TctErrorExpr(location, "InlineArray constructor cannot have an initializer lambda")
                     val arrayType = TypeInlineArray.create(type.elementType, type.size)
                     tcLambda?.checkType(type.elementType)
 
@@ -552,12 +550,28 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
             val typeR = typeExpr.resolveType(scope)
             if (typeR is TypeError)               return TctErrorExpr(location, "")
 
+            if (typeR is TypeEnum && tctExpr is TctConstant && tctExpr.value is IntValue) {
+                val intValue = tctExpr.value.value
+                if (intValue<0 || intValue>=typeR.entries.size) {
+                    Log.error(location, "Value $intValue is out of range for enum '${typeR.name}'")
+                    return TctErrorExpr(location, "")
+                }
+                val entry = typeR.entries[intValue]
+                return TctConstant(location, entry.value)
+            }
+
             return if ( (tctExpr.type is TypeEnum && typeR is TypeInt) ||
-                (tctExpr.type is TypeInt && typeR is TypeEnum))
+                (tctExpr.type is TypeInt && typeR is TypeEnum) ||
+                (tctExpr.type is TypeChar && typeR is TypeInt) ||
+                (tctExpr.type is TypeInt && typeR is TypeChar) ||
+                (tctExpr.type is TypeAny) )
                 TctAsExpr(location, tctExpr, typeR)
-            else if (insideUnsafe)
-                TctAsExpr(location, tctExpr, typeR)
-            else
+            else if (insideUnsafe) {
+                if (tctExpr is TctConstant && tctExpr.value is IntValue)
+                    TctConstant(location, IntValue(tctExpr.value.value, typeR))
+                else
+                    TctAsExpr(location, tctExpr, typeR)
+            } else
                 TctErrorExpr(location, "Cannot cast type '${tctExpr.type}' to '${typeR.name}'")
         }
 
@@ -807,6 +821,7 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
                 is TypeRange -> tcRange.type.elementType
                 is TypeArray -> tcRange.type.elementType
                 is TypeInlineArray -> tcRange.type.elementType
+                is TypeString -> TypeChar
                 is TypeClassInstance -> {
                     iterableDesc = tcRange.type.isIterable()
                     iterableDesc?.second?.returnType ?: reportTypeError(location, "Type '${tcRange.type}' is not iterable")
@@ -836,6 +851,13 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
 
             } else if (tcRange.type is TypeArray) {
                 if (!tcRange.type.elementType.isAssignableTo(type))
+                    reportTypeError(
+                        location,
+                        "Cannot iterate over array of type '${tcRange.type}' with index type '${type}'"
+                    )
+                TctForArrayStmt(location, sym, tcRange, tcBody)
+            } else if (tcRange.type is TypeString) {
+                if (!TypeChar.isAssignableTo(type))
                     reportTypeError(
                         location,
                         "Cannot iterate over array of type '${tcRange.type}' with index type '${type}'"
@@ -927,6 +949,32 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
                 syms += sym
             }
             return TctDestructuringDeclStmt(location, syms, rhs)
+        }
+
+        is AstConstDecl -> {
+            val tctInitializer = value.typeCheckRvalue(scope)
+            val type = astType?.resolveType(scope) ?: tctInitializer.type
+            if (type is TypeUnit)
+                Log.error(location, "Constant '${name}' cannot be of type Unit")
+            if (tctInitializer !is TctConstant) {
+                Log.error(location, "Constant '${name}' must be initialized with a constant expression")
+                return TctEmptyStmt(location)
+            }
+            if (!tctInitializer.type.isAssignableTo(type))
+                Log.error(location, "Cannot assign constant of type '${tctInitializer.type}' to constant of type '${type}'")
+            val sym = ConstSymbol(location, name, type, tctInitializer.value)
+            scope.addSymbol(sym)
+            return TctEmptyStmt(location)
+        }
+
+        is AstFreeStmt -> {
+            val tctExpr = expr.typeCheckRvalue(scope)
+            val tt = if (tctExpr.type is TypeNullable) tctExpr.type.elementType else tctExpr.type
+            if (tt !is TypeClassInstance && tt !is TypeArray && tt !is TypeInlineArray) {
+                Log.error(location, "Cannot free type '${tctExpr.type}'")
+                return TctEmptyStmt(location)
+            }
+            TctFreeStmt(location, tctExpr)
         }
     }
 }
@@ -1117,6 +1165,19 @@ private fun AstBlock.findFunctionDefinitions(scope:AstBlock) {
                 scope.addFunctionOverride(location, name, functionInstance)
             else
                 scope.addFunctionOverload(location, name, functionInstance)
+
+            if (name=="free") {
+                if (params.isNotEmpty())
+                    Log.error(location, "Destuctors do not take parameters")
+                else if (function.returnType!=TypeUnit)
+                    Log.error(location, "Destructor must have return type 'Unit'")
+                else if (scope !is AstClassDefStmt)
+                    Log.error(location, "Destructor must be a class method")
+                else if (scope.klass.destructor!=null)
+                    Log.error(location, "Multiple definitions of destructor for class '${scope.klass.name}'")
+                else
+                    scope.klass.destructor = functionInstance
+            }
         }
 
         is AstClassDefStmt -> {

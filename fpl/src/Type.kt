@@ -39,6 +39,7 @@ class TypeClass(name:String, val typeParameters:List<TypeGenericParameter>, val 
     val fields = mutableListOf<Symbol>()
     val virtualFunctions = mutableListOf<Function>()
     lateinit var constructor : FunctionInstance
+    var destructor : FunctionInstance? = null
     var instanceSize = 0
     val descriptor = ClassValue.create(this)
 
@@ -206,7 +207,7 @@ fun Type.getSize(): Int = when (this) {
     TypeString -> 4
     is TypeArray -> 4
     is TypeRange -> 4
-    TypeAny -> 0
+    TypeAny -> 4
     TypeError -> 0
     TypeNothing -> 0
     is TypeClass -> 4

@@ -281,7 +281,7 @@ class MethodsTests {
         """.trimIndent()
 
         val expected = """
-            input.fpl:11.11-11.11:  Class 'Cat' has no member 'bark'
+            input.fpl:11.7-11.10:  Class 'Cat' has no member 'bark'
         """.trimIndent()
 
         runTest(prog, expected)
@@ -303,7 +303,7 @@ class MethodsTests {
         """.trimIndent()
 
         val expected = """
-            input.fpl:10.17-10.17:  Method references not supported yet
+            input.fpl:10.13-10.16:  Method references not supported yet
         """.trimIndent()
 
         runTest(prog, expected)
@@ -343,7 +343,7 @@ class MethodsTests {
         """.trimIndent()
 
         val expected = """
-            input.fpl:2.5-2.7:  Function 'double' must return a value along all paths
+            input.fpl:2.9-2.14:  Function 'double' must return a value along all paths
         """.trimIndent()
 
         runTest(prog, expected)
@@ -363,7 +363,7 @@ class MethodsTests {
         """.trimIndent()
 
         val expected = """
-            input.fpl:8.5-8.7:  Variable 'r' cannot be of type Unit
+            input.fpl:8.9-8.9:  Variable 'r' cannot be of type Unit
         """.trimIndent()
 
         runTest(prog, expected)
@@ -378,7 +378,7 @@ class MethodsTests {
         """.trimIndent()
 
         val expected = """
-            input.fpl:3.11-3.11:  Cannot access member 'bark' of type 'Int'
+            input.fpl:3.7-3.10:  Cannot access member 'bark' of type 'Int'
         """.trimIndent()
 
         runTest(prog, expected)
@@ -582,6 +582,32 @@ class MethodsTests {
         runTest(prog, expected)
     }
 
+    @Test
+    fun freeTest() {
+        val prog = """
+            extern fun print(s:String)
+            
+            class Cat(val name:String, val age:Int)
+                fun free()
+                    print("Freeing cat ")
+                    print(name)
+                    print("\n")
+
+            fun main()
+                val c = new Cat("Mittens", 3)
+                print(c.name)
+                print("\n")
+                free c
+        """.trimIndent()
+
+        val expected = """
+            Mittens
+            Freeing cat Mittens
+
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
 
 
 }

@@ -40,6 +40,8 @@ class AstDestructuringVarDeclStmt(location: Location, val names: List<AstDeclNod
 class AstEmptyStmt(location: Location) : AstStmt(location)
 class AstExpressionStmt(location: Location, val expr: AstExpr) : AstStmt(location)
 class AstAssignStmt(location: Location, val op:TokenKind, val lhs: AstExpr, val rhs: AstExpr) : AstStmt(location)
+class AstConstDecl(location: Location, val name: String, val astType: AstType?, val value: AstExpr) : AstStmt(location)
+class AstFreeStmt(location: Location, val expr: AstExpr) : AstStmt(location)
 
 // Statement Block nodes
 sealed class AstBlock(location: Location, val body:List<AstStmt>) : AstStmt(location) {

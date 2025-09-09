@@ -1216,4 +1216,38 @@ class ExecuteTest {
 
         runTest(prog, expected)
     }
+
+    @Test
+    fun constDecl() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+
+            const TEN = 10
+
+            fun main()
+                var i = 0
+                while i < TEN
+                    print(i)
+                    print('\n')
+                    i = i + 1
+        """.trimIndent()
+
+        val expected = """
+            0
+            1
+            2
+            3
+            4
+            5
+            6
+            7
+            8
+            9
+
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
 }

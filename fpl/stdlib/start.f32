@@ -157,7 +157,7 @@ ret
 #                     malloc
 # ==========================================================
 # $1 = size in bytes to allocate
-malloc:
+/malloc:
 ld $4, SYSVARS_BASE          # Load base address of system variables
 ldw $2, $4[SYSVARS_HEAP_PTR] # Load current heap pointer
 ldw $3, $4[SYSVARS_HEAP_END]  # Load end of heap
@@ -175,6 +175,15 @@ ld $8, 0                     # Set return value to 0 (null pointer)
 ret
 
 # ==========================================================
+#                     free
+# ==========================================================
+# $1 = pointer to memory to free
+/free:
+# No action - memory is not reclaimed
+ret
+
+
+# ==========================================================
 #                     malloc Array
 # ==========================================================
 # $1 = number of elements
@@ -186,7 +195,7 @@ stw $30, $sp[4]
 ld $9, $1                 # Keep number of elements in $9
 mul $1, $2                # Calculate total size in bytes
 add $1, 4                 # Add space for header (length prefix)
-jsr malloc                # Call malloc to allocate memory
+jsr /malloc          # Call malloc to allocate memory
 beq $8, 0, .end           # Check if malloc failed
 add $8, 4                 # Update pointer to point to first element
 stw $9, $8[-4]            # Store number of elements at the start of
@@ -208,7 +217,7 @@ stw $30, $sp[4]
 ld $9, $1                 # $9 = Class descriptor
 ldw $1, $9[0]             # Load size of class from descriptor
 add $1, 4                 # Add space for header (length prefix)
-jsr malloc                # Call malloc to allocate memory
+jsr /malloc          # Call malloc to allocate memory
 beq $8, 0, .end           # Check if malloc failed
 add $8, 4                 # Update pointer to point to first field
 stw $9, $8[-4]            # Store class descriptor at the start of object

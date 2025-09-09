@@ -730,7 +730,7 @@ class InheritanceTests {
         """.trimIndent()
 
         val expected = """
-            input.fpl:13.11-13.11:  Class 'Animal' has no member 'bark'
+            input.fpl:13.7-13.10:  Class 'Animal' has no member 'bark'
         """.trimIndent()
 
         runTest(src, expected)
@@ -755,7 +755,7 @@ class InheritanceTests {
         """.trimIndent()
 
         val expected = """
-            input.fpl:13.15-13.15:  Class 'Animal' has no member 'meow'
+            input.fpl:13.11-13.14:  Class 'Animal' has no member 'meow'
         """.trimIndent()
 
         runTest(src, expected)
@@ -781,7 +781,7 @@ class InheritanceTests {
         """.trimIndent()
 
         val expected = """
-            input.fpl:14.11-14.11:  Class 'Animal' has no member 'bark'
+            input.fpl:14.7-14.10:  Class 'Animal' has no member 'bark'
         """.trimIndent()
 
         runTest(src, expected)
@@ -805,7 +805,7 @@ class InheritanceTests {
         """.trimIndent()
 
         val expected = """
-            input.fpl:12.12-12.12:  Cannot access member as expression may be null
+            input.fpl:12.7-12.11:  Cannot access member as expression may be null
         """.trimIndent()
 
         runTest(src, expected)
@@ -825,6 +825,7 @@ class InheritanceTests {
         """.trimIndent()
 
         val expected = """
+            input.fpl:8.19-8.20:  Cannot cast type 'Int' to 'Animal'
         """.trimIndent()
 
         runTest(src, expected)

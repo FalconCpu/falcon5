@@ -8,4 +8,5 @@ object Stdlib {
     val bzero = Function(nullLocation, "bzero", null, listOf(intSym, intSym), TypeUnit, TokenKind.EXTERN)
     val strcmp = Function(nullLocation, "strcmp", null, listOf(stringSym, stringSym), TypeBool, TokenKind.EXTERN)
     val strequal = Function(nullLocation, "strequal", null, listOf(stringSym, stringSym), TypeBool, TokenKind.EXTERN)
+    val free = Function(nullLocation, "free", null, listOf(intSym), TypeUnit, TokenKind.EXTERN)
 }

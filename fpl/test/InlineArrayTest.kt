@@ -152,5 +152,31 @@ class InlineArrayTest {
 
     }
 
+    @Test
+    fun inlineArrayLambda() {
+        val prog = """
+            extern fun print(s:String)
+            extern fun print(i:Int)
+
+            fun main()
+                val t = new InlineArray<Int>(5){it*2}
+                for i in t
+                    print(i)
+                    print("\n")
+        """.trimIndent()
+
+        val expected = """
+            0
+            2
+            4
+            6
+            8
+
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+
 
 }

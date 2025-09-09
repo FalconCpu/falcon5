@@ -69,6 +69,11 @@ fun AstBlock.addSymbol(symbol: Symbol) {
 }
 
 fun AstBlock.addFunctionOverload(location: Location, name: String, function:FunctionInstance) {
+    if (this is AstFile) {
+        parent!!.addFunctionOverload(location, name, function)
+        return
+    }
+
     when (val sym = symbols[name]) {
         null -> {
             val funcSym = FunctionSymbol(location, name)
@@ -92,6 +97,11 @@ fun AstBlock.addFunctionOverload(location: Location, name: String, function:Func
 }
 
 fun AstBlock.addFunctionOverride(location: Location, name: String, function:FunctionInstance) {
+    if (this is AstFile) {
+        parent!!.addFunctionOverride(location, name, function)
+        return
+    }
+
     when (val sym = symbols[name]) {
         null -> {
             Log.error(location, "Function '${name}' has nothing to override")
