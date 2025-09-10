@@ -103,6 +103,12 @@ class Parser(val lexer: Lexer) {
         return AstAbortExpr(loc.location, expr)
     }
 
+    private fun parseUnsafe() : AstUnsafeExpr {
+        val loc = expect(UNSAFE)
+        val expr = parseExpr()
+        return AstUnsafeExpr(loc.location, expr)
+    }
+
     private fun parseTry() : AstTryExpr {
         val loc = expect(TRY)
         val expr = parseExpr()
@@ -152,6 +158,7 @@ class Parser(val lexer: Lexer) {
             CONTINUE -> parseContinue()
             ABORT -> parseAbort()
             OPENB -> parseParentheses()
+            UNSAFE -> parseUnsafe()
             NEW, LOCAL, CONST -> parseNew()
             else -> throw ParseError(currentToken.location, "Got '$currentToken' when expecting primary expression")
         }
@@ -228,14 +235,6 @@ class Parser(val lexer: Lexer) {
                 val tok = nextToken() // Consume MINUS
                 val expr = parsePrefixExpr()
                 AstNegateExpr(tok.location, expr)
-            }
-
-            UNSAFE -> {
-                val tok = nextToken() // Consume UNSAFE
-                expect(OPENB)
-                val expr = parseExpr()
-                expect(CLOSEB)
-                AstUnsafeExpr(tok.location, expr)
             }
 
             else ->  parsePostfixExpr()
@@ -466,9 +465,10 @@ class Parser(val lexer: Lexer) {
     private fun optionalEnd(kind:TokenKind) {
         val loc = currentToken.location
         if (canTake(END)) {
+            canTake(kind)
             if (currentToken.kind != kind && currentToken.kind!= EOL)
                 Log.error(loc, "Got 'end $currentToken' when expecting 'end $kind'")
-            skipToEol()
+            expectEol()
         }
     }
 
@@ -611,6 +611,31 @@ class Parser(val lexer: Lexer) {
         return AstIfStmt(loc, clauses)
     }
 
+    private fun parseWhenCase() : AstWhenCase {
+        val patterns = mutableListOf<AstExpr>()
+        if (canTake(ELSE)) {
+            // Else case
+        } else do {
+            patterns += parseExpr()
+        } while (canTake(COMMA))
+        expect(ARROW)
+        val body = if(canTake(EOL)) parseIndentedBlock() else listOf(parseStmt())
+        return AstWhenCase(currentToken.location, patterns, body)
+    }
+
+    private fun parseWhenStmt() : AstWhenStmt {
+        val tok = expect(WHEN)
+        val expr = parseExpr()
+        expectEol()
+        expect(INDENT)
+        val cases = mutableListOf<AstWhenCase>()
+        while(currentToken.kind!= DEDENT && currentToken.kind!=EOF)
+            cases += parseWhenCase()
+        expect(DEDENT)
+        optionalEnd(WHEN)
+        return AstWhenStmt(tok.location, expr, cases)
+    }
+
     private fun parseEnumEntry() : AstEnumEntry {
         val name = expect(IDENTIFIER)
         val args = if (currentToken.kind == OPENB) parseArgList() else emptyList()
@@ -654,6 +679,7 @@ class Parser(val lexer: Lexer) {
                 CLASS -> parseClassDef()
                 ENUM -> parseEnum()
                 FREE -> parseFreeStmt()
+                WHEN -> parseWhenStmt()
                 ELSIF -> throw ParseError(currentToken.location, "ELSIF without IF")
                 ELSE -> throw ParseError(currentToken.location, "ELSE without IF")
                 END -> throw ParseError(currentToken.location, "END without IF, WHILE, REPEAT or FUN")

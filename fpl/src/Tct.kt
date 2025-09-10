@@ -43,6 +43,7 @@ class TctTryExpr(location: Location, val expr: TctExpr, type:Type) : TctExpr(loc
 class TctVarargExpr(location: Location, val exprs: List<TctExpr>, type:Type) : TctExpr(location, type)
 class TctMakeTupleExpr(location: Location, val elements: List<TctExpr>, type:TypeTuple) : TctExpr(location, type)
 class TctAbortExpr(location: Location, val abortCode: TctExpr) : TctExpr(location, TypeNothing)
+class TctGlobalVarExpr(location: Location, val sym: GlobalVarSymbol, type:Type) : TctExpr(location, type)
 
 class TctErrorExpr(location: Location, val message: String = "") : TctExpr(location, TypeError) {
     init {
@@ -53,7 +54,7 @@ class TctErrorExpr(location: Location, val message: String = "") : TctExpr(locat
 
 // Statement nodes
 sealed class TctStmt(location: Location) : Tct(location)
-class TctVarDeclStmt(location: Location, val sym:VarSymbol, val initializer: TctExpr?) : TctStmt(location)
+class TctVarDeclStmt(location: Location, val sym:Symbol, val initializer: TctExpr?) : TctStmt(location)
 class TctDestructuringDeclStmt(location: Location, val syms: List<VarSymbol>, val initializer: TctExpr) : TctStmt(location)
 class TctEmptyStmt(location: Location) : TctStmt(location)
 class TctExpressionStmt(location: Location, val expr: TctExpr) : TctStmt(location)
@@ -74,6 +75,8 @@ class TctForRangeStmt(location: Location, val index:VarSymbol, val range:TctRang
 class TctForArrayStmt(location: Location, val index:VarSymbol, val array:TctExpr, body: List<TctStmt>) : TctBlock(location, body)
 class TctForIterableStmt(location: Location, val loopVar:VarSymbol, val iterable:TctExpr, val lengthSym:FieldSymbol, val getMethod:FunctionInstance, body: List<TctStmt>) : TctBlock(location, body)
 class TctFieldInitializer(val field: FieldSymbol?, val value: TctExpr)
+class TctWhenStmt(location: Location, val expr: TctExpr, body: List<TctWhenCase>) : TctBlock(location, body)
+class TctWhenCase(location: Location, val matchExprs: List<TctExpr>, body: List<TctStmt>) : TctBlock(location, body)
 
 
 

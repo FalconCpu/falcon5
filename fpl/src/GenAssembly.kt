@@ -77,7 +77,7 @@ private fun Instr.genAssembly() = when(this) {
     is InstrAluLit -> genAssembly()
     is InstrBranch -> genAssembly()
     is InstrCall -> "jsr /${func.name}"
-    is InstrVCall -> "ldw R30, R1[-4]\nldw R30,R30[${func.virtualFunctionNumber*4+8}]\njsr R30[0]"
+    is InstrVCall -> "ldw R30, R1[-4]\nldw R30,R30[${func.virtualFunctionNumber*4+12}]\njsr R30[0]"
     is InstrEnd -> ""
     is InstrJump -> "jmp .$label"
     is InstrLabel -> ".$label:"

@@ -1278,5 +1278,105 @@ class ExecuteTest {
         runTest(prog, expected)
     }
 
+    @Test
+    fun globalVars() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+            extern fun print(s:String)
 
+            var g1 = 0 
+            var g2 = "Finished"
+            
+            fun printAndInc()
+                print(g1)
+                print('\n')
+                g1 += 1
+
+            fun main()
+                while g1 < 10
+                    printAndInc()
+                print(g2)
+        """.trimIndent()
+
+        val expected = """
+            0
+            1
+            2
+            3
+            4
+            5
+            6
+            7
+            8
+            9
+            Finished
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun whenTest() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+            extern fun print(s:String)
+
+            fun printValue(i:Int)
+                when i
+                    0 -> print("zero\n")
+                    1 -> print("one\n")
+                    2,3,4 -> print("a few\n")
+                    else -> print("many\n")
+            
+            fun main()
+                for x in 0..6
+                    printValue(x)
+                print("Finished\n")
+        """.trimIndent()
+
+        val expected = """
+            zero
+            one
+            a few
+            a few
+            a few
+            many
+            many
+            Finished
+            
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun whenBadElse() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+            extern fun print(s:String)
+
+            fun printValue(i:Int)
+                when i
+                    0 -> print("zero\n")
+                    "1" -> print("one\n")
+                    else -> print("many\n")
+                    2,3,4 -> print("a few\n")
+            
+            fun main()
+                for x in 0..6
+                    printValue(x)
+                print("Finished\n")
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:8.9-8.11:  Type mismatch got 'String' when expecting 'Int'
+            input.fpl:10.9-10.9:  The else case must be the last case in a when statement
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
 }
+

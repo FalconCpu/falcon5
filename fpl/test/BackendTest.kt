@@ -20,6 +20,7 @@ class BackendTest {
 
         val expected = """
             Function topLevel:
+            END
             Function main():
             START
             LEA R1, STRING0

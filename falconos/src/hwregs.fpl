@@ -28,6 +28,8 @@ const hwregs = unsafe(0xE0000000 as HwRegs)
 
 fun uartTx(c:Char)
     # wait for space in tx fifo
-    while hwregs.uart_tx=0
-        val dummy = 0
+    var a = -1
+    repeat
+        a = hwregs.uart_tx
+    until a>8
     hwregs.uart_tx = (c as Int)

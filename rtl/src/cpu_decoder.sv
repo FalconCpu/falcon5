@@ -30,6 +30,7 @@ module cpu_decoder(
     // Other inputs
     input  logic [4:0]   p4_dest,             // Destination register from ALU stage
     input  logic [4:0]   p5_dest,             // Destination register from COM stage
+    input  logic         p5_is_mem_read,      // True if the instruction in the COM stage is a load
     input  logic         p4_divider_busy,     // Divider is busy
     input  logic         p4_mem_busy,         // Memory queue is full
     input  logic         p4_jump,             // Jump taken in ALU stage
@@ -255,7 +256,8 @@ always_comb begin
     end
 
     // Update the scoreboard
-    scoreboard[p5_dest] = 1'b0; // Clear the scoreboard for the instruction that just completed
+    if (p5_is_mem_read)
+        scoreboard[p5_dest] = 1'b0; // Clear the scoreboard for the instruction that just completed
     scoreboard[p2_latent_dest] = 1'b1;
     if (p4_jump)
         scoreboard[p3_latent_dest] = 1'b0; // Clear the scoreboard for the instruction that was in the ALU stage when a jump occurs

@@ -25,13 +25,14 @@ module cpu_combine(
     // Results
     output  logic [4:0]  p5u_dest_reg,       // Destination register from the COM stage
     output  logic [31:0] p5u_result,         // Result from the COM stage (for bypassing)
-    output  logic [31:0] p5_result 
+    output  logic [31:0] p5_result,
+    output  logic        p5_is_mem_read      // True if this is a load instruction 
 );
 
 
 always_comb begin
     mem_ready = 1'b0;
-    
+
     // Default outputs
     if (p4_dest_zero) begin
         p5u_dest_reg = mem_dest;
@@ -45,6 +46,8 @@ always_comb begin
         p5u_result   = p4_alu_result;
     end
 end
+
+assign p5_is_mem_read = p4_dest_zero;
 
 always_ff @(posedge clock) begin
     p5_result <= p5u_result;

@@ -1,3 +1,5 @@
+const ABORT_INVALID_ARGUMENT = 1
+
 class List<T>
     var length = 0
     var array = new Array<T>(8)

@@ -36,6 +36,15 @@ private fun AstExpr.typeCheckRvalue(scope: AstBlock, allowTypes:Boolean=false) :
                 return TctVariable(location, ret.sym, refinedType)
         }
 
+        is TctGlobalVarExpr -> {
+            val refinedType = pathContext.refinedTypes[ret.sym]
+            if (ret.type is TypeErrable && refinedType!=null && refinedType !is TypeErrable)
+                return TctExtractCompoundExpr(location, ret, 0,refinedType)
+            if (refinedType!=null)
+                return TctGlobalVarExpr(location, ret.sym, refinedType)
+
+        }
+
         is  TctTypeName->
             if (!allowTypes)
                 return TctErrorExpr(location,"'${ret.type}' is a type name, not a value")
@@ -63,6 +72,12 @@ private fun TctExpr.checkIsLvalue() {
         }
 
         is TctErrorExpr -> {}
+
+        is TctGlobalVarExpr -> {
+            if (!sym.mutable)
+                Log.error(location,"Global variable $sym is not mutable")
+            pathContext = pathContext.initialize(sym)
+        }
 
         is TctMakeTupleExpr -> {
             elements.forEach { it.checkIsLvalue() }
@@ -192,7 +207,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
 
                 is ConstSymbol -> TctConstant(location, sym.value)
                 is FunctionSymbol -> TctFunctionName(location, sym)
-                is GlobalVarSymbol -> TODO()
+                is GlobalVarSymbol -> TctGlobalVarExpr(location, sym, sym.type)
                 is TypeNameSymbol -> TctTypeName(location, sym)
                 is VarSymbol -> TctVariable(location, sym, sym.type)
                 is FieldSymbol -> {
@@ -699,6 +714,7 @@ fun FunctionSymbol.resolveOverload(location:Location, args: List<TctExpr>) : Fun
 fun AstLambdaExpr.typeCheckLambda(scope:AstBlock, itSym:VarSymbol) : TctLambdaExpr {
     // Currently we only support vary basic lambda. They must take a single 'it' parameter
     // And consist of a single expression.
+    this.parent = scope
     require(body.size==1)
     val stmt = body[0]
     require(stmt is AstExpressionStmt) { "Lambda body must consist of a single expression statement" }
@@ -732,7 +748,10 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
             )
             if (type is TypeUnit)
                 Log.error(location, "Variable '${name}' cannot be of type Unit")
-            val sym = VarSymbol(location, name, type, mutable)
+            val sym = if (scope is AstFile)
+                newGlobalVar(location, name, type, mutable)
+            else
+                VarSymbol(location, name, type, mutable)
             scope.addSymbol(sym)
             val tcr = tctInitializer?.checkType(type)
             if (tcr == null)
@@ -746,6 +765,7 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
             val tctBody = body.map { it.typeCheckStmt(this) }
             if (!pathContext.unreachable && function.returnType!=TypeUnit)
                 Log.error(location, "Function '${name}' must return a value along all paths")
+            pathContext = emptyPathContext
             TctFunctionDefStmt(location, name, function, tctBody)
         }
 
@@ -982,6 +1002,24 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
             }
             TctFreeStmt(location, tctExpr)
         }
+
+        is AstWhenCase -> error("Should not be type checking AstWhenCase directly, it should be part of AstWhenStmt")
+
+        is AstWhenStmt -> {
+            // TODO - add path contexts
+            val tctExpr = expr.typeCheckRvalue(scope)
+            val clauses = mutableListOf<TctWhenCase>()
+            for (clause in body.filterIsInstance<AstWhenCase>()) {
+                val tctMatch = clause.patterns.map {
+                    it.typeCheckRvalue(scope).checkType(tctExpr.type)
+                }
+                if (clause.patterns.isEmpty() && clause!= body.last())
+                    Log.error(clause.location, "The else case must be the last case in a when statement")
+                val tctBody = clause.body.map { it.typeCheckStmt(clause) }
+                clauses += TctWhenCase(location, tctMatch, tctBody)
+            }
+            TctWhenStmt(location, tctExpr, clauses)
+        }
     }
 }
 
@@ -1068,6 +1106,7 @@ fun TypeClassInstance.isIterable() : Pair<FieldSymbol,FunctionInstance>? {
     val getMethod = lookup("get",null)
     if (getMethod==null || getMethod !is FunctionSymbol)
         return null
+
     val getOverloads = getMethod.overloads.filter { it.parameters.size==1 && it.parameters[0].type==TypeInt }
     if (getOverloads.size!=1)
         return null

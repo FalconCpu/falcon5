@@ -201,7 +201,7 @@ ret
 #                     free
 # ==========================================================
 # $1 = pointer to memory to free
-/free:
+/freeMem(Int):
 # No action - memory is not reclaimed
 ret
 
@@ -211,7 +211,7 @@ ret
 # ==========================================================
 # $1 = number of elements
 # $2 = size of each element in bytes
-/mallocArray:
+/mallocArray(Int,Int):
 sub $sp, 8                # Allocate space on stack for two variables
 stw $9, $sp[0]
 stw $30, $sp[4]
@@ -233,7 +233,7 @@ ret
 # ==========================================================
 # $1 = class descriptor
 
-/mallocObject:
+/mallocObject(ClassDescriptor):
 sub $sp, 8                # Allocate space on stack for two variables
 stw $9, $sp[0]
 stw $30, $sp[4]

@@ -96,6 +96,7 @@ fun compile(lexers:List<Lexer>, stopAt: StopAt) : String {
     Log.clear()
     allFunctions.clear()
     allSymbols.clear()
+    allGlobals.clear()
     Value.clear()
     errorEnum = null
 

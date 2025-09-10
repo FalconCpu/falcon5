@@ -22,6 +22,7 @@ class CodeGenTest {
 
         val expected = """
             Function topLevel:
+            END
             Function add(Int,Int):
             START
             MOV x, R1
@@ -60,6 +61,7 @@ class CodeGenTest {
 
         val expected = """
             Function topLevel:
+            END
             Function main():
             START
             LEA t0, STRING0
@@ -87,6 +89,7 @@ class CodeGenTest {
 
         val expected = """
             Function topLevel:
+            END
             Function main():
             START
             MOV t0, 0
@@ -138,6 +141,7 @@ class CodeGenTest {
 
         val expected = """
             Function topLevel:
+            END
             Function sum(Array<Int>):
             START
             MOV a, R1
@@ -170,7 +174,7 @@ class CodeGenTest {
             MOV t0, 5
             MOV R1, t0
             MOV R2, 4
-            CALL mallocArray
+            CALL mallocArray(Int,Int)
             MOV t1, R8
             MUL_I t2, t0, 4
             MOV R1, t1

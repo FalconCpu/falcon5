@@ -275,6 +275,14 @@ fun TctExpr.codeGenRvalue() : Reg {
             currentFunc.addCall(Stdlib.abort)
             zeroReg
         }
+
+        is TctGlobalVarExpr -> {
+            if (type is TypeInlineArray)
+                // For inline arrays we want to return the address of the array, not load the first element
+                currentFunc.addAlu(BinOp.ADD_I, cpuRegs[29], sym.offset)
+            else
+                currentFunc.addLoad(sym.type.getSize(), cpuRegs[29], sym.offset)
+        }
     }
 }
 
@@ -442,7 +450,7 @@ fun TctExpr.codeGenBool(trueLabel: Label, falseLabel: Label) {
             val loopLabel = currentFunc.newLabel()
             currentFunc.addLabel(loopLabel)
             currentFunc.addBranch(BinOp.EQ_I, tmpReg, typeRReg, trueLabel)
-            val parent = currentFunc.addLoad(4, tmpReg, 4)   // offset 4 = parent
+            val parent = currentFunc.addLoad(4, tmpReg, 8)   // offset 4 = parent
             currentFunc.addMov(tmpReg, parent)
             currentFunc.addBranch(BinOp.NE_I, tmpReg, zeroReg, loopLabel)
             currentFunc.addJump(falseLabel)
@@ -522,6 +530,14 @@ fun TctExpr.codeGenLvalue(value:Reg, op:TokenKind) {
                 val newValue = if (op==TokenKind.EQ) value else applyCompoundOp(op, currentFunc.addLoad(objectReg, member), value)
                 currentFunc.addStore(newValue, objectReg, member)
             }
+        }
+
+        is TctGlobalVarExpr -> {
+            if (value is CompoundReg)
+                error("Cannot assign union value to global variable '${sym.name}'")
+            val newValue = if (op==TokenKind.EQ) value else
+                applyCompoundOp(op, currentFunc.addLoad(sym.type.getSize(), cpuRegs[29], sym.offset), value)
+            currentFunc.addStore(sym.type.getSize(), newValue, cpuRegs[29], sym.offset)
         }
 
         else ->
@@ -613,8 +629,10 @@ fun TctStmt.codeGenStmt() {
 
         is TctTop -> {
             // Generate code for the top level statements
+
             for (stmt in body)
                 stmt.codeGenStmt()
+            currentFunc.addInstr(InstrEnd())
         }
 
         is TctEmptyStmt -> {}
@@ -625,14 +643,27 @@ fun TctStmt.codeGenStmt() {
 
         is TctVarDeclStmt -> {
             val regInit = initializer?.codeGenRvalue()
-            if (regInit is CompoundReg) {
-                val dest = currentFunc.getReg(sym)
-                require(dest is CompoundReg)
-                assert(dest.regs.size == regInit.regs.size)
-                for (i in dest.regs.indices)
-                    currentFunc.addMov(dest.regs[i], regInit.regs[i])
-            } else if (regInit!= null)
-                currentFunc.addMov(currentFunc.getReg(sym), regInit)
+            when(sym) {
+                is VarSymbol ->{
+                    if (regInit is CompoundReg) {
+                        val dest = currentFunc.getReg(sym)
+                        require(dest is CompoundReg)
+                        assert(dest.regs.size == regInit.regs.size)
+                        for (i in dest.regs.indices)
+                            currentFunc.addMov(dest.regs[i], regInit.regs[i])
+                    } else if (regInit != null)
+                        currentFunc.addMov(currentFunc.getReg(sym), regInit)
+                }
+
+                is GlobalVarSymbol -> {
+                    if (regInit is CompoundReg)
+                        error("Cannot initialize global variable '${sym.name}' with union type")
+                    else if (regInit != null)
+                        currentFunc.addStore(sym.type.getSize(), regInit, cpuRegs[29], sym.offset)
+                }
+
+                else -> error("Invalid symbol type in variable declaration: ${sym.javaClass}")
+            }
         }
 
         is TctDestructuringDeclStmt -> {
@@ -865,6 +896,38 @@ fun TctStmt.codeGenStmt() {
             currentFunc.addMov(cpuRegs[1], reg)
             currentFunc.addCall(Stdlib.free)
             currentFunc.addLabel(label)
+        }
+
+        is TctWhenCase -> TODO()
+        is TctWhenStmt -> {
+            val exprReg = expr.codeGenRvalue()
+            val cases = body.filterIsInstance<TctWhenCase>()
+            val endLabel = currentFunc.newLabel()
+            val caseLabels = mutableListOf<Label>()
+            var nextLabel = currentFunc.newLabel()
+
+            if (expr.type is TypeString)
+                TODO("String 'when' not implemented yet")
+
+            for (case in cases) {
+                val caseLabel = currentFunc.newLabel()
+                caseLabels += caseLabel
+                if (case.matchExprs.isEmpty())
+                    currentFunc.addJump(caseLabel)  // 'else' clause
+                else for (expr in case.matchExprs) {
+                    val matchReg = expr.codeGenRvalue()
+                    currentFunc.addBranch(BinOp.EQ_I, exprReg, matchReg, caseLabel)
+                }
+            }
+
+            currentFunc.addJump(endLabel)
+            for ((case,label) in cases.zip(caseLabels)) {
+                currentFunc.addLabel(label)
+                for(stmt in case.body)
+                    stmt.codeGenStmt()
+                currentFunc.addJump(endLabel)
+            }
+            currentFunc.addLabel(endLabel)
         }
     }
 }

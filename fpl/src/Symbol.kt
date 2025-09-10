@@ -1,6 +1,8 @@
 import java.io.File
 
 val allSymbols = mutableListOf<Symbol>()
+val allGlobals = mutableListOf<GlobalVarSymbol>()
+var globalsSize = 0
 
 sealed class Symbol (val location: Location, val name:String, val type: Type, val mutable: Boolean) {
     override fun toString(): String = name
@@ -14,7 +16,7 @@ sealed class Symbol (val location: Location, val name:String, val type: Type, va
 
 class VarSymbol(location: Location, name: String, type: Type, mutable: Boolean) : Symbol(location, name, type, mutable)
 class ConstSymbol(location: Location, name: String, type: Type, val value: Value) : Symbol(location, name, type, false)
-class GlobalVarSymbol(location: Location, name: String, type: Type, mutable:Boolean) : Symbol(location, name, type, mutable)
+class GlobalVarSymbol(location: Location, name: String, type: Type, mutable:Boolean, val offset:Int) : Symbol(location, name, type, mutable)
 class FunctionSymbol(location: Location, name: String) : Symbol(location, name, TypeNothing, false) {
     val overloads = mutableListOf<FunctionInstance>()
     fun clone() : FunctionSymbol {
@@ -47,6 +49,15 @@ private fun genPredefinedSymbols(): Map<String, Symbol> {
 }
 
 
+fun newGlobalVar(location: Location, name: String, type: Type, mutable: Boolean): GlobalVarSymbol {
+    val sym = GlobalVarSymbol(location, name, type, mutable, globalsSize)
+    globalsSize += type.getSize()
+    // round up to next multiple of 4
+    if (globalsSize % 4 != 0)
+        globalsSize += 4 - (globalsSize % 4)
+    allGlobals.add(sym)
+    return sym
+}
 
 fun AstBlock.lookupSymbol(name: String, location: Location): Symbol? {
     val ret = predefinedSymbols[name] ?:
@@ -173,7 +184,7 @@ fun Symbol.mapType(typeMap: Map<TypeGenericParameter, Type>) : Symbol {
             clone.overloads.addAll(overloads.map { it.mapTypes(typeMap) })
             clone
         }
-        is GlobalVarSymbol -> GlobalVarSymbol(location, name, type.mapType(typeMap), mutable)
+        is GlobalVarSymbol -> this
         is TypeNameSymbol -> TypeNameSymbol(location, name, type.mapType(typeMap))
         is VarSymbol -> VarSymbol(location, name, type.mapType(typeMap), mutable)
     }

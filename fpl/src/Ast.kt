@@ -82,6 +82,8 @@ class AstIfClause(location:Location, val condition:AstExpr?, body: List<AstStmt>
 class AstIfStmt(location:Location, body:List<AstIfClause>) : AstBlock(location, body)
 class AstLambdaExpr(location: Location, body: List<AstStmt>) : AstBlock(location, body)
 class AstForStmt(location: Location, val indexName: String, val indexType: AstType?, val range: AstExpr, body: List<AstStmt>) : AstBlock(location, body)
+class AstWhenStmt(location: Location, val expr: AstExpr, cases: List<AstWhenCase>) : AstBlock(location, cases)
+class AstWhenCase(location: Location, val patterns: List<AstExpr>, body:List<AstStmt>) : AstBlock(location, body)
 
 class AstEnumDefStmt(location: Location, val name: String, val params: List<AstParameter>, val values: List<AstEnumEntry>, body:List<AstStmt>) : AstBlock(location,body) {
     lateinit var enum: TypeEnum

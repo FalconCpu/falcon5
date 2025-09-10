@@ -1,9 +1,25 @@
 
 fun main()
-    val msg = "world"
-    kprintf("Hello %8x X\n", 12345)
-    kprintf("Hello %08x X\n", 12345)
-    kprintf("Hello %-8x X\n", 12345)
+    kprintf("Initializing\n")
+    initializeBuddyAllocator()
+    dumpBuddyAllocator()
 
-    kprintf("Hello %8s X\n",  msg)
-    kprintf("Hello %-8s X\n", msg)
+    # alloc a 6KiB block -> needs 8KiB (log 1)
+    val a = allocateBlock(6*1024)
+    kprintf("alloc a=%08x\n", a)
+
+    # alloc a 4KiB block
+    val b = allocateBlock(4*1024)
+    kprintf("alloc b=%08x\n", b)
+
+    dumpBuddyAllocator()
+
+    # free and ensure coalesce
+    freeBlock(a)
+    kprintf("freed a\n")
+    dumpBuddyAllocator()
+
+    freeBlock(b)
+    kprintf("freed b\n")
+    dumpBuddyAllocator()
+    dumpMemorySystem()

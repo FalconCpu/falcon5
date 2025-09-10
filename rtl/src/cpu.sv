@@ -117,6 +117,8 @@ logic        p4_store_fault;
 logic [4:0]  p5u_dest_reg;
 logic [31:0] p5u_result;
 logic [31:0] p5_result;
+logic        p5_is_mem_read;
+
 
 logic        mem_ready;
 logic [4:0]  mem_dest;
@@ -164,6 +166,7 @@ logic        p4_mem_busy;
     .p3_latent_dest(p3_latent_dest),
     .p4_dest(p4_dest),
     .p5_dest(p5u_dest_reg),
+    .p5_is_mem_read(p5_is_mem_read),
     .p4_divider_busy(!div_ready),
     .p4_mem_busy(p4_mem_busy),
     .p4_jump(p4_jump),
@@ -262,6 +265,7 @@ cpu_combine  cpu_combine_inst (
     .p4_mult_result(p4_mult_result),
     .p5u_dest_reg(p5u_dest_reg),
     .p5u_result(p5u_result),
+    .p5_is_mem_read(p5_is_mem_read),
     .p5_result(p5_result),
     .mem_ready(mem_ready),
     .mem_dest(mem_dest),

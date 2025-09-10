@@ -67,7 +67,7 @@ fun allocateBlock(size:Int) -> Int
     while freeBlocks[slot].isEmpty()
         slot += 1
         if slot=16 
-            panic("Out of memory", Error.OUT_OF_MEMORY)
+            abort ABORT_OUT_OF_MEMORY
 
     var blk = freeBlocks[slot].take()
 
@@ -84,8 +84,10 @@ fun allocateBlock(size:Int) -> Int
 # Initialize the buddy allocator - add all memory in the range to the free lists
 
 fun initializeBuddyAllocator()
-    # Initialize the free block lists. 
-    freeBlocks = new InlineArray<List<Int>>(16){ new List<Int>() }
+    # Initialize the free block lists.
+    for i in 0..<16
+        freeBlocks[i] = new List<Int>()
+        kprintf("Free list %d initialized %p\n", i, freeBlocks[i])
 
     # Add all memory in the range to the free lists
     const startOfBuddyAllocator = 0x10004

@@ -6,4 +6,5 @@ task.fpl
 kprintf.fpl
 list.fpl
 buddyAllocator.fpl
+memory.fpl
 main.fpl

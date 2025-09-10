@@ -89,15 +89,16 @@ class ArrayValue private constructor (val elements: List<Value>, val index:Int, 
 
 class ClassValue private constructor(val klass: TypeClass) : Value(klass) {
     override fun toString(): String = "${klass.name}/DESCRIPTOR"
+    val nameValue = StringValue.create(klass.name)
 
     override fun emitRef(sb: StringBuilder) {
-        sb.append("dcw ${klass.instanceSize}\n")  // Size of the class instance
-        sb.append("dcb ${klass.name}\n")          // Class name
+        error("Not supported")
     }
 
     fun emit(sb: StringBuilder) {
         sb.append("$klass/DESCRIPTOR:\n")
         sb.append("dcw ${klass.instanceSize}\n")  // Size of the class instance
+        sb.append("dcw $nameValue\n")  // Class name
         val superClass = klass.superClass?.genericType
         if (superClass == null)
             sb.append("dcw 0\n")  // No superclass

@@ -21,9 +21,11 @@ data class PathContext (
     )
 
     fun refineType(expr:TctExpr, type: Type) : PathContext {
-        if (expr !is TctVariable)
-            return this // Only refine types for variables
-        val sym = expr.sym
+        val sym = when (expr) {
+            is TctVariable -> expr.sym
+            is TctGlobalVarExpr -> expr.sym
+            else -> return this
+        }
         return PathContext(
             uninitializedVariables,
             maybeUninitializedVariables,
