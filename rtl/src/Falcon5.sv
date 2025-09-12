@@ -141,11 +141,36 @@ logic [31:0]  cpu_icache_rdata;
 logic [31:0]  cpu_icache_raddr;
 logic [8:0]   cpu_icache_rtag;
 
+logic         vga_sdram_request;
+logic         vga_sdram_ready;
+logic [25:0]  vga_sdram_address;
+logic         vga_sdram_rvalid;
+logic [31:0]  vga_sdram_rdata;
+logic [25:0]  vga_sdram_raddress;
+logic         vga_sdram_complete;
+
+logic         blitr_sdram_request;
+logic [25:0]  blitr_sdram_address;
+logic         blitr_sdram_ready;
+logic         blitr_sdram_rvalid;
+logic [31:0]  blitr_sdram_rdata;
+logic [25:0]  blitr_sdram_raddress;
+logic         blitr_sdram_complete;
+
+logic         blitw_sdram_request;
+logic         blitw_sdram_ready;
+logic [25:0]  blitw_sdram_address;
+logic [3:0]   blitw_sdram_wstrb;
+logic [31:0]  blitw_sdram_wdata;
+
+logic         hwregs_blit_valid;
+logic [31:0]  hwregs_blit_command;
+logic         hwregs_blit_privaledge;
+logic [9:0]   blit_fifo_slots_free;
+
 
 logic [9:0]  mouse_x;
 logic [9:0]  mouse_y;
-logic [31:0] hwregs_blit_command;
-logic [9:0]  blit_fifo_slots_free;
 logic [2:0]  perf_count;
 
 
@@ -264,17 +289,17 @@ aux_decoder  aux_decoder_inst (
 sdram_arbiter  sdram_arbiter_inst (
     .clk(clock),
     .reset(reset),
-    .m1_request(1'b0),
-    .m1_ready(),
+    .m1_request(vga_sdram_request),
+    .m1_ready(vga_sdram_ready),
     .m1_write(1'b0),
-    .m1_burst(1'b0),
-    .m1_address(26'bx),
+    .m1_burst(1'b1),
+    .m1_address(vga_sdram_address),
     .m1_wdata(32'bx),
     .m1_wstrb(4'bx),
-    .m1_rvalid(),
-    .m1_raddress(),
-    .m1_rdata(),
-    .m1_complete(),
+    .m1_rvalid(vga_sdram_rvalid),
+    .m1_raddress(vga_sdram_raddress),
+    .m1_rdata(vga_sdram_rdata),
+    .m1_complete(vga_sdram_complete),
     .m2_request(dcache_sdram_request),
     .m2_ready(dcache_sdram_ready),
     .m2_write(dcache_sdram_write),
@@ -286,24 +311,24 @@ sdram_arbiter  sdram_arbiter_inst (
     .m2_raddress(dcache_sdram_raddress),
     .m2_rdata(dcache_sdram_rdata),
     .m2_complete(dcache_sdram_complete),
-    .m3_request(1'b0),
-    .m3_ready(),
-    .m3_write(1'bx),
-    .m3_burst(1'bx),
-    .m3_address(26'bx),
+    .m3_request(blitr_sdram_request),
+    .m3_ready(blitr_sdram_ready),
+    .m3_write(1'b0),
+    .m3_burst(1'b1),
+    .m3_address(blitr_sdram_address),
     .m3_wdata(32'bx),
     .m3_wstrb(4'bx),
-    .m3_rvalid(),
-    .m3_raddress(),
-    .m3_rdata(),
-    .m3_complete(),
-    .m4_request(1'b0),
-    .m4_ready(),
-    .m4_write(1'bx),
-    .m4_burst(1'bx),
-    .m4_address(26'bx),
-    .m4_wdata(32'bx),
-    .m4_wstrb(4'bx),
+    .m3_rvalid(blitr_sdram_rvalid),
+    .m3_raddress(blitr_sdram_raddress),
+    .m3_rdata(blitr_sdram_rdata),
+    .m3_complete(blitr_sdram_complete),
+    .m4_request(blitw_sdram_request),
+    .m4_ready(blitw_sdram_ready),
+    .m4_write(1'b1),
+    .m4_burst(1'b0),
+    .m4_address(blitw_sdram_address),
+    .m4_wdata(blitw_sdram_wdata),
+    .m4_wstrb(blitw_sdram_wstrb),
     .m4_rvalid(),
     .m4_raddress(),
     .m4_rdata(),
@@ -365,6 +390,52 @@ instruction_ram  instruction_ram_inst (
     .ifetch_iram_raddr(cpu_icache_raddr),
     .ifetch_iram_rtag(cpu_icache_rtag),
     .ifetch_iram_rvalid(cpu_icache_rvalid)
+  );
+
+vga  vga_inst (
+    .clock(clock),
+    .reset(reset),
+    .hwregs_write(hwregs_request && hwregs_write),
+    .hwregs_addr(hwregs_addr),
+    .hwregs_wdata(hwregs_wdata),
+    .VGA_CLK(VGA_CLK),
+    .VGA_R(VGA_R),
+    .VGA_G(VGA_G),
+    .VGA_B(VGA_B),
+    .VGA_HS(VGA_HS),
+    .VGA_VS(VGA_VS),
+    .VGA_SYNC_N(VGA_SYNC_N),
+    .VGA_BLANK_N(VGA_BLANK_N),
+    .vga_sdram_request(vga_sdram_request),
+    .vga_sdram_ready(vga_sdram_ready),
+    .vga_sdram_address(vga_sdram_address),
+    .vga_sdram_rvalid(vga_sdram_rvalid),
+    .vga_sdram_rdata(vga_sdram_rdata),
+    .vga_sdram_raddress(vga_sdram_raddress),
+    .vga_sdram_complete(vga_sdram_complete),
+    .mouse_x(mouse_x),
+    .mouse_y(mouse_y)
+  );
+
+blitter  blitter_inst (
+    .clock(clock),
+    .reset(reset),
+    .hwregs_blit_valid(hwregs_blit_valid),
+    .hwregs_blit_command(hwregs_blit_command),
+    .hwregs_blit_privaledge(hwregs_blit_privaledge),
+    .blit_fifo_slots_free(blit_fifo_slots_free),
+    .blitr_sdram_request(blitr_sdram_request),
+    .blitr_sdram_address(blitr_sdram_address),
+    .blitr_sdram_ready(blitr_sdram_ready),
+    .blitr_sdram_rvalid(blitr_sdram_rvalid),
+    .blitr_sdram_rdata(blitr_sdram_rdata),
+    .blitr_sdram_raddress(blitr_sdram_raddress),
+    .blitr_sdram_complete(blitr_sdram_complete),
+    .blitw_sdram_request(blitw_sdram_request),
+    .blitw_sdram_ready(blitw_sdram_ready),
+    .blitw_sdram_address(blitw_sdram_address),
+    .blitw_sdram_wstrb(blitw_sdram_wstrb),
+    .blitw_sdram_wdata(blitw_sdram_wdata)
   );
 
 endmodule

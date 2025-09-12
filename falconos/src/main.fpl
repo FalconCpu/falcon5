@@ -1,25 +1,16 @@
 
 fun main()
-    kprintf("Initializing\n")
-    initializeBuddyAllocator()
-    dumpBuddyAllocator()
+    copyFontData()
+    val gc = new GraphicsContext()
+    gc.setup()
+    gc.drawRect(0, 0, 640, 480, 0)       # Clear screen to black
+    for i in 0..255
+        val x = (i % 16) * 32
+        val y = (i / 16) * 28
+        gc.drawRect(x, y, x + 30, y + 26, i)  # Draw color blocks
 
-    # alloc a 6KiB block -> needs 8KiB (log 1)
-    val a = allocateBlock(6*1024)
-    kprintf("alloc a=%08x\n", a)
+    gc.drawText(10, 10, 15, "Hello, World!")  # Draw white text
+    while true
+        val a = 1
 
-    # alloc a 4KiB block
-    val b = allocateBlock(4*1024)
-    kprintf("alloc b=%08x\n", b)
 
-    dumpBuddyAllocator()
-
-    # free and ensure coalesce
-    freeBlock(a)
-    kprintf("freed a\n")
-    dumpBuddyAllocator()
-
-    freeBlock(b)
-    kprintf("freed b\n")
-    dumpBuddyAllocator()
-    dumpMemorySystem()

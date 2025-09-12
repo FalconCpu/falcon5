@@ -1,0 +1,13 @@
+
+ld $1, 0x0         # screen base address
+ld $2, 0x4000000
+ld $3, 0x01020304
+
+loop:
+stw $3, $1[0]
+add $1, 4
+bne $1, $2, loop
+
+forever:
+jmp forever
+
