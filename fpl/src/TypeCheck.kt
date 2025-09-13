@@ -42,7 +42,18 @@ private fun AstExpr.typeCheckRvalue(scope: AstBlock, allowTypes:Boolean=false) :
                 return TctExtractCompoundExpr(location, ret, 0,refinedType)
             if (refinedType!=null)
                 return TctGlobalVarExpr(location, ret.sym, refinedType)
+        }
 
+        is TctMemberExpr -> {
+            val sym = ret.getSymbol()
+            val refinedType = pathContext.refinedTypes[sym]
+//            Throwable().printStackTrace()
+//            println("$location Refined type for $this $sym is $refinedType")
+
+            if (ret.type is TypeErrable && refinedType!=null && refinedType !is TypeErrable)
+                return TctExtractCompoundExpr(location, ret, 0,refinedType)
+            if (refinedType!=null)
+                return TctMemberExpr(location, ret.objectExpr, ret.member, refinedType)
         }
 
         is  TctTypeName->
@@ -206,7 +217,13 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
                 }
 
                 is ConstSymbol -> TctConstant(location, sym.value)
-                is FunctionSymbol -> TctFunctionName(location, sym)
+                is FunctionSymbol -> {
+                    val type = if (sym.overloads.size==1)
+                        TypeFunction.create(sym.overloads[0])
+                    else
+                        TypeNothing
+                    TctFunctionName(location, sym, type)
+                }
                 is GlobalVarSymbol -> TctGlobalVarExpr(location, sym, sym.type)
                 is TypeNameSymbol -> TctTypeName(location, sym)
                 is VarSymbol -> TctVariable(location, sym, sym.type)
@@ -217,6 +234,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
                     else
                         TctErrorExpr(location, "Field '${sym.name}' cannot be accessed outside of a class context")
                 }
+                is AccessSymbol -> error("Access symbols should not appear in AST")
             }
 
         is AstBinaryExpr -> {
@@ -281,8 +299,14 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
                         ?: return TctErrorExpr(location, "")  // Error message is reported by resolveOverload()
                     TctCallExpr(location, tctFunc.objectExpr, resolvedFunc.function, tctArgs, resolvedFunc.returnType)
                 }
-                else ->
-                    return TctErrorExpr(location, "Invalid function call")
+                else -> if (tctFunc.type is TypeFunction) {
+                    if (tctArgs.size!=tctFunc.type.parameterType.size)
+                        return TctErrorExpr(location,"Got ${tctArgs.size} arguments when expecting ${tctFunc.type.parameterType.size}")
+                    for(i in tctArgs.indices)
+                        tctArgs[i].checkType(tctFunc.type.parameterType[i])
+                    TctIndirectCallExpr(location, tctFunc, tctArgs, tctFunc.type.returnType)
+                } else
+                    return TctErrorExpr(location, "Invalid function call ${tctFunc.type}")
             }
         }
 
@@ -295,6 +319,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
                 is TypeArray -> arrayExpr.type.elementType
                 is TypeString -> TypeChar
                 is TypeInlineArray -> arrayExpr.type.elementType
+                is TypePointer -> arrayExpr.type.elementType
                 else -> reportTypeError(location, "Cannot index type '${arrayExpr.type}'")
             }
             if (arrayExpr.type is TypeInlineArray) {
@@ -584,6 +609,8 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
             else if (insideUnsafe) {
                 if (tctExpr is TctConstant && tctExpr.value is IntValue)
                     TctConstant(location, IntValue(tctExpr.value.value, typeR))
+                else if (tctExpr.type is TypeErrable)
+                    TctExtractCompoundExpr(location, tctExpr, 0, typeR)
                 else
                     TctAsExpr(location, tctExpr, typeR)
             } else
@@ -630,6 +657,19 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
             val tcAbortExpr = abortCode.typeCheckRvalue(scope).checkType(TypeInt)
             pathContext = unreachablePathContext
             TctAbortExpr(location, tcAbortExpr)
+        }
+
+        is AstIfExpr -> {
+            val tcCondition = cond.typeCheckBoolExpr(scope)
+            pathContext = tcCondition.trueBranch
+            val tcThen = trueExpr.typeCheckRvalue(scope)
+            val thenPath = pathContext
+            pathContext = tcCondition.falseBranch
+            val tcElse = falseExpr.typeCheckRvalue(scope)
+            val elsePath = pathContext
+            pathContext = listOf(thenPath, elsePath).merge()
+            val type = enclosingType(location, tcThen.type, tcElse.type)
+            TctIfExpr(location, tcCondition.expr, tcThen, tcElse, type)
         }
     }
 }
@@ -763,7 +803,7 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
             pathContext = emptyPathContext
             firstUnreachableStatement = true
             val tctBody = body.map { it.typeCheckStmt(this) }
-            if (!pathContext.unreachable && function.returnType!=TypeUnit)
+            if (!pathContext.unreachable && function.returnType!=TypeUnit && qualifier!=TokenKind.EXTERN)
                 Log.error(location, "Function '${name}' must return a value along all paths")
             pathContext = emptyPathContext
             TctFunctionDefStmt(location, name, function, tctBody)
@@ -781,14 +821,20 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
             val oldContinueContext = continueContext
             val oldSecondTypeCheckPass = secondTypecheckPass
             currentLoop = this
-            val tctCondition = condition.typeCheckBoolExpr(scope)
-            pathContext = tctCondition.trueBranch
+
             // make a first pass through the body to get the pathContext for the loop path
-            body.map { it.typeCheckStmt(this) }
-            secondTypecheckPass = true
-            pathContext = (listOf(pathContext, tctCondition.trueBranch)+continueContext).merge()
+            val pathContextIn = pathContext
+            val firstTctCondition = condition.typeCheckBoolExpr(scope)
+            pathContext = firstTctCondition.trueBranch
+            val firstTctBody = body.map { it.typeCheckStmt(this) }
+
+            // Now make a second pass to get the correct pathContext for after the loop
             breakContext = mutableListOf()
             continueContext = mutableListOf()
+            secondTypecheckPass = true
+            pathContext = (listOf(pathContext, pathContextIn)).merge()   // Path context at condition is either from end of body or from before the loop
+            val tctCondition = condition.typeCheckBoolExpr(scope)
+            pathContext = tctCondition.trueBranch
             val tctBody = body.map { it.typeCheckStmt(this) }
 
             // determine the pathContext for after the loop
@@ -1050,6 +1096,11 @@ private fun AstType.resolveType(scope:AstBlock) : Type {
             return TypeArray.create(elementType)
         }
 
+        is AstPointerType -> {
+            val elementType = elementType.resolveType(scope)
+            return TypePointer.create(elementType)
+        }
+
         is AstInlineArrayType -> {
             val tcElementType = elementType.resolveType(scope)
             val tcSize = size.typeCheckRvalue(scope)
@@ -1075,6 +1126,8 @@ private fun AstType.resolveType(scope:AstBlock) : Type {
         is AstGenericType -> {
             val baseType = baseType.resolveType(scope)
 
+            if (baseType is TypeError)
+                return baseType
             if (baseType !is TypeClassInstance)
                 return reportTypeError(location, "Type '${baseType.name}' is not a class")
             if (baseType.typeArguments.isNotEmpty())

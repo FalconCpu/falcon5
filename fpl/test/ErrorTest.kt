@@ -299,5 +299,75 @@ class ErrorTests {
         runTest(prog, expected)
     }
 
+    @Test
+    fun castTest() {
+        val prog = """
+        extern fun print(i:Int)
+        extern fun print(s:String)
+        
+        enum Error(desc:String) [
+            FILE_NOT_FOUND("File not found"),
+            OUT_OF_MEMORY("Out of memory") ]
+        
+        fun openFile(name:String) -> Int!
+            if (name = "missing.txt")
+                return Error.FILE_NOT_FOUND
+            elsif (name = "bigfile.txt")
+                return Error.OUT_OF_MEMORY
+            else
+                return 42
+        
+        fun main()
+            # Success path
+            val h1 = openFile("data.txt")
+            print("Opened handle: ")
+            print(h1 as Int)
+            print("\n")
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:20.14-20.15:  Cannot cast type 'Int!' to 'Int'
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun unsafeCastTest() {
+        val prog = """
+        extern fun print(i:Int)
+        extern fun print(s:String)
+        
+        enum Error(desc:String) [
+            FILE_NOT_FOUND("File not found"),
+            OUT_OF_MEMORY("Out of memory") ]
+        
+        fun openFile(name:String) -> Int!
+            if (name = "missing.txt")
+                return Error.FILE_NOT_FOUND
+            elsif (name = "bigfile.txt")
+                return Error.OUT_OF_MEMORY
+            else
+                return 42
+        
+        fun main()
+            # Success path
+            val h1 = openFile("data.txt")
+            print("Opened handle: ")
+            print(unsafe(h1 as Int))
+            print("\n")
+        """.trimIndent()
+
+        val expected = """
+            Opened handle: 42
+            
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+
+
+
 
 }

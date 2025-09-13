@@ -99,6 +99,7 @@ fun compile(lexers:List<Lexer>, stopAt: StopAt) : String {
     allGlobals.clear()
     Value.clear()
     errorEnum = null
+    allAccessSymbols.clear()
 
     // Run the parsing
     val astTop = Parser.parseAll(lexers)

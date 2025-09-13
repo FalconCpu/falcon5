@@ -26,6 +26,16 @@ class TypeArray private constructor(val elementType:Type) : Type("Array<$element
     }
 }
 
+class TypePointer private constructor(val elementType:Type) : Type("Pointer<$elementType>") {
+    companion object {
+        val allPointerTypes = mutableMapOf<Type, TypePointer>()
+        fun create(elementType: Type) = allPointerTypes.getOrPut(elementType) {
+            TypePointer(elementType)
+        }
+    }
+}
+
+
 class TypeRange private constructor(val elementType:Type) : Type("Range<$elementType>") {
     companion object {
         val allRangeTypes = mutableMapOf<Type, TypeRange>()
@@ -71,13 +81,13 @@ class TypeEnum(name:String) : Type(name) {
 
 fun Type.isSuperClassOf(other: Type): Boolean {
     if (this == other) return true
-    if (this !is TypeClassInstance) return false
+    if (this !is TypeClassInstance && this !is TypeClass) return false
     if (other !is TypeClassInstance) return false
+    val generic = if (this is TypeClassInstance) this.genericType else this
     var current: TypeClass? = other.genericType
     while (current != null) {
-        if (this.genericType == current) {
+        if (generic == current)
             return true
-        }
         current = current.superClass?.genericType
     }
     return false
@@ -160,6 +170,25 @@ class TypeInlineArray private constructor(val elementType:Type, val size:Int) : 
     }
 }
 
+class TypeFunction private constructor(val parameterType:List<Type>, val returnType:Type, name:String) : Type(name) {
+    companion object {
+        val allFunctionTypes = mutableListOf<TypeFunction>()
+        fun create(parameterType:List<Type>, returnType:Type,): TypeFunction {
+            val ret = allFunctionTypes.find{it.parameterType==parameterType && it.returnType==returnType}
+            if (ret!=null)
+                return ret
+            val name = parameterType.joinToString(prefix="(", postfix = ")->", separator = ",") + returnType.toString()
+            val new = TypeFunction(parameterType, returnType, name)
+            allFunctionTypes += new
+            return new
+        }
+        fun create(func:FunctionInstance): TypeFunction {
+            val paramTypes = func.parameters.map{it.type}
+            return create(paramTypes, func.returnType)
+        }
+    }
+}
+
 // Type checking
 fun Type.isAssignableTo(other: Type): Boolean {
     if (this == other) return true
@@ -172,6 +201,9 @@ fun Type.isAssignableTo(other: Type): Boolean {
 
     // any type can be assigned to TypeAny
     if (other == TypeAny) return true
+
+    // Arrays can be converted to Pointer
+    if (this is TypeArray && other is TypePointer && this.elementType.isAssignableTo(other.elementType)) return true
 
     if (other.isSuperClassOf(this)) return true
     if (other is TypeNullable && other.elementType.isSuperClassOf(this)) return true
@@ -201,6 +233,43 @@ fun reportTypeError(location: Location, message: String) : TypeError {
     return TypeError
 }
 
+fun commonAncestorType(type1:Type, type2:Type) : Type? {
+    if (type1 !is TypeClassInstance) return null
+    if (type2 !is TypeClassInstance) return null
+    if (type1.typeArguments != type2.typeArguments)
+        return null
+    var current: TypeClass? = type1.genericType
+    while (current != null) {
+        println("Checking if ${current.name} is super class of ${type2.genericType.name}")
+        if (current.isSuperClassOf(type2))
+            return TypeClassInstance.create(current, type1.typeArguments)
+        current = current.superClass?.genericType
+    }
+    return null
+}
+
+fun enclosingType(location: Location, typ1:Type, type2:Type) : Type {
+    // Find the closest common ancestor type
+    val isNullable = (typ1 is TypeNullable) || (type2 is TypeNullable)
+    val base1 = if (typ1 is TypeNullable) typ1.elementType else typ1
+    val base2 = if (type2 is TypeNullable) type2.elementType else type2
+
+    val ret =
+        if      (base1 is TypeNothing)          base2
+        else if (base2 is TypeNothing)          base1
+        else if (base1==base2)                  base1
+        else if (base1==TypeError)              base2
+        else if (base2==TypeError)              base1
+        else if (base1==TypeAny)                TypeAny
+        else if (base2==TypeAny)                TypeAny
+        else if (base1==TypeNull)               TypeNullable.create(base2)
+        else if (base2==TypeNull)               TypeNullable.create(base1)
+        else commonAncestorType(base1, base2)
+            ?: reportTypeError(location, "Types '$typ1' and '$type2' have no common ancestor type")
+
+    return if (isNullable) TypeNullable.create(ret) else ret
+}
+
 fun Type.getSize(): Int = when (this) {
     TypeUnit, TypeBool, TypeChar -> 1
     TypeInt, TypeReal -> 4
@@ -219,6 +288,8 @@ fun Type.getSize(): Int = when (this) {
     is TypeClassInstance -> 4
     is TypeTuple -> 4*elementTypes.size
     is TypeInlineArray -> elementType.getSize() * size
+    is TypeFunction -> 4
+    is TypePointer -> 4
 }
 
 // ========================================================================
@@ -242,6 +313,7 @@ fun Type.mapType(typeMap: Map<TypeGenericParameter, Type>): Type {
             TypeClassInstance.create(this, newTypeArgs)
         }
         is TypeTuple -> TypeTuple.create(elementTypes.map { it.mapType(typeMap) })
+        is TypePointer -> TypePointer.create(elementType.mapType(typeMap))
         TypeAny,
         TypeBool,
         TypeChar,
@@ -254,6 +326,7 @@ fun Type.mapType(typeMap: Map<TypeGenericParameter, Type>): Type {
         TypeString,
         TypeUnit -> this
         is TypeInlineArray -> TypeInlineArray.create(elementType.mapType(typeMap), size)
+        is TypeFunction -> this // TODO
     }
 }
 

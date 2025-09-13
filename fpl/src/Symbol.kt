@@ -28,6 +28,10 @@ class FunctionSymbol(location: Location, name: String) : Symbol(location, name, 
 class TypeNameSymbol(location: Location, name: String, type:Type) : Symbol(location, name, type, false)
 class FieldSymbol(location: Location, name: String, type: Type, mutable:Boolean, var offset:Int=-1) : Symbol(location, name, type, mutable)
 
+// Represents accessing a field or property of an object, e.g., obj.field
+// Only used during type checking, not in the final IR
+class AccessSymbol(location: Location, val lhs:Symbol, val rhs:Symbol, type:Type) : Symbol(location, "${lhs.name}.${rhs.name}", type, rhs.mutable)
+
 val predefinedSymbols : Map<String, Symbol> = genPredefinedSymbols()
 val lengthSymbol = FieldSymbol(nullLocation, "length", TypeInt, false, -4)
 
@@ -48,6 +52,15 @@ private fun genPredefinedSymbols(): Map<String, Symbol> {
     return symbols
 }
 
+val allAccessSymbols = mutableMapOf<Pair<Symbol, Symbol>, AccessSymbol>()
+fun createAccessSymbol(location: Location, lhs:Symbol, rhs:Symbol, type:Type) : AccessSymbol {
+    val key = Pair(lhs, rhs)
+    return allAccessSymbols.getOrPut(key) {
+        val sym = AccessSymbol(location, lhs, rhs, type)
+//        println("Creating AccessSymbol $sym for ${lhs.name}.${rhs.name}")
+        sym
+    }
+}
 
 fun newGlobalVar(location: Location, name: String, type: Type, mutable: Boolean): GlobalVarSymbol {
     val sym = GlobalVarSymbol(location, name, type, mutable, globalsSize)
@@ -149,6 +162,7 @@ fun Symbol.getDescription() : String = when (this) {
     is TypeNameSymbol -> "type name"
     is VarSymbol -> "variable"
     is FieldSymbol -> "field"
+    is AccessSymbol -> "fieldAccess"
 }
 
 
@@ -187,6 +201,7 @@ fun Symbol.mapType(typeMap: Map<TypeGenericParameter, Type>) : Symbol {
         is GlobalVarSymbol -> this
         is TypeNameSymbol -> TypeNameSymbol(location, name, type.mapType(typeMap))
         is VarSymbol -> VarSymbol(location, name, type.mapType(typeMap), mutable)
+        is AccessSymbol -> error("AccessSymbol should not be mapped")
     }
 }
 
@@ -209,6 +224,7 @@ private fun Symbol.toJson():String {
             else -> "type"
         }
         is VarSymbol -> "var"
+        is AccessSymbol -> "fieldAccess"
     }
 
     val type = if (this is FunctionSymbol) this.overloads[0].returnType else this.type

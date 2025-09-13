@@ -33,6 +33,7 @@ class AstTryExpr(location: Location, val expr: AstExpr) : AstExpr(location)
 class AstMakeTupleExpr(location: Location, val elements: List<AstExpr>) : AstExpr(location)
 class AstUnsafeExpr(location: Location, val expr: AstExpr) : AstExpr(location)
 class AstAbortExpr(location: Location, val abortCode: AstExpr) : AstExpr(location)
+class AstIfExpr(location: Location, val cond:AstExpr, val trueExpr:AstExpr, val falseExpr:AstExpr) : AstExpr(location)
 
 // Statement nodes
 sealed class AstStmt(location: Location) : Ast(location)
@@ -96,6 +97,7 @@ class AstTop(location: Location, body: List<AstStmt>) : AstBlock(location, body)
 // Type nodes
 sealed class AstType(location:Location) : Ast(location)
 class AstArrayType(location: Location, val elementType: AstType) : AstType(location)
+class AstPointerType(location: Location, val elementType: AstType) : AstType(location)
 class AstNullableType(location: Location, val elementType: AstType) : AstType(location)
 class AstErrableType(location: Location, val elementType: AstType) : AstType(location)
 class AstTypeIdentifier(location: Location, val name: String) : AstType(location)

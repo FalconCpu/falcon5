@@ -1,53 +1,160 @@
-extern fun print(s:String)
-extern fun print(i:Int)
-extern fun printHex(i:Int)
+extern fun taskFinished()
 
-class Task
-    var pc  : Int
-    var r1  : Int
-    var r2  : Int
-    var r3  : Int
-    var r4  : Int
-    var r5  : Int
-    var r6  : Int
-    var r7  : Int
-    var r8  : Int
-    var r9  : Int
-    var r10 : Int
-    var r11 : Int
-    var r12 : Int
-    var r13 : Int
-    var r14 : Int
-    var r15 : Int
-    var r16 : Int
-    var r17 : Int
-    var r18 : Int
-    var r19 : Int
-    var r20 : Int
-    var r21 : Int
-    var r22 : Int
-    var r23 : Int
-    var r24 : Int
-    var r25 : Int
-    var r26 : Int
-    var r27 : Int
-    var r28 : Int
-    var r29 : Int
-    var r30 : Int
-    var sp  : Int
+var allTasks : TaskControlBlock         # linked list of all tasks
+var readyTasks : TaskControlBlock       # linked list of tasks that are running or ready to run
+var taskListCreated = false
+
+enum TaskState [ READY, BLOCKED, TERMINATED ]
+
+class TaskControlBlock
+    val regs  : InlineArray<Int>(32)    # register 0 = PC
+    val memory = new List<Int>()        # memory regions this task has access to
+    var estatus = 0                     # saved exception status register
+    var name  : String
+    var runState = TaskState.BLOCKED
+    var nextTask : TaskControlBlock     # for linked list of tasks
+    var prevTask : TaskControlBlock
+    var nextReady : TaskControlBlock   # for linked list of ready tasks
+    var prevReady : TaskControlBlock
+    var firstMessage : Message? = null
+    var lastMessage : Message? = null
 
     fun dump() 
-        val x = unsafe((this as Array<Int>))
         for i in 0..31
             if i=0
-                print("PC=")
+                kprintf("PC=")
             elsif i=31
-                print("SP=")
+                kprintf("SP=")
             else
-                print("$")
-                print(i)
-                if i<10
-                    print(" ")
-                print("=")
-            printHex(x[i])
+                kprintf("%2d=",i)
+            kprintf("%08x ",regs[i])
+            if (i %8=7)
+                kprintf("\n")
+        
+    
+    fun addMessage(msg:Message)
+        if lastMessage=null
+            firstMessage = msg
+        else
+            lastMessage.next = msg
+        lastMessage = msg
+        if runState=TaskState.BLOCKED
+            setReady()
+    
 
+    # Allocate memory for this task using the buddy allocator,
+    # and add it to the task's list of memory regions
+    fun allocMem(size:Int, permission:Int) -> Int
+        var mem = allocateBlock(size)
+        mem = mem | permission
+        memory.add(mem)
+        return mem & BUDDY_MASK_ADDRESS
+
+    fun freeMem(block:Int) -> Error
+        if (memory.remove(block))
+            freeBlock(block)
+            return Error.OK
+        return Error.INVALID_ARGUMENT
+
+    fun free()
+        # free all memory regions allocated to this task
+        for mem in memory
+            if (mem!=(0xE0000000 | MEM_PERMISSION_RW) and mem!=(0xFFFF0004 | MEM_PERMISSION_R))
+                freeBlock(mem)
+        free memory
+
+    fun setReady()
+        if runState = TaskState.READY
+            return  # already ready
+        # Add to the end of the ready list
+        runState  = TaskState.READY
+        nextReady = readyTasks
+        prevReady = readyTasks.prevReady
+        readyTasks.prevReady.nextReady = this
+        readyTasks.prevReady = this
+
+    fun setBlocked()
+        if runState = TaskState.BLOCKED
+            return  # already blocked
+        if readyTasks = this
+            readyTasks = nextReady
+        runState = TaskState.BLOCKED
+        prevReady.nextReady = nextReady
+        nextReady.prevReady = prevReady
+        nextReady = this
+        prevReady = this
+
+
+fun createTask(name:String, code:Int, stackSize:Int, globalSize:Int) -> TaskControlBlock
+    val task = new TaskControlBlock()
+    task.name = name
+    task.runState = TaskState.BLOCKED
+    for i in 0..31
+        task.regs[i] = 0xBAADDA4A
+    task.regs[31] = task.allocMem(stackSize,MEM_PERMISSION_RW) + stackSize  # Allocate mem for stack (sp points to end)
+    task.regs[30] = unsafe(taskFinished as Int)                 # if the task returns, jump to endTask function
+    task.regs[29] = task.allocMem(4096,MEM_PERMISSION_RW)  # give the task a globals area
+    task.memory.add(0xE0000000 | MEM_PERMISSION_RW)        # give task access to MMIO
+    task.memory.add(0xFFFF0004 | MEM_PERMISSION_R)         # give task access to ROM
+    task.regs[0] = code     
+
+    # Add task to the allTasks list
+    task.nextTask = allTasks
+    task.prevTask = allTasks.prevTask
+    allTasks.prevTask.nextTask = task
+    allTasks.prevTask = task
+
+    kprintf("Created task '%s' %p: Stack=%p Globals=%x\n", task.name, task, task.regs[31], task.regs[29])
+    return task
+
+fun createSystemTask(name:String, code:Int) -> TaskControlBlock
+    val task = new TaskControlBlock()
+    task.name = name
+    task.estatus = 1            # Give task supervisor privileges
+    task.runState = TaskState.BLOCKED
+    for i in 0..31
+        task.regs[i] = 0xBAADDA4B
+    task.regs[31] = 0x10000  # Task uses system stack
+    task.regs[30] = 0        # Task should never return
+    task.regs[29] = 0x100    # give the task access to kernal globals area
+    task.regs[0] = code     
+
+    # Add task to the allTasks list
+    if taskListCreated = false
+        # this is the first task, so initialize the allTasks list
+        allTasks = task
+        task.nextTask = task
+        task.prevTask = task
+        task.nextReady = task
+        task.prevReady = task   
+        task.runState = TaskState.READY
+        readyTasks = task
+        taskListCreated = true
+    else
+        task.nextTask = allTasks
+        task.prevTask = allTasks.prevTask
+        allTasks.prevTask.nextTask = task
+        allTasks.prevTask = task
+
+    kprintf("Created system task '%s' %p: Stack=%p Globals=%x\n", task.name, task, task.regs[31], task.regs[29])
+    return task
+
+fun findTaskByName(name:String) -> TaskControlBlock?
+    var t = allTasks.nextTask
+    while t!=allTasks
+        if t.name = name
+            return t
+    return null
+
+fun runScheduler()
+    # really simple implementation for now - just switch to the next task in the ready list
+
+    if readyTasks.nextReady = readyTasks
+        kprintf("Only system task left running\n")
+        dumpBuddyAllocator()
+        dumpMemorySystem()
+        exit()
+
+
+    readyTasks = readyTasks.nextReady
+    runTask(readyTasks)

@@ -1,3 +1,4 @@
+extern fun exit()
 
 enum Exception(text:String) [
     NONE                     ("No Exception"),
@@ -11,11 +12,108 @@ enum Exception(text:String) [
     SYSTEM_CALL              ("System Call"),
     INDEX_OVERFLOW           ("Index Overflow") ]
 
-fun exceptionHandler(cause:Exception, data:Int, task:Task)
-    print("EXCEPTION ")
-    print(cause.text)
-    print(" DATA=")
-    printHex(data)
-    print(" EPC=")
-    printHex(task.pc)
-    print("\n")
+const SYSCALL_END_TASK     = 0x00
+const SYSCALL_YIELD        = 0x01
+const SYSCALL_FIND_TASK    = 0x02
+const SYSCALL_SEND_MESSAGE = 0x03
+const SYSCALL_GET_MESSAGE  = 0x04
+const SYSCALL_POLL_MESSAGE = 0x05
+const SYSCALL_ALLOC_MEM    = 0x06
+const SYSCALL_FREE_MEM     = 0x07   
+const SYSCALL_OPEN_FILE    = 0x10
+const SYSCALL_CLOSE_FILE   = 0x11
+const SYSCALL_READ_FILE    = 0x12
+const SYSCALL_WRITE_FILE   = 0x13
+
+
+fun dumpException(cause:Exception, data:Int)
+    kprintf("EXCEPTION %s DATA=%08x\n", cause.text, data)
+    # print the register state of the current task
+    allTasks.dump()
+    exit()
+
+fun endTask(task:TaskControlBlock)
+    kprintf("Ending task '%s'\n", task.name)
+    # remove task from readyTasks list
+    if task.runState = TaskState.READY
+        task.prevReady.nextReady = task.nextReady
+        task.nextReady.prevReady = task.prevReady
+    # remove task from allTasks list
+    task.prevTask.nextTask = task.nextTask
+    task.nextTask.prevTask = task.prevTask
+    free task
+
+fun exceptionHandler(cause:Exception, data:Int, task:TaskControlBlock)
+    var advancePC = true
+
+    if (cause=Exception.SYSTEM_CALL)
+        when (data)
+            SYSCALL_END_TASK ->
+                endTask(task)
+
+            SYSCALL_YIELD    ->
+               val dummy = 0  # just return to the scheduler
+
+            SYSCALL_FIND_TASK->  
+                val name = unsafe(task.regs[1] as String)
+                val t = findTaskByName(name)
+                task.regs[8] = unsafe(t as Int)
+
+            SYSCALL_SEND_MESSAGE ->
+                val t = unsafe(task.regs[1] as TaskControlBlock)
+                val msg = new Message(task.regs[2], task.regs[3], task.regs[4], task.regs[5])
+                t.addMessage(msg)
+
+            SYSCALL_GET_MESSAGE  ->
+                val msg = task.firstMessage
+                if msg=null
+                    task.setBlocked()
+                    advancePC = false       # don't advance PC - when task is resumed it will re-issue the syscall
+                else
+                    task.regs[8] = msg.data0
+                    task.regs[7] = msg.data1
+                    task.regs[6] = msg.data2
+                    task.regs[5] = msg.data3
+                    task.firstMessage = msg.next
+                    if task.firstMessage=null
+                        task.lastMessage = null
+                    free msg  
+
+            SYSCALL_POLL_MESSAGE ->
+                val msg = task.firstMessage
+                if msg=null
+                    task.regs[8] = 0
+                else
+                    task.regs[8] = 1
+
+            SYSCALL_ALLOC_MEM ->
+                val size = task.regs[1]
+                val permission = task.regs[2]
+                val mem = task.allocMem(size, permission)  # TODO check for failure
+                task.regs[8] = mem
+
+            SYSCALL_FREE_MEM  ->
+                val mem = task.regs[1]      # TODO check that this memory was allocated to this task
+                task.freeMem(mem)
+
+            SYSCALL_OPEN_FILE ->
+                val filename = unsafe(task.regs[1] as String)
+                val mode = task.regs[2]
+                val fd = openFile(task, filename, mode)
+                if (fd is Error)
+                    task.regs[7] = 1
+                else
+                    task.regs[7] = 0
+                task.regs[8] = unsafe(fd as Int)
+
+
+            else -> 
+                kprintf("Unknown syscall %x from task '%s'\n", data, task.name)
+    else
+        dumpException(cause, data)
+
+    # advance the PC of the task to the next instruction
+    if advancePC
+        task.regs[0] += 4
+
+    runScheduler()

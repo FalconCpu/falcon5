@@ -1378,5 +1378,205 @@ class ExecuteTest {
 
         runTest(prog, expected)
     }
+
+    @Test
+    fun functionPointerTest() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+            extern fun print(s:String)
+
+            fun doSomething()
+                print("Hello")
+            
+            fun main()
+                val x = doSomething
+                x()
+        """.trimIndent()
+
+        val expected = """
+            Hello
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun functionPointerTestWithArgs() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+            extern fun print(s:String)
+
+            fun doSomething(a:Int)
+                print("Hello ")
+                print(a)
+                print("\n")
+            
+            fun main()
+                val x = doSomething
+                x(4)
+        """.trimIndent()
+
+        val expected = """
+            Hello 4
+            
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun functionPointerTestWithBadArgs() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+            extern fun print(s:String)
+
+            fun doSomething(a:Int)
+                print("Hello ")
+                print(a)
+                print("\n")
+            
+            fun main()
+                val x = doSomething
+                x()
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:12.6-12.6:  Got 0 arguments when expecting 1
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+
+    @Test
+    fun ifExpression() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+            extern fun print(s:String)
+
+            fun doSomething(a:Int)
+                print(if a > 0 then "Positive" else "Non-positive")
+                print("\n")
+            
+            fun main()
+                for i in -1..1
+                    doSomething(i)
+        """.trimIndent()
+
+        val expected = """
+            Non-positive
+            Non-positive
+            Positive
+
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun ifExpression1() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+            extern fun print(s:String)
+
+            fun doSomething(a:Int)
+                print(if a > 0 then "Positive" else 2)
+                print("\n")
+            
+            fun main()
+                for i in -1..1
+                    doSomething(i)
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:6.16-6.16:  Types 'String' and 'Int' have no common ancestor type
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun ifExpression2() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+            extern fun print(s:String)
+
+            class Animal
+            class Dog(val name:String) : Animal
+
+            fun doSomething(a:Animal) 
+                val x = if a is Dog then a else return 
+                print(x.name)       # Should be Dog here
+            
+            fun main()
+                val d = new Dog("Fido")
+                doSomething(d)
+        """.trimIndent()
+
+        val expected = """
+            Fido
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun ifExpression3() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+            extern fun print(s:String)
+
+            class Animal
+            class Dog(val name:String) : Animal
+            class Cat(val name:String) : Animal
+
+            fun doSomething(a:Int) -> Dog 
+                val x = if a=1 then new Dog("Fido") else new Cat("Whiskers")
+                return x        # Error as x should be Animal
+            
+            fun main()
+                doSomething(0)
+        """.trimIndent()
+
+        val expected = """
+            input.fpl:11.12-11.12:  Type mismatch got 'Animal' when expecting 'Dog'
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+    @Test
+    fun pointerTest() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(c:Char)
+            extern fun print(s:String)
+
+            fun doSomething(a:Pointer<Int>) 
+                for i in 0..4
+                    print(a[i])
+                    print(' ')
+            
+            fun main()
+                val c = new Array<Int>(5){it*10}
+                doSomething(c)
+        """.trimIndent()
+
+        val expected = """
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
+
+
+
 }
 

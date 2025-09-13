@@ -14,6 +14,10 @@
 
 const BUDDY_MASK_ADDRESS = 0xFFFFF000
 const BUDDY_MASK_SIZE    = 0x0000000F
+const MEM_PERMISSION_R   = 0x00000010
+const MEM_PERMISSION_RW  = 0x00000030
+const MEM_PERMISSION_RX  = 0x00000050
+
 
 # Keep a list of free blocks of each size:-
 var freeBlocks : InlineArray< List<Int> >(16)
@@ -46,7 +50,7 @@ fun buddyLog2(size:Int) -> Int
 # Free a block of memory given its block ID
 
 fun freeBlock(b:Int)
-    var blk = b
+    var blk = b & 0xFFFFF00F   # mask off any permission bits
     # Look to see if the buddy is free - if so merge the two blocks to form a larger block and repeat
     while freeBlocks[blk&BUDDY_MASK_SIZE].remove( getBuddy(blk) )
         blk = mergeBuddy(blk)
@@ -87,7 +91,6 @@ fun initializeBuddyAllocator()
     # Initialize the free block lists.
     for i in 0..<16
         freeBlocks[i] = new List<Int>()
-        kprintf("Free list %d initialized %p\n", i, freeBlocks[i])
 
     # Add all memory in the range to the free lists
     const startOfBuddyAllocator = 0x10004

@@ -892,6 +892,46 @@ class PathContextTests {
         runTest(prog, expected)
     }
 
+    @Test
+    fun fieldRefineType() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(s:String)
+            
+            class LinkedListNode(val value:Int)
+                var next:LinkedListNode? = null
+            
+            fun addToEnd(head:LinkedListNode, node:LinkedListNode)
+                var x = head
+                while x.next != null
+                    x = x.next              # OK as can refine type of x.next to non-null
+                x.next = node                
+                
+            fun printList(head:LinkedListNode)
+                var x : LinkedListNode? = head
+                while x != null
+                    print(x.value)
+                    print("\n")
+                    x = x.next
+                
+            fun main()
+                val list = new LinkedListNode(1)
+                addToEnd(list, new LinkedListNode(2))
+                addToEnd(list, new LinkedListNode(3))
+                printList(list)
+                
+                
+        """.trimIndent()
+
+        val expected = """
+            1
+            2
+            3
+
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
 
 }
 

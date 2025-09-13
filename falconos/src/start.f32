@@ -57,14 +57,18 @@ ExceptionHandler:
     cfg $1, !escratch, $29     # Swap $29 and escratch back (now !escratch has TCB pointer again)
     stw $1, $29[116]           # Save updated TCB pointer
 
+    cfg $1, !estatus
+    stw $1, $29[132]           # Save ESTATUS into task control
+
     cfg $1, !epc
     stw $1, $29[0]             # Save EPC into task control block
 
     cfg $1, !ecause
     cfg $2, !edata
-    ld $31, 0x4000000           # Set up stack pointer for calling fpl function
+    ld $3, $29                 # Load pointer to task control block
+    ld $31, 0x4000000          # Set up stack pointer for calling fpl function
     ld $29, 0x200              # Setup global pointer for calling fpl function
-    jsr /exceptionHandler(Exception,Int,Task)
+    jsr /exceptionHandler(Exception,Int,TaskControlBlock)  # Call the exception handler function
     jmp /exit()
 
 # #######################################################################
@@ -72,13 +76,31 @@ ExceptionHandler:
 # #######################################################################
 # Resume (or start) a task. The task control block pointer is in $1
 
-/runTask(Task):
+/runTask(TaskControlBlock):
+    # Set up the MPU for the task
+    ldw $2, $1[128]             # $2 = Task's List<MemBlock>
+    ldw $3, $2[0]               # $3 = number of memory regions
+    ldw $4, $2[4]               # $4 = pointer to array of memory regions
+    lsl $3, 2                   # Convert count to bytes
+    add $3, $4                  # $3 = pointer to end of array of memory regions
+    ld $5, 1
+    cfg !mpu_cmd, $5            # Reset the MPU
+
+.loop:
+    ldw $5, $4[0]               # $5 = next memory region
+    cfg !mpu_data, $5           # Add memory region to MPU
+    add $4, 4                   # Increment pointer to next memory region
+    bne $3, $4, .loop            # Repeat for all memory regions
+
     ldw $29, $1[116]            # Get the task's $29
     cfg !escratch, $29          # Temporarily store $29 in escratch
     ld $29, $1                  # Set $29 to point to the task control block
 
+    ldw $1, $29[132]            # Load ESTATUS from task control block
+    cfg !estatus, $1
+
     ldw $1, $29[0]               # Load EPC from task control block
-    cfg !epc, $1                # Set EPC
+    cfg !epc, $1                 # Set EPC
 
     ldw $1,  $29[4]               # Load the registers
     ldw $2,  $29[8]
@@ -123,6 +145,54 @@ ld $29, 0x200              # Setup global pointer
 jsr /initializeMemorySystem()
 jsr /topLevel
 jsr /main()
+
+# #######################################################################
+#                          End Task
+# #######################################################################
+# Block of code to end a task cleanly by jumping to system function
+
+/taskFinished():
+    sys 0
+
+
+# #######################################################################
+#                          Yield
+# #######################################################################
+# Call the scheduler to switch to another task
+
+/yield():
+    sys 1
+    ret
+
+# #######################################################################
+#                          findTask
+# #######################################################################
+# Call the scheduler to switch to another task
+
+/findTask(String):
+    sys 2
+    ret
+
+
+# #######################################################################
+#                          SendMessage
+# #######################################################################
+# Call the scheduler to switch to another task
+
+/sendMessage(TaskControlBlock,Int,Int,Int,Int):
+    sys 3
+    ret
+
+# #######################################################################
+#                          GetMessage
+# #######################################################################
+# Call the scheduler to switch to another task
+
+/getMessage():
+    sys 4
+    ret
+
+
 
 # #######################################################################
 #                          Exit

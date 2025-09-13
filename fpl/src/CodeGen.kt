@@ -16,6 +16,7 @@ fun TctExpr.codeGenRvalue() : Reg {
                 is StringValue -> currentFunc.addLea(value)
                 is ArrayValue -> currentFunc.addLea(value)
                 is ClassValue -> currentFunc.addLea(value)
+                is FunctionValue -> currentFunc.addLea(value)
             }
         }
 
@@ -33,7 +34,10 @@ fun TctExpr.codeGenRvalue() : Reg {
 
         is TctErrorExpr -> { zeroReg }  // Dummy return value
 
-        is TctFunctionName -> TODO("Function pointers not supported yet")
+        is TctFunctionName -> {
+            val value = FunctionValue.create(sym.overloads[0], type)
+            currentFunc.addLea(value)
+        }
 
         is TctReturnExpr -> {
             val retReg = expr?.codeGenRvalue()
@@ -58,6 +62,8 @@ fun TctExpr.codeGenRvalue() : Reg {
                 Log.error(location, "Cannot index into type '${array.type}'")
             val bounds = if (array.type is TypeInlineArray)
                 currentFunc.addLdImm(array.type.size)
+            else if (array.type is TypePointer)
+                currentFunc.addLdImm(Int.MAX_VALUE)   // No bounds checking on pointers
             else
                 currentFunc.addLoad(arrayReg, lengthSymbol)
             val scaled = currentFunc.addIndex(size, indexReg, bounds)
@@ -283,6 +289,35 @@ fun TctExpr.codeGenRvalue() : Reg {
             else
                 currentFunc.addLoad(sym.type.getSize(), cpuRegs[29], sym.offset)
         }
+
+        is TctIndirectCallExpr -> {
+            val argRegs = args.map{it.codeGenRvalue()}
+            val func = func.codeGenRvalue()
+            for(i in argRegs.indices)
+                currentFunc.addMov(cpuRegs[i+1], argRegs[i])
+            currentFunc.addInstr( InstrIndCall(func, type))
+            if (type!=TypeUnit)
+                currentFunc.addCopy(cpuRegs[8])
+            else
+                cpuRegs[0]
+        }
+
+        is TctIfExpr -> {
+            val resultReg = currentFunc.newUserTemp()
+            val trueLabel = currentFunc.newLabel()
+            val falseLabel = currentFunc.newLabel()
+            val endLabel = currentFunc.newLabel()
+            cond.codeGenBool(trueLabel, falseLabel)
+            currentFunc.addLabel(trueLabel)
+            val trueReg = trueExpr.codeGenRvalue()
+            currentFunc.addMov(resultReg, trueReg)
+            currentFunc.addJump(endLabel)
+            currentFunc.addLabel(falseLabel)
+            val falseReg = falseExpr.codeGenRvalue()
+            currentFunc.addMov(resultReg, falseReg)
+            currentFunc.addLabel(endLabel)
+            resultReg
+        }
     }
 }
 
@@ -505,6 +540,8 @@ fun TctExpr.codeGenLvalue(value:Reg, op:TokenKind) {
                 Log.error(location, "Cannot index into type '${array.type}'")
             val bounds = if (array.type is TypeInlineArray)
                 currentFunc.addLdImm(array.type.size)
+            else if (array.type is TypePointer)
+                currentFunc.addLdImm(-1) // Arbitrary large value - we can't do bounds checking on pointers
             else
                 currentFunc.addLoad(arrayReg, lengthSymbol)
             val scaled = currentFunc.addIndex(size, indexReg, bounds)

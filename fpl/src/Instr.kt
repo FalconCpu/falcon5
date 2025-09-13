@@ -38,6 +38,7 @@ sealed class Instr() {
         is InstrBranch -> "${op.branchName()} $src1, $src2, $label"
         is InstrCall -> "CALL $func"
         is InstrVCall -> "VCALL $func"
+        is InstrIndCall -> "INDCALL $func"
         is InstrEnd -> "END"
         is InstrJump -> "JMP $label"
         is InstrLabel -> "$label:"
@@ -62,6 +63,7 @@ sealed class Instr() {
         is InstrLoad -> dest
         is InstrCall -> if (func.returnType!=TypeUnit) resultReg else null
         is InstrVCall -> if (func.returnType!=TypeUnit) resultReg else null
+        is InstrIndCall -> if (retType!=TypeUnit) resultReg else null
         is InstrBranch,
         is InstrEnd,
         is InstrJump,
@@ -82,6 +84,7 @@ sealed class Instr() {
         is InstrMov -> listOf(src)
         is InstrCall -> emptyList()
         is InstrVCall -> emptyList()
+        is InstrIndCall -> listOf(func)
         is InstrEnd -> emptyList()
         is InstrJump -> emptyList()
         is InstrLabel -> emptyList()
@@ -108,6 +111,7 @@ class InstrJump(val label: Label) : Instr()
 class InstrBranch(val op:BinOp, val src1: Reg, val src2: Reg, val label: Label) : Instr()
 class InstrCall(val func: Function) : Instr()
 class InstrVCall(val func: Function) : Instr()
+class InstrIndCall(val func: Reg, val retType:Type) : Instr()
 class InstrLea(val dest: Reg, val src: Value) : Instr()
 class InstrLoad(val size:Int, val dest: Reg, val addr: Reg, val offset:Int) : Instr()
 class InstrStore(val size:Int, val src: Reg, val addr: Reg, val offset:Int) : Instr()

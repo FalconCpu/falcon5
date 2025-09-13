@@ -1,0 +1,11 @@
+var uartTask : TaskControlBlock
+
+fun initializeUART()
+    uartTask = createSystemTask("UART", unsafe(uartTaskCode as Int))
+    uartTask.setReady()
+
+fun uartTaskCode()
+    while true  
+        val (msg1,msg2,msg3,msg4) = getMessage()
+        kprintf("UART task got message: %x %x %x %x\n", msg1, msg2, msg3, msg4)
+        yield

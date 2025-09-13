@@ -21,11 +21,7 @@ data class PathContext (
     )
 
     fun refineType(expr:TctExpr, type: Type) : PathContext {
-        val sym = when (expr) {
-            is TctVariable -> expr.sym
-            is TctGlobalVarExpr -> expr.sym
-            else -> return this
-        }
+        val sym = expr.getSymbol() ?: return this
         return PathContext(
             uninitializedVariables,
             maybeUninitializedVariables,
@@ -35,6 +31,16 @@ data class PathContext (
     }
 
 
+}
+
+fun TctExpr.getSymbol() : Symbol? = when (this) {
+    is TctVariable -> this.sym
+    is TctGlobalVarExpr -> this.sym
+    is TctMemberExpr -> {
+        val sym = objectExpr.getSymbol() ?: return null
+        createAccessSymbol(location, sym, member, type)
+    }
+    else -> null
 }
 
 val emptyPathContext = PathContext(

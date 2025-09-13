@@ -321,7 +321,15 @@ class Parser(val lexer: Lexer) {
     }
 
     private fun parseExpr() : AstExpr {
-        return parseOrExpr()
+        if (canTake(IF)) {
+            val cond = parseExpr()
+            expect(THEN)
+            val trueExpr = parseExpr()
+            expect(ELSE)
+            val falseExpr = parseExpr()
+            return AstIfExpr(cond.location, cond, trueExpr, falseExpr)
+        } else
+            return parseOrExpr()
     }
 
     private fun parseLambdaExpr() : AstLambdaExpr {
@@ -361,6 +369,15 @@ class Parser(val lexer: Lexer) {
         return AstArrayType(currentToken.location, elementType)
     }
 
+    private fun parseTypePointer() : AstPointerType {
+        expect(POINTER) // Consume ARRAY
+        expect(LT)
+        val elementType = parseType()
+        expect(GT) // Consume GT
+        return AstPointerType(currentToken.location, elementType)
+    }
+
+
     private fun parseInlineArrayType() : AstInlineArrayType {
         expect(INLINEARRAY) // Consume ARRAY
         expect(LT)
@@ -390,6 +407,7 @@ class Parser(val lexer: Lexer) {
             IDENTIFIER -> parseTypeIdentifier()
             ARRAY -> parseTypeArray()
             INLINEARRAY -> parseInlineArrayType()
+            POINTER -> parseTypePointer()
             OPENB -> parseTypeTuple()
             else -> throw ParseError(currentToken.location, "Got '$currentToken' when expecting type")
         }

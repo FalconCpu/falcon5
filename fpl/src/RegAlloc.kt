@@ -108,6 +108,7 @@ class RegisterAllocator(private val func: Function, private val livemap: LiveMap
             is InstrBranch -> InstrBranch(op, replace(src1), replace(src2), label)
             is InstrCall -> this
             is InstrVCall -> this
+            is InstrIndCall -> InstrIndCall(replace(func), retType)
             is InstrJump -> this
             is InstrLabel -> this
             is InstrMov -> InstrMov(replace(dest), replace(src))

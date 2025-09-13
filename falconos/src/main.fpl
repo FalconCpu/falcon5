@@ -1,16 +1,52 @@
 
+# external functions (implemented in assembly syscalls in start.f32)
+extern fun runTask(task:TaskControlBlock)
+extern fun endTask()
+extern fun openFile(name:String, mode:Int) -> Int!
+extern fun writeFile(fd:Int, data:Pointer<Char>, length:Int) -> Int!
+
 fun main()
+    initializeBuddyAllocator()
     copyFontData()
-    val gc = new GraphicsContext()
-    gc.setup()
-    gc.drawRect(0, 0, 640, 480, 0)       # Clear screen to black
-    for i in 0..255
-        val x = (i % 16) * 32
-        val y = (i / 16) * 28
-        gc.drawRect(x, y, x + 30, y + 26, i)  # Draw color blocks
 
-    gc.drawText(10, 10, 15, "Hello, World!")  # Draw white text
+    # create a dummy task to act as a sentinel in the allTasks and readyTasks lists
+    val systemTask = createTask("system", unsafe(systemTask as Int), 4096, 4096)
+    allTasks = systemTask
+    readyTasks = systemTask
+    systemTask.nextReady = systemTask
+    systemTask.prevReady = systemTask
+
+    initializeUART()
+    
+    val task1 = createTask("task1", unsafe(task1Code as Int), 4096, 4096)
+    task1.setReady()
+
+    val task2 = createTask("task2", unsafe(task2Code as Int), 4096, 4096)
+    task2.setReady()
+
+    runScheduler()
+
+
+fun systemTask()
     while true
-        val a = 1
+        kprintf("In system task\n")
+        yield()
 
 
+# external functions (implemented in assembly syscalls in start.f32)
+extern fun yield()
+extern fun getMessage() -> (Int,Int,Int,Int)
+extern fun sendMessage(task:TaskControlBlock, data0:Int, data1:Int, data2:Int, data3:Int)
+extern fun findTask(name:String) -> TaskControlBlock?
+
+fun task1Code()
+    val fh = openFile("CON:", 0)  # open console for reading
+
+
+fun task2Code()
+    val task1 = findTask("task1")
+    if task1=null
+        kprintf("Couldn't find task1\n")
+        return
+    kprintf("Found task1 %p\n", task1)
+    sendMessage(task1, 0x12345678, 0x9ABCDEF0, 0xDEADBEEF, 0xFEEDFACE)

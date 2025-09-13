@@ -1,0 +1,8 @@
+
+class FileHandle(val handler:TaskControlBlock, val task:TaskControlBlock)
+
+fun openFile(taak:TaskControlBlock, name:String, mode:Int) -> FileHandle!
+    if (name="CON:")
+        return new FileHandle(uartTask, taak)
+    else 
+        return Error.FILE_NOT_FOUND  # only console supported for now

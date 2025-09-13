@@ -10,7 +10,7 @@ sealed class Tct (val location: Location)
 sealed class TctExpr(location: Location, val type:Type) : Tct(location)
 class TctConstant(location: Location, val value: Value) : TctExpr(location, value.type)
 class TctVariable(location: Location, val sym:VarSymbol, type:Type) : TctExpr(location, type)
-class TctFunctionName(location: Location, val sym: FunctionSymbol) : TctExpr(location, TypeNothing)
+class TctFunctionName(location: Location, val sym: FunctionSymbol, type:Type) : TctExpr(location, type)
 class TctTypeName(location: Location, val sym: TypeNameSymbol) : TctExpr(location, sym.type)
 class TctBinaryExpr(location: Location, val op: BinOp, val lhs: TctExpr, val rhs: TctExpr, type:Type) : TctExpr(location, type)
 class TctIntCompareExpr(location: Location, val op: BinOp, val lhs: TctExpr, val rhs: TctExpr) : TctExpr(location, TypeBool)
@@ -44,6 +44,8 @@ class TctVarargExpr(location: Location, val exprs: List<TctExpr>, type:Type) : T
 class TctMakeTupleExpr(location: Location, val elements: List<TctExpr>, type:TypeTuple) : TctExpr(location, type)
 class TctAbortExpr(location: Location, val abortCode: TctExpr) : TctExpr(location, TypeNothing)
 class TctGlobalVarExpr(location: Location, val sym: GlobalVarSymbol, type:Type) : TctExpr(location, type)
+class TctIndirectCallExpr(location: Location, val func:TctExpr, val args:List<TctExpr>, type:Type) : TctExpr(location,type)
+class TctIfExpr(location: Location, val cond:TctExpr, val trueExpr:TctExpr, val falseExpr:TctExpr, type:Type) : TctExpr(location,type)
 
 class TctErrorExpr(location: Location, val message: String = "") : TctExpr(location, TypeError) {
     init {

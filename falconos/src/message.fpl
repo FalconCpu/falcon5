@@ -1,0 +1,3 @@
+
+class Message(var data0: Int, var data1: Int, var data2: Int, var data3: Int)
+    var next : Message? = null

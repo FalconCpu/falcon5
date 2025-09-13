@@ -121,6 +121,21 @@ class ClassValue private constructor(val klass: TypeClass) : Value(klass) {
     }
 }
 
+class FunctionValue private constructor(val func:FunctionInstance, type:Type) : Value(type) {
+    override fun toString(): String = "/${func.name}"
+
+    override fun emitRef(sb: StringBuilder) {
+        error("Not supported")
+    }
+
+    companion object {
+        val allFunctionValue = mutableMapOf<FunctionInstance, FunctionValue>()
+
+        fun create(func: FunctionInstance, type:Type): FunctionValue =
+            allFunctionValue.getOrPut(func) { FunctionValue(func,type) }
+    }
+}
+
 
 
 fun emitAllValues(sb: StringBuilder) {
