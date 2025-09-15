@@ -100,13 +100,23 @@ fun exceptionHandler(cause:Exception, data:Int, task:TaskControlBlock)
                 val filename = unsafe(task.regs[1] as String)
                 val mode = task.regs[2]
                 val fd = openFile(task, filename, mode)
-                if (fd is Error)
-                    task.regs[7] = 1
-                else
-                    task.regs[7] = 0
-                task.regs[8] = unsafe(fd as Int)
+                task.regs[8] = if fd is Error then 1 else 0
+                task.regs[7] = unsafe(fd as Int)
 
+            SYSCALL_CLOSE_FILE ->
+                kprintf("closeFile not implemented\n")
+                abort ABORT_NOT_IMPLEMENTED
 
+            SYSCALL_READ_FILE  ->
+                kprintf("readFile not implemented\n")
+                abort ABORT_NOT_IMPLEMENTED
+
+            SYSCALL_WRITE_FILE ->
+                task.setBlockedIO()
+                val fd = unsafe(task.regs[1] as FileHandle) # TODO check that this file handle belongs to this task
+                val msg = new Message(MESSAGE_WRITE, task.regs[1], task.regs[2], task.regs[3])
+                fd.handler.addMessage(msg)
+                
             else -> 
                 kprintf("Unknown syscall %x from task '%s'\n", data, task.name)
     else

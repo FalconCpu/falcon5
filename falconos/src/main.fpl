@@ -10,7 +10,7 @@ fun main()
     copyFontData()
 
     # create a dummy task to act as a sentinel in the allTasks and readyTasks lists
-    val systemTask = createTask("system", unsafe(systemTask as Int), 4096, 4096)
+    val systemTask = createSystemTask("system", unsafe(systemTask as Int))
     allTasks = systemTask
     readyTasks = systemTask
     systemTask.nextReady = systemTask
@@ -21,8 +21,8 @@ fun main()
     val task1 = createTask("task1", unsafe(task1Code as Int), 4096, 4096)
     task1.setReady()
 
-    val task2 = createTask("task2", unsafe(task2Code as Int), 4096, 4096)
-    task2.setReady()
+    # val task2 = createTask("task2", unsafe(task2Code as Int), 4096, 4096)
+    # task2.setReady()
 
     runScheduler()
 
@@ -41,12 +41,16 @@ extern fun findTask(name:String) -> TaskControlBlock?
 
 fun task1Code()
     val fh = openFile("CON:", 0)  # open console for reading
+    if (fh is Int)
+        writeFile(fh, "Hello world\n", 12)
+    else
+        kprintf("Failed to open console for writing\n")
+    kprintf("Task 1 completed file write\n")
 
-
-fun task2Code()
-    val task1 = findTask("task1")
-    if task1=null
-        kprintf("Couldn't find task1\n")
-        return
-    kprintf("Found task1 %p\n", task1)
-    sendMessage(task1, 0x12345678, 0x9ABCDEF0, 0xDEADBEEF, 0xFEEDFACE)
+# fun task2Code()
+#     val task1 = findTask("task1")
+#     if task1=null
+#         kprintf("Couldn't find task1\n")
+#         return
+#     kprintf("Found task1 %p\n", task1)
+#     sendMessage(task1, 0x12345678, 0x9ABCDEF0, 0xDEADBEEF, 0xFEEDFACE)

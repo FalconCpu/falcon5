@@ -31,7 +31,7 @@ private fun AstExpr.typeCheckRvalue(scope: AstBlock, allowTypes:Boolean=false) :
                 Log.error(location, "'${ret.sym.name}' may be uninitialized")
             val refinedType = pathContext.refinedTypes[ret.sym]
             if (ret.type is TypeErrable && refinedType!=null && refinedType !is TypeErrable)
-                return TctExtractCompoundExpr(location, ret, 0,refinedType)
+                return TctExtractCompoundExpr(location, ret, 1,refinedType)
             if (refinedType!=null)
                 return TctVariable(location, ret.sym, refinedType)
         }
@@ -39,7 +39,7 @@ private fun AstExpr.typeCheckRvalue(scope: AstBlock, allowTypes:Boolean=false) :
         is TctGlobalVarExpr -> {
             val refinedType = pathContext.refinedTypes[ret.sym]
             if (ret.type is TypeErrable && refinedType!=null && refinedType !is TypeErrable)
-                return TctExtractCompoundExpr(location, ret, 0,refinedType)
+                return TctExtractCompoundExpr(location, ret, 1,refinedType)
             if (refinedType!=null)
                 return TctGlobalVarExpr(location, ret.sym, refinedType)
         }
@@ -51,7 +51,7 @@ private fun AstExpr.typeCheckRvalue(scope: AstBlock, allowTypes:Boolean=false) :
 //            println("$location Refined type for $this $sym is $refinedType")
 
             if (ret.type is TypeErrable && refinedType!=null && refinedType !is TypeErrable)
-                return TctExtractCompoundExpr(location, ret, 0,refinedType)
+                return TctExtractCompoundExpr(location, ret, 1,refinedType)
             if (refinedType!=null)
                 return TctMemberExpr(location, ret.objectExpr, ret.member, refinedType)
         }
@@ -610,7 +610,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
                 if (tctExpr is TctConstant && tctExpr.value is IntValue)
                     TctConstant(location, IntValue(tctExpr.value.value, typeR))
                 else if (tctExpr.type is TypeErrable)
-                    TctExtractCompoundExpr(location, tctExpr, 0, typeR)
+                    TctExtractCompoundExpr(location, tctExpr, 1, typeR)
                 else
                     TctAsExpr(location, tctExpr, typeR)
             } else
@@ -1055,15 +1055,20 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
             // TODO - add path contexts
             val tctExpr = expr.typeCheckRvalue(scope)
             val clauses = mutableListOf<TctWhenCase>()
+            val pathConextOut = mutableListOf<PathContext>()
+            val pathContextIn = pathContext
             for (clause in body.filterIsInstance<AstWhenCase>()) {
+                pathContext = pathContextIn
                 val tctMatch = clause.patterns.map {
                     it.typeCheckRvalue(scope).checkType(tctExpr.type)
                 }
                 if (clause.patterns.isEmpty() && clause!= body.last())
                     Log.error(clause.location, "The else case must be the last case in a when statement")
                 val tctBody = clause.body.map { it.typeCheckStmt(clause) }
+                pathConextOut += pathContext
                 clauses += TctWhenCase(location, tctMatch, tctBody)
             }
+            pathContext = pathConextOut.merge()
             TctWhenStmt(location, tctExpr, clauses)
         }
     }

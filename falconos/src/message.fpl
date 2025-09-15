@@ -1,3 +1,7 @@
 
+const MESSAGE_WRITE = 0x0100
+const MESSAGE_READ  = 0x0101
+
+
 class Message(var data0: Int, var data1: Int, var data2: Int, var data3: Int)
     var next : Message? = null

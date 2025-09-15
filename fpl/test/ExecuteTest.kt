@@ -1570,6 +1570,7 @@ class ExecuteTest {
         """.trimIndent()
 
         val expected = """
+            0 10 20 30 40 
         """.trimIndent()
 
         runTest(prog, expected)

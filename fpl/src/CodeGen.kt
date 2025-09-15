@@ -252,8 +252,8 @@ fun TctExpr.codeGenRvalue() : Reg {
             require (expr.type is TypeErrable)
             val reg = expr.codeGenRvalue()
             require(reg is CompoundReg)
-            currentFunc.addBranch(BinOp.NE_I, reg.regs[1], zeroReg, currentFunc.endLabel)
-            reg.regs[0]
+            currentFunc.addBranch(BinOp.NE_I, reg.regs[0], zeroReg, currentFunc.endLabel)
+            reg.regs[1]
         }
 
         is TctVarargExpr -> {
@@ -495,10 +495,10 @@ fun TctExpr.codeGenBool(trueLabel: Label, falseLabel: Label) {
             val reg = expr.codeGenRvalue()
             require(reg is CompoundReg)
             if (this.typeIndex==0) {
-                currentFunc.addBranch(BinOp.EQ_I, reg.regs[1], zeroReg, trueLabel)
+                currentFunc.addBranch(BinOp.EQ_I, reg.regs[0], zeroReg, trueLabel)
                 currentFunc.addJump(falseLabel)
             } else {
-                currentFunc.addBranch(BinOp.NE_I, reg.regs[1], zeroReg, trueLabel)
+                currentFunc.addBranch(BinOp.NE_I, reg.regs[0], zeroReg, trueLabel)
                 currentFunc.addJump(falseLabel)
             }
         }
@@ -612,8 +612,8 @@ fun genCall(func:Function, thisArg:Reg?, args: List<Reg>) : Reg {
 
     // Get the return value from the CPU register
     return if (func.returnType is TypeErrable) {
-        val typeReg = currentFunc.addCopy(cpuRegs[7])
-        val valueReg = currentFunc.addCopy(cpuRegs[8])
+        val typeReg = currentFunc.addCopy(cpuRegs[8])
+        val valueReg = currentFunc.addCopy(cpuRegs[7])
         currentFunc.newCompoundReg(listOf(typeReg, valueReg))
     } else if (func.returnType is TypeTuple) {
         val regs = mutableListOf<Reg>()
@@ -653,6 +653,10 @@ fun TctStmt.codeGenStmt() {
                 if (param.type is TypeTuple) {
                     val regs = param.type.elementTypes.map { currentFunc.addCopy(cpuRegs[index++]) }
                     currentFunc.symToReg[param] = currentFunc.newCompoundReg(regs)
+                } else if (param.type is TypeErrable) {
+                    val typeReg = currentFunc.addCopy(cpuRegs[index++])
+                    val valueReg = currentFunc.addCopy(cpuRegs[index++])
+                    currentFunc.symToReg[param] = currentFunc.newCompoundReg(listOf(typeReg, valueReg))
                 } else
                     currentFunc.addMov( currentFunc.getReg(param), cpuRegs[index++])
             // Generate code for the function body

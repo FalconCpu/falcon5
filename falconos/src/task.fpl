@@ -4,7 +4,7 @@ var allTasks : TaskControlBlock         # linked list of all tasks
 var readyTasks : TaskControlBlock       # linked list of tasks that are running or ready to run
 var taskListCreated = false
 
-enum TaskState [ READY, BLOCKED, TERMINATED ]
+enum TaskState [ READY, BLOCKED, BLOCKED_IO, TERMINATED ]
 
 class TaskControlBlock
     val regs  : InlineArray<Int>(32)    # register 0 = PC
@@ -84,6 +84,29 @@ class TaskControlBlock
         nextReady = this
         prevReady = this
 
+    fun setBlockedIO()
+        if runState = TaskState.BLOCKED_IO
+            return  # already blocked
+        if readyTasks = this
+            readyTasks = nextReady
+        runState = TaskState.BLOCKED_IO
+        prevReady.nextReady = nextReady
+        nextReady.prevReady = prevReady
+        nextReady = this
+        prevReady = this
+
+    fun completeIO(result:Int!)
+        if runState != TaskState.BLOCKED_IO
+            kprintf("Task not in BlockedIO")
+            abort ABORT_INVALID_ARGUMENT
+        regs[8] = if result is Error then 1 else 0
+        regs[7] = unsafe(result as Int)
+        # Add to the end of the ready list
+        runState  = TaskState.READY
+        nextReady = readyTasks
+        prevReady = readyTasks.prevReady
+        readyTasks.prevReady.nextReady = this
+        readyTasks.prevReady = this
 
 fun createTask(name:String, code:Int, stackSize:Int, globalSize:Int) -> TaskControlBlock
     val task = new TaskControlBlock()
@@ -116,7 +139,7 @@ fun createSystemTask(name:String, code:Int) -> TaskControlBlock
         task.regs[i] = 0xBAADDA4B
     task.regs[31] = 0x10000  # Task uses system stack
     task.regs[30] = 0        # Task should never return
-    task.regs[29] = 0x100    # give the task access to kernal globals area
+    task.regs[29] = 0x200    # give the task access to kernal globals area
     task.regs[0] = code     
 
     # Add task to the allTasks list

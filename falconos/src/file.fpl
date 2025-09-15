@@ -2,6 +2,7 @@
 class FileHandle(val handler:TaskControlBlock, val task:TaskControlBlock)
 
 fun openFile(taak:TaskControlBlock, name:String, mode:Int) -> FileHandle!
+    kprintf("openFile %s mode %d\n", name, mode)
     if (name="CON:")
         return new FileHandle(uartTask, taak)
     else 

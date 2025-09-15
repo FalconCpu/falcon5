@@ -25,7 +25,7 @@ class ErrorTests {
                 if (name = "missing.txt")
                     return Error.FILE_NOT_FOUND
                 else
-                    return 1
+                    return 42
            
             fun main()
                 val handle1 = openFile("missing.txt")
@@ -49,7 +49,7 @@ class ErrorTests {
 
         val expected = """
             Error opening file: File not found
-            File opened successfully with handle =1
+            File opened successfully with handle =42
         """.trimIndent()
 
         runTest(prog, expected)
@@ -220,7 +220,7 @@ class ErrorTests {
         
         fun open(filename:String) -> Int!
             if (filename="data.txt")
-                return 1
+                return 42
             else
                 return Error.FILE_NOT_FOUND
         
@@ -245,7 +245,7 @@ class ErrorTests {
 
         val expected = """
             Failed to process missing.txt
-            File opened with handle = 1
+            File opened with handle = 42
             Processed data.txt successfully
         """.trimIndent()
 

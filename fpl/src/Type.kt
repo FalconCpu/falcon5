@@ -204,6 +204,7 @@ fun Type.isAssignableTo(other: Type): Boolean {
 
     // Arrays can be converted to Pointer
     if (this is TypeArray && other is TypePointer && this.elementType.isAssignableTo(other.elementType)) return true
+    if (this is TypeString && other is TypePointer && TypeChar.isAssignableTo(other.elementType)) return true
 
     if (other.isSuperClassOf(this)) return true
     if (other is TypeNullable && other.elementType.isSuperClassOf(this)) return true

@@ -85,11 +85,12 @@ ExceptionHandler:
     add $3, $4                  # $3 = pointer to end of array of memory regions
     ld $5, 1
     cfg !mpu_cmd, $5            # Reset the MPU
-
+    jmp .loop_start
 .loop:
     ldw $5, $4[0]               # $5 = next memory region
     cfg !mpu_data, $5           # Add memory region to MPU
     add $4, 4                   # Increment pointer to next memory region
+.loop_start:
     bne $3, $4, .loop            # Repeat for all memory regions
 
     ldw $29, $1[116]            # Get the task's $29
@@ -192,7 +193,21 @@ jsr /main()
     sys 4
     ret
 
+/openFile(String,Int):
+    sys 16
+    ret
 
+/closeFile(Int):
+    sys 17
+    ret
+
+/readFile(Int,Pointer<Char>,Int):
+    sys 18
+    ret
+
+/writeFile(Int,Pointer<Char>,Int):
+    sys 19
+    ret
 
 # #######################################################################
 #                          Exit
