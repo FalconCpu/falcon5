@@ -1197,27 +1197,6 @@ class ExecuteTest {
     }
 
     @Test
-    fun minusEqOnUnionShouldFail() {
-        val prog = """
-            extern fun print(i:Int)
-
-            fun inc(x:Int!) -> Int!
-                var z = x
-                z += 1
-                return z
-
-            fun main()
-                val a = inc(5)
-        """.trimIndent()
-
-        val expected = """
-            input.fpl:5.5-5.5:  Operator '+=' not defined for type 'Int!'
-        """.trimIndent()
-
-        runTest(prog, expected)
-    }
-
-    @Test
     fun constDecl() {
         val prog = """
             extern fun print(i:Int)

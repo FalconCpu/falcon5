@@ -442,7 +442,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
                 return TctErrorExpr(location, "Cannot create array literal of type '${type.name}'")
             val tcItems = tcArgs.map {it.checkType(type.elementType)}
             if (arena==Arena.CONST) {
-                val e = tcArgs.find {it !is TctConstant}
+                val e = tcItems.find {it !is TctConstant}
                 if (e != null)
                     return TctErrorExpr(e.location, "Cannot create constant array literal with non-constant element")
                 val values = tcItems.map { (it as TctConstant).value }
@@ -1246,6 +1246,8 @@ private fun AstBlock.findFunctionDefinitions(scope:AstBlock) {
     when (this) {
         is AstFunctionDefStmt -> {
             val paramsSymbols = params.map { it.createSymbol(this) }
+            for(errPearam in paramsSymbols.filter { it.type is TypeErrable })
+                Log.error(errPearam.location, "Function parameter '${errPearam.name}' cannot be of errable type")
             val returnType = retType?.resolveType(this) ?: TypeUnit
             val longName = (if (scope is AstClassDefStmt) scope.klass.name + "/" else "") +
                 name + paramsSymbols.joinToString(separator = ",", prefix = "(", postfix = ")") { it.type.name }

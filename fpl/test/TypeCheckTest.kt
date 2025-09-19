@@ -241,25 +241,6 @@ class TypeCheckTest {
     }
 
     @Test
-    fun forLoopErrors1() {
-        val prog = """
-            extern fun print(i:Int)
-            extern fun print(c:Char)
-            
-            fun main()
-                for i in 'a'..4
-                    print(i)
-                print('\n')
-        """.trimIndent()
-
-        val expected = """
-            input.fpl:5.19-5.19:  Type mismatch got 'Int' when expecting 'Char'
-        """.trimIndent()
-
-        runTest(prog, expected)
-    }
-
-    @Test
     fun forLoopErrors2() {
         val prog = """
             extern fun print(i:Int)

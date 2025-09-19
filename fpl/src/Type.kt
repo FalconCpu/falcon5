@@ -223,6 +223,8 @@ fun TctExpr.checkType(expectedType:Type) : TctExpr {
         return TctMakeErrableExpr(location, this, 1, expectedType)
     if (expectedType is TypeErrable && this.type==expectedType.okType)
         return TctMakeErrableExpr(location, this, 0, expectedType)
+    if (this.type==TypeInt && expectedType==TypeChar && this is TctConstant && this.value is IntValue && this.value.value in -128..127)
+        return TctConstant(location, IntValue(this.value.value, TypeChar))
 
     if (!type.isAssignableTo(expectedType))
         return TctErrorExpr(location, "Type mismatch got '$type' when expecting '$expectedType'")
