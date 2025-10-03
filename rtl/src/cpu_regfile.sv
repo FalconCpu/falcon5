@@ -53,6 +53,8 @@ always_ff @(posedge clock) begin
     // synthesis translate_off
     if (p5_dest_reg!=5'h0) begin
         $fwrite(fh,"$%d = %08x\n", p5_dest_reg, p5_result);
+        if ($isunknown(p5_result))
+            $display("WARNING: Write of X to $%d\n", p5_dest_reg);
     end
     // synthesis translate_on
 end

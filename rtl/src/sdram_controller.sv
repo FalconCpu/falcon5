@@ -257,7 +257,7 @@ always_comb begin
         end
 
         `STATE_PRECHARGE: begin 
-            if (count==3)
+            if (count==1)
                 next_state = `STATE_READY;
         end
 
@@ -268,15 +268,15 @@ always_comb begin
 
 
         `STATE_REFRESH: begin 
-            if (count==0) begin
+            if (count==1) begin
                 next_cmd = `CMD_PRECHARGE;
                 next_addr = 13'h0400;
             end
-            if (count==3) begin
+            if (count==4) begin
                 next_cmd   = `CMD_REFRESH;
                 next_refresh_needed = 1'b0;
             end
-            if (count==11)
+            if (count==12)        // Need 60ns after a refresh before next command
                 next_state = `STATE_READY;
         end
     endcase

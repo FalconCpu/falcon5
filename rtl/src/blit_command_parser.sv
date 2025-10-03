@@ -44,7 +44,8 @@ module blit_command_parser(
     output logic [15:0]   src_stride,     // Width of the screen in bytes
     output logic [7:0]    reg_color,       // Color to write
     output logic [7:0]    reg_bgcolor,     // Background color for text
-    input  logic          busy            // 1 = blitter is busy
+    input  logic          busy,            // 1 = blitter is busy
+    input  logic          ack             // 1 = blitter has accepted start
 );
 
 // FIFO to hold commands
@@ -83,8 +84,8 @@ localparam STATE_IDLE=0,
            STATE_SETUP=1, 
            STATE_RECT=2, 
            STATE_COPY=3,
-           STATE_WAIT_BUSY=4, 
-           STATE_WAIT_BUSY2=5,
+           STATE_WAIT_ACK=4, 
+           STATE_WAIT_BUSY=5,
            STATE_TEXT=6,
            STATE_TEXT2=7,
            STATE_TEXT3=8,
@@ -140,8 +141,7 @@ always_comb begin
     if (hwregs_blit_valid) begin
         if (fifo_slots_free==0)
             $display("BLIT_CMD: Warning: Command FIFO full, dropping command");
-        else
-            next_fifo_wr_ptr = inc_wr_ptr;
+        next_fifo_wr_ptr = inc_wr_ptr;
     end
 
     // Process commands from the FIFO
@@ -202,7 +202,7 @@ always_comb begin
                     next_reg_y2 = this_cmd[31:16] + offset_y;
                     next_reg_command = `BLIT_RECT;
                     next_start = 1'b1;
-                    next_state = STATE_WAIT_BUSY;
+                    next_state = STATE_WAIT_ACK;
                 end 
                 next_arg_count = arg_count + 3'd1;
                 consume_cmd = 1'b1;
@@ -210,8 +210,6 @@ always_comb begin
         end
 
         STATE_COPY: begin
-            next_src_stride = reg_src_stride;
-            next_reg_src = src_base_addr;
             if (cmd_valid) begin
                 if (arg_count == 3'd0) begin
                     next_reg_x1 = this_cmd[15:0] + offset_x;
@@ -224,8 +222,9 @@ always_comb begin
                     next_reg_src_y = this_cmd[31:16] + offset_y;
                     next_reg_command = `BLIT_COPY;
                     next_src_base_addr = reg_src;
+                    next_src_stride = reg_src_stride;
                     next_start = 1'b1;
-                    next_state = STATE_WAIT_BUSY;
+                    next_state = STATE_WAIT_ACK;
                 end 
                 next_arg_count = arg_count + 3'd1;
                 consume_cmd = 1'b1;
@@ -262,7 +261,9 @@ always_comb begin
         end
 
         STATE_TEXT3: begin
-            next_state = STATE_TEXT4; // Wait one cycle to ensure busy is set
+            next_start = !ack;
+            if (ack)
+                next_state = STATE_TEXT4; // Wait one cycle to ensure busy is set
         end
 
         STATE_TEXT4: begin
@@ -301,11 +302,13 @@ always_comb begin
             end
         end
 
-        STATE_WAIT_BUSY: begin
-            next_state = STATE_WAIT_BUSY2;
+        STATE_WAIT_ACK: begin
+            next_start = !ack;
+            if (ack)
+                next_state = STATE_WAIT_BUSY;
         end
 
-        STATE_WAIT_BUSY2: begin
+        STATE_WAIT_BUSY: begin
             if (!busy)
                 next_state = STATE_IDLE;
         end

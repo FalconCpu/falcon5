@@ -17,6 +17,7 @@
 // E0000020  MOUSE_X        R    Mouse X coordinate
 // E0000024  MOUSE_Y        R    Mouse Y coordinate
 // E0000028  MOUSE_BUTTONS  R    Mouse buttons (bit 0 = left, bit 1 = right, bit 2 = middle)
+// E000002C  KEYBOARD       R    Keyboard data (-1 if no data)
 // E0000030  TIMER          RW   32 bit free running timer
 // E0000034  BLIT_CMD       RW   Write=Blitter Command Read=Fifo full
 // E0000038  BLIT_CTRL      RW   Blitter Control register 
@@ -68,6 +69,8 @@ module hwregs (
     output logic [31:0] GPIO_1,
     inout               PS2_CLK,
     inout               PS2_DAT,
+    inout               PS2_CLK2,
+    inout               PS2_DAT2,
     output logic [9:0]  mouse_x,
     output logic [9:0]  mouse_y,
 
@@ -94,7 +97,13 @@ logic [41:0] perf_count_jmp;
 logic [41:0] perf_count_if;
 logic [41:0] perf_count_sb;
 logic [41:0] perf_count_rs;
+logic [7:0]  keyboard_code;
+logic        keyboard_strobe;
+logic [7:0]  key_read_data;
+logic        key_read_valid;
 
+
+logic [8:0]   count_keys;
 
 // synthesis translate_off
 integer fh;
@@ -124,8 +133,8 @@ always_ff @(posedge clock) begin
             16'h0004: begin
                 if (hwregs_wdata[9:0] != LEDR)
                     $display("[%t] LED = %03X", $time, hwregs_wdata[9:0]);
-                if (hwregs_wmask[0])  LEDR[7:0] <= hwregs_wdata[7:0];
-                if (hwregs_wmask[1])  LEDR[9:8] <= hwregs_wdata[9:8];
+                //if (hwregs_wmask[0])  LEDR[7:0] <= hwregs_wdata[7:0];
+                //if (hwregs_wmask[1])  LEDR[9:8] <= hwregs_wdata[9:8];
             end
             16'h0010: begin 
                 // Writes to the UART TX are handled by the FIFO
@@ -185,6 +194,7 @@ always_ff @(posedge clock) begin
             16'h0020: hwregs_rdata <= {22'b0, mouse_x};
             16'h0024: hwregs_rdata <= {22'b0, mouse_y};
             16'h0028: hwregs_rdata <= {29'b0, mouse_buttons};
+            16'h002C: hwregs_rdata <= key_read_valid ? {24'b0, key_read_data} : 32'hffffffff;
             16'h0030: hwregs_rdata <= timer;
             16'h0034: hwregs_rdata <= {22'b0, blit_fifo_slots_free};
             16'h0044: begin
@@ -206,11 +216,11 @@ always_ff @(posedge clock) begin
 
     // Update performance counters
     if (reset || perf_reset) begin
-        perf_count_ok  <= 32'b0;
-        perf_count_jmp <= 32'b0;
-        perf_count_if  <= 32'b0;
-        perf_count_sb  <= 32'b0;
-        perf_count_rs  <= 32'b0;
+        perf_count_ok  <= 42'b0;
+        perf_count_jmp <= 42'b0;
+        perf_count_if  <= 42'b0;
+        perf_count_sb  <= 42'b0;
+        perf_count_rs  <= 42'b0;
     end else if (perf_run) begin
         case(perf_count)
             `PERF_OK:         perf_count_ok  <= perf_count_ok + 1;
@@ -225,7 +235,7 @@ always_ff @(posedge clock) begin
 
     if (reset) begin
         seven_seg <= 24'h000000;
-        LEDR <= 10'b0;
+        // LEDR <= 10'b0;
         timer <= 0;
         GPIO_0 <= 32'b0;
         GPIO_1 <= 32'b0;
@@ -290,5 +300,36 @@ mouse_interface  mouse_interface_inst (
     .mouse_y(mouse_y),
     .mouse_buttons(mouse_buttons)
   );  
+
+keyboard_if  keyboard_if_inst (
+    .clock(clock),
+    .reset(reset),
+    .PS2_CLK2(PS2_CLK2),
+    .PS2_DAT2(PS2_DAT2),
+    .keyboard_code(keyboard_code),
+    .keyboard_strobe(keyboard_strobe)
+  );
+
+wire key_read_strobe = hwregs_request && !hwregs_write && hwregs_addr[15:0] == 16'h002C;
+
+byte_fifo  keyboard_rx_fifo (
+    .clk(clock),
+    .reset(reset),
+    .write_enable(keyboard_strobe),
+    .write_data(keyboard_code),
+    .read_enable(key_read_strobe),
+    .read_data(key_read_data),
+    .slots_free(),
+    .not_empty(key_read_valid)
+  );
+
+always_ff @(posedge clock) begin
+    if (reset)
+        count_keys <= 0;
+    else if (keyboard_strobe)
+        count_keys <= count_keys + 1;
+end
+
+assign LEDR = {1'b0,count_keys};
 
 endmodule

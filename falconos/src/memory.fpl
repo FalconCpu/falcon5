@@ -17,7 +17,7 @@
 # ####################################################################
 
 const HEAP_START = 0x1000
-const HEAP_END   = 0x4000000
+const HEAP_END   = 0x10000
 
 # FreeMemBlock
 # Blocks are always a multiple of 16 bytes in size - this means the lower 4 bits are always 0

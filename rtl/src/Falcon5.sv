@@ -280,6 +280,8 @@ aux_decoder  aux_decoder_inst (
     .GPIO_1(GPIO_1[35:4]),
     .PS2_CLK(PS2_CLK),
     .PS2_DAT(PS2_DAT),
+    .PS2_CLK2(PS2_CLK2),
+    .PS2_DAT2(PS2_DAT2),
     .mouse_x(mouse_x),
     .mouse_y(mouse_y),
     .perf_count(perf_count)

@@ -25,6 +25,12 @@ const SYSCALL_CLOSE_FILE   = 0x11
 const SYSCALL_READ_FILE    = 0x12
 const SYSCALL_WRITE_FILE   = 0x13
 
+# The following syscalls are only allowed from system tasks
+const SYSCALL_FILE_OPENED  = 0x20
+const SYSCALL_FILE_CLOSED  = 0x21
+const SYSCALL_IO_ERROR     = 0x22
+const SYSCALL_IO_RESULT    = 0x23
+
 
 fun dumpException(cause:Exception, data:Int)
     kprintf("EXCEPTION %s DATA=%08x\n", cause.text, data)
@@ -99,17 +105,23 @@ fun exceptionHandler(cause:Exception, data:Int, task:TaskControlBlock)
             SYSCALL_OPEN_FILE ->
                 val filename = unsafe(task.regs[1] as String)
                 val mode = task.regs[2]
-                val fd = openFile(task, filename, mode)
-                task.regs[8] = if fd is Error then 1 else 0
-                task.regs[7] = unsafe(fd as Int)
-
+                val driver = if (filename="CON:") then terminalTask else filesysTask
+                kprintf("openFile %s mode %d\n", filename, mode)
+                val msg = new Message(MESSAGE_OPEN, task.regs[1], task.regs[2],unsafe(task as Int))
+                filesysTask.addMessage(msg)
+                task.setBlockedIO()
+    
             SYSCALL_CLOSE_FILE ->
                 kprintf("closeFile not implemented\n")
                 abort ABORT_NOT_IMPLEMENTED
 
             SYSCALL_READ_FILE  ->
-                kprintf("readFile not implemented\n")
-                abort ABORT_NOT_IMPLEMENTED
+                val fd = unsafe(task.regs[1] as FileHandle) # TODO check that this file handle belongs to this task
+                val ptr = unsafe(task.regs[2] as Pointer<Char>) # TODO check that this pointer is in the task's memory space
+                val len = task.regs[3]
+                val msg = new Message(MESSAGE_READ, task.regs[1], task.regs[2], task.regs[3])
+                fd.handler.addMessage(msg)
+                task.setBlockedIO()
 
             SYSCALL_WRITE_FILE ->
                 task.setBlockedIO()
@@ -117,6 +129,46 @@ fun exceptionHandler(cause:Exception, data:Int, task:TaskControlBlock)
                 val msg = new Message(MESSAGE_WRITE, task.regs[1], task.regs[2], task.regs[3])
                 fd.handler.addMessage(msg)
                 
+            SYSCALL_FILE_OPENED ->
+                # TODO - check that this syscall is from a system task
+                kprintf("SYSCALL_FILE_OPENED\n")
+                val fd = unsafe(task.regs[1] as FileHandle) 
+                val destTask = fd.task
+                if destTask.runState != TaskState.BLOCKED_IO
+                    kprintf("Error: SYSCALL_FILE_OPENED but task '%s' not blocked on I/O\n", destTask.name)
+                    abort ABORT_INVALID_STATE
+                destTask.regs[8] = 0                  # success
+                destTask.regs[7] = unsafe(fd as Int)  # host file handle
+                destTask.setReady()
+
+            SYSCALL_FILE_CLOSED ->
+                # TODO - check that this syscall is from a system task  
+                kprintf("SYSCALL_FILE_CLOSED not implemented\n")
+                abort ABORT_NOT_IMPLEMENTED
+
+            SYSCALL_IO_ERROR  ->
+                # TODO - check that this syscall is from a system task
+                val destTask = unsafe(task.regs[1] as TaskControlBlock)
+                val error = task.regs[2]
+                if destTask.runState != TaskState.BLOCKED_IO
+                    kprintf("Error: SYSCALL_IO_ERROR but task '%s' not blocked on I/O\n", destTask.name)
+                    abort ABORT_INVALID_STATE
+                destTask.regs[8] = 1
+                destTask.regs[7] = error
+                destTask.setReady()
+
+            SYSCALL_IO_RESULT  ->
+                # TODO - check that this syscall is from a system task
+                val destTask = unsafe(task.regs[1] as TaskControlBlock)
+                val result = task.regs[2]
+                if destTask.runState != TaskState.BLOCKED_IO
+                    kprintf("Error: SYSCALL_IO_RESULT but task '%s' not blocked on I/O\n", destTask.name)
+                    abort ABORT_INVALID_STATE
+                destTask.regs[8] = 0
+                destTask.regs[7] = result
+                destTask.setReady()
+
+
             else -> 
                 kprintf("Unknown syscall %x from task '%s'\n", data, task.name)
     else

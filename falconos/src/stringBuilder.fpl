@@ -1,0 +1,56 @@
+
+class StringBuilder
+    var length = 0
+    var array = new Array<Char>(16)
+
+    fun resizeArray(newSize: Int)
+        if newSize <= array.length
+            return
+        var oldArray = array
+        array = new Array<Char>(newSize)
+        for i in 0..<oldArray.length
+            array[i] = oldArray[i]
+        free oldArray
+
+    fun append(item: Char)
+        if length >= array.length
+            resizeArray(array.length * 2)
+        array[length] = item
+        length+=1
+
+    fun append(item: String)
+        for i in 0..<item.length
+            append(item[i])
+
+    fun append(item: StringBuilder)
+        for i in 0..<item.length
+            append(item.array[i])
+
+    fun get(index: Int) -> Char
+        return array[index]
+
+    fun clear()
+        length = 0
+
+    fun insertAt(index: Int, item: Char)
+        if length >= array.length
+            resizeArray(array.length * 2)
+        for i in length-1..>index
+            array[i+1] = array[i]
+        array[index] = item
+        length+=1
+
+    fun removeRange(startIndex:Int, endIndex:Int)
+        val count = endIndex - startIndex + 1
+        if startIndex<0 or count<0 or endIndex>=length
+            abort ABORT_INVALID_ARGUMENT
+        for i in startIndex..<length-count
+            array[i] = array[i+count]
+        length -= count
+
+    fun removeAt(index: Int) -> Char
+        var ret = array[index]
+        for i in index..<length-1
+            array[i] = array[i+1]
+        length-=1
+        return ret

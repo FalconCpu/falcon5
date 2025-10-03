@@ -18,7 +18,17 @@ const char* YELLOW = "\x1b[33m";
 const char* RED = "\x1b[31m";
 const char* RESET = "\x1b[0m";
 
+#define NETFS_CMD_BOOT   0x000002B0
+#define NETFS_CMD_OPEN   0x010102B0
+#define NETFS_CMD_CLOSE  0x010202B0
+#define NETFS_CMD_READ   0x010302B0
+#define NETFS_CMD_WRITE  0x010402B0
+#define NETFS_RESP_OK    0x020102B0
+#define NETFS_RESP_ERROR 0x020202B0
+
+
 FILE* dump_file;
+int checksum = 0;
 
 /// -----------------------------------------------------
 ///                       fatal
@@ -95,7 +105,10 @@ static int read_from_com_port() {
     if (bytesRead==0)
         return -1;
 
-    return readBuffer[0] & 0xff;
+    int v = readBuffer[0] & 0xff;
+    checksum += v;
+    //printf("Got byte %02x  checksum=%x\n", v, checksum);
+    return v;
 }
 
 /// -----------------------------------------------------------------
@@ -144,6 +157,7 @@ static void send_word_to_com_port(int word) {
     buffer[3] = (word>>24) & 0xff;
     DWORD bytesWritten = 0;
     output_to_com_port(buffer, 4);
+    checksum += (buffer[0]&0xff) + (buffer[1]&0xff) + (buffer[2]&0xff) + (buffer[3]&0xff);
 }
 
 /// -----------------------------------------------------------------
@@ -151,17 +165,16 @@ static void send_word_to_com_port(int word) {
 /// -----------------------------------------------------------------
 /// send the boot rom to the com port
 
-static void send_packet_to_com_port(int command, int* data, int length) {
+static void send_packet_to_com_port(int command, int length, char* data) {
+    checksum = 0;
     send_word_to_com_port(command);
     send_word_to_com_port(length);
     DWORD bytesWritten = 0;
-    output_to_com_port((char*)data, length*4);
+    output_to_com_port((char*)data, length);
 
-    int crc = 0;
     for(int i=0; i<length; i++)
-        crc += data[i];
-    send_word_to_com_port(crc);
-    printf("%sSent %ld bytes\n%s", YELLOW,bytesWritten,RESET);
+        checksum += data[i] & 0xff; 
+    send_word_to_com_port(checksum);
 }
 
 
@@ -205,41 +218,76 @@ static void send_boot_image(char* file_name) {
 }
 
 /// -----------------------------------------------------------------
-///                    send_file_cmd
+///                    read frame
 /// -----------------------------------------------------------------
 
-void send_file_cmd() {
-    int length = read_word_from_com_port();
-    int* buf = malloc(length*4+4);
-    int i = 0;
-    int crc = 0;
-    printf("%sReceiving file of length %d\n%s", YELLOW,length,RESET);
-    for(; i<length; i++) {
-        buf[i] = read_word_from_com_port();
-        crc += buf[i];
+typedef struct Frame{
+    int length;
+    char data[];
+} Frame;
+
+Frame* read_frame() {
+    int l0 = read_from_com_port();     if (l0==-1) return 0;
+    int l1 = read_from_com_port();     if (l1==-1) return 0;
+    int l2 = read_from_com_port();     if (l2==-1) return 0;
+    int l3 = read_from_com_port();     if (l3==-1) return 0;
+    int len = (l0) | (l1<<8) | (l2<<16) | (l3<<24);
+
+    Frame* frame = malloc(sizeof(Frame)+len+1);
+    frame->length = len;
+    for(int i=0; i<len; i++) {
+        int d0 = read_from_com_port();  if (d0==-1) return 0;
+        frame->data[i] = d0;
     }
-    int rx_crc = read_word_from_com_port();
-    if (crc != rx_crc)
-        fatal("%sCRC error %x %x%s", RED,crc, rx_crc,RESET);
+    frame->data[len] = 0;
 
-    char*  filename = (char*)buf;
+    int csum = checksum;   // save checksum so far
+    int crc0 = read_from_com_port();    if (crc0==-1) return 0;
+    int crc1 = read_from_com_port();    if (crc1==-1) return 0;
+    int crc2 = read_from_com_port();    if (crc2==-1) return 0;
+    int crc3 = read_from_com_port();    if (crc3==-1) return 0;
+    int crc = (crc0) | (crc1<<8) | (crc2<<16) | (crc3<<24);
+    if (csum != crc)
+        fatal("%sFrame checksum error got=%x expected=%x%s", RED,csum, crc,RESET);
+    return frame;
+}
 
-    printf("%sSending file '%s'\n%s", YELLOW,filename,RESET);
+/// -----------------------------------------------------------------
+///                    command_open_file
+/// -----------------------------------------------------------------
 
-    int* fileBuf = malloc(65536); // HACK - fix this
-    FILE *fh = fopen(filename, "rb");
-    if (fh==0)
-        fatal("Cannot open file '%s'", filename);
-    int fileLength = fread(fileBuf, 1, 65536, fh);
-    fclose(fh);
-    printf("%sFile length %d bytes\n%s", YELLOW,fileLength,RESET);
-    int padLength = (fileLength+3)/4;
+static void cmd_open_file() {
+    Frame* frame = read_frame();
+    if (frame==0) 
+        return;
+    int mode = frame->data[0] | (frame->data[1]<<8) | (frame->data[2]<<16) | (frame->data[3]<<24);
+    char* filename = (char*)(frame->data + 4);
+    printf("%sOpen file '%s' mode %x%s\n", YELLOW, filename, mode, RESET);
 
-    send_packet_to_com_port(0x000202B0, fileBuf, padLength);
-    
-    free(fileBuf);
-    free(buf);
-    fflush(dump_file);
+    FILE *fh = 0;
+    if (mode==0)
+        fh = fopen(filename, "rb");
+    else if (mode==1)
+        fh = fopen(filename, "wb");
+    else if (mode==2)
+        fh = fopen(filename, "ab");
+    else
+        fatal("Unknown file mode %d", mode);
+
+    if (fh==0) {
+        printf("%sError opening file '%s' mode %x: %s%s\n", RED, filename, mode, strerror(errno), RESET);
+        int response[2];
+        response[1] = errno;
+        send_packet_to_com_port(NETFS_RESP_ERROR, 4, (char*)response);
+        free(frame);
+        return;
+    } else {
+        printf("%sFile opened ok %p%s\n", YELLOW, fh, RESET);
+        int response[2];
+        response[0] = (int)fh;
+        send_packet_to_com_port(NETFS_RESP_OK, 4, (char*)response);
+    }   
+    free(frame);
 }
 
 
@@ -255,17 +303,17 @@ void send_file_cmd() {
 
 static void command_mode() {
     // The first 0xB0 has already been read by the time we get here
-
+    checksum = 0xB0;
     int c1 = read_from_com_port();
     int c2 = read_from_com_port();
     int c3 = read_from_com_port();
-    int c = (0xB0) | (c1<<8) | (c2<<16) | (c3<<24);
-    switch(c) {
-        case 0x000002B0:       send_boot_image("asm.hex");       break;
-        case 0x000102B0:       send_file_cmd();       break;
+    int cmd = (0xB0) | (c1<<8) | (c2<<16) | (c3<<24);
 
+    switch(cmd) {
+        case NETFS_CMD_BOOT:   send_boot_image("asm.hex");       break;
+        case NETFS_CMD_OPEN:   cmd_open_file(); break;
         default:
-            printf("%sUnknown command %x%s\n", YELLOW, c, RESET);
+            printf("%sUnknown command %x%s\n", RED, cmd, RESET);
             break;
     }
     return;

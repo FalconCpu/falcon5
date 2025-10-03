@@ -2,10 +2,13 @@ const ABORT_OUT_OF_MEMORY = 0x1001
 const ABORT_INVALID_ARGUMENT = 0x1002
 const ABORT_NOT_IMPLEMENTED = 0x1003
 const ABORT_DOUBLE_FREE = 0x1004
+const ABORT_INVALID_STATE = 0x1005
 
-enum Error [
-    OK,
-    OUT_OF_MEMORY,
-    INVALID_ARGUMENT,
-    NOT_IMPLEMENTED,
-    FILE_NOT_FOUND ]
+enum Error(message:String) [
+    OK             ("No error"),
+    OUT_OF_MEMORY  ("Out of memory"),
+    INVALID_ARGUMENT("Invalid argument"),
+    NOT_IMPLEMENTED ("Not implemented"),
+    FILE_NOT_FOUND  ("File not found"),
+    PROTOCOL_ERROR  ("Protocol error"),
+    TIMEOUT         ("Operation timed out") ]

@@ -5,10 +5,12 @@ memory.fpl
 buddyAllocator.fpl
 kprintf.fpl
 list.fpl
+stringBuilder.fpl
 task.fpl
 message.fpl
-exceptions.fpl
-uart.fpl
+keyboard.fpl
+terminal.fpl
 file.fpl
 graphicsContext.fpl
+exceptions.fpl
 main.fpl

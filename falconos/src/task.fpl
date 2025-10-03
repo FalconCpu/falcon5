@@ -95,12 +95,12 @@ class TaskControlBlock
         nextReady = this
         prevReady = this
 
-    fun completeIO(result:Int!)
+    fun completeIO(error:Int, result:Int)
         if runState != TaskState.BLOCKED_IO
             kprintf("Task not in BlockedIO")
             abort ABORT_INVALID_ARGUMENT
-        regs[8] = if result is Error then 1 else 0
-        regs[7] = unsafe(result as Int)
+        regs[8] = error
+        regs[7] = result
         # Add to the end of the ready list
         runState  = TaskState.READY
         nextReady = readyTasks
@@ -116,9 +116,11 @@ fun createTask(name:String, code:Int, stackSize:Int, globalSize:Int) -> TaskCont
         task.regs[i] = 0xBAADDA4A
     task.regs[31] = task.allocMem(stackSize,MEM_PERMISSION_RW) + stackSize  # Allocate mem for stack (sp points to end)
     task.regs[30] = unsafe(taskFinished as Int)                 # if the task returns, jump to endTask function
-    task.regs[29] = task.allocMem(4096,MEM_PERMISSION_RW)  # give the task a globals area
+    # task.regs[29] = task.allocMem(4096,MEM_PERMISSION_RW)  # give the task a globals area
+    task.regs[29] = 0x200                                  # temp - give the task access to kernal globals area
     task.memory.add(0xE0000000 | MEM_PERMISSION_RW)        # give task access to MMIO
     task.memory.add(0xFFFF0004 | MEM_PERMISSION_R)         # give task access to ROM
+    task.memory.add(0x00000009 | MEM_PERMISSION_RW)        # Give task access to SDRAM
     task.regs[0] = code     
 
     # Add task to the allTasks list
@@ -172,12 +174,11 @@ fun findTaskByName(name:String) -> TaskControlBlock?
 fun runScheduler()
     # really simple implementation for now - just switch to the next task in the ready list
 
-    if readyTasks.nextReady = readyTasks
-        kprintf("Only system task left running\n")
-        dumpBuddyAllocator()
-        dumpMemorySystem()
-        exit()
-
+    # if readyTasks.nextReady = readyTasks
+    #     kprintf("Only system task left running\n")
+    #     dumpBuddyAllocator()
+    #     dumpMemorySystem()
+    #     exit()
 
     readyTasks = readyTasks.nextReady
     runTask(readyTasks)

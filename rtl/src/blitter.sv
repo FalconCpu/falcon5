@@ -47,6 +47,7 @@ logic [7:0]    reg_color;  // Color to write
 logic [7:0]    reg_bgcolor;
 
 logic         start;
+logic         ack;
 logic         busy;
 logic [15:0]  p1_x;
 logic [15:0]  p1_y;
@@ -107,13 +108,15 @@ blit_command_parser  blit_command_parser_inst (
     .src_stride(src_stride),
     .reg_color(reg_color),
     .reg_bgcolor(reg_bgcolor),
-    .busy(busy)
+    .busy(busy),
+    .ack(ack)
   );
  
 blit_coordinate_gen  blit_coordinate_gen_inst (
     .clock(clock),
     .reset(reset),
     .start(start),
+    .ack(ack),
     .reg_command(reg_command),
     .reg_x1(reg_x1),
     .reg_y1(reg_y1),

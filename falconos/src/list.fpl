@@ -48,6 +48,14 @@ class List<T>
                 length-=1
                 return true
         return false
+    
+    fun removeRange(startIndex:Int, endIndex:Int)
+        val count = endIndex - startIndex + 1
+        if startIndex<0 or count<0 or endIndex>=length
+            abort ABORT_INVALID_ARGUMENT
+        for i in startIndex..<length-count
+            array[i] = array[i+count]
+        length -= count
 
     fun indexOf(item:T) -> Int
         for i in 0..<length
@@ -66,6 +74,10 @@ class List<T>
             array[i+1] = array[i]
         array[index] = item
         length+=1
+
+    fun addAll(other: List<T>)
+        for i in 0..<other.length
+            add(other.array[i])
 
     fun contains(item:T) -> Bool
         for i in 0..<length

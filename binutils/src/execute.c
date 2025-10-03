@@ -278,6 +278,9 @@ static int read_hwregs(unsigned int addr) {
             fscanf(uart_input,"%x\n", &v);
             return v;
 
+        case 0xE000002C:    // Keyboard
+            return -1;
+
         case 0xE0000030:   // Simulation flag
             return 1;      // Returns 1 in simulations, zero on real hardware
 

@@ -224,7 +224,6 @@ static void clear_out_word() {
 }
 
 static void generate_dcb(Token* line) {
-    clear_out_word();
     int i = 0;
     while(1) {
         switch(line[i]->kind) {
@@ -251,11 +250,9 @@ static void generate_dcb(Token* line) {
         else
             error("Invalid byte");
     }
-    clear_out_word();
 }
 
 static void generate_dch(Token* line) {
-    clear_out_word();
     int i = 0;
     while(1) {
         switch(line[i]->kind) {
@@ -278,10 +275,10 @@ static void generate_dch(Token* line) {
         else
             error("Invalid byte");
     }
-    clear_out_word();
 }
 
 static void generate_dcw(Token* line) {
+    clear_out_word();
     int i = 0;
     while(1) {
         switch(line[i]->kind) {

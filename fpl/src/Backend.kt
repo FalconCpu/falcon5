@@ -230,6 +230,8 @@ fun Function.runBackend() {
     currentFunction = this
 
     runPeephole()
+    CommonSubexpr(this).run()
+    this.rebuildIndex()
     val liveMap = LiveMap(this)
     RegisterAllocator(this, liveMap).run()
     runPeephole()

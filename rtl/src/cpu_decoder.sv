@@ -106,6 +106,7 @@ always_comb begin
             p2_use_a   = 1'b1;
             p2_use_b   = 1'b1;
             p2_dest    = instr_d;
+            p2_literal   = {{19{instr_c[7]}}, instr_c, instr_b};        // Used for shift type
         end
 
         `KIND_ALU_IMM: begin

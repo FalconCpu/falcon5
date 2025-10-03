@@ -11,7 +11,7 @@ class HwRegs
     var mouse_x        : Int  # Mouse X coordinate
     var mouse_y        : Int  # Mouse Y coordinate
     var mouse_buttons  : Int  # Mouse buttons (bit 0 = left, bit 1 = right, bit 2 = middle)
-    var reserved       : Int  #
+    var keyboard       : Int  # Keyboard scan code, -1 if no key pressed
     var timer          : Int  # 32 bit free running timer
     var blit_cmd       : Int  # Write=Blitter Command Read=Fifo full
     var blit_ctrl      : Int  # Blitter Control register 

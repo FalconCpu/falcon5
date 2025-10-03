@@ -49,6 +49,23 @@ class GraphicsContext
                 hwregs.blit_cmd = c1
         hwregs.blit_cmd = 0                 # null terminate to end string
 
+    fun drawChar(x:Int, y:Int, color:Int, char:Char)
+        while (hwregs.blit_cmd < 512)         # Wait for blitter to have at least 3 free slots in command queue
+            hwregs.seven_seg = hwregs.blit_cmd
+            val dummy = 1
+        hwregs.blit_cmd = CMD_DRAW_TEXT | color
+        hwregs.blit_cmd = y lsl 16 | x
+        hwregs.blit_cmd = char as Int
+        hwregs.blit_cmd = 0                 # null terminate to end string
+
+    fun copyRect(x1:Int, y1:Int, x2:Int, y2:Int, srcX:Int, srcY:Int)
+        while (hwregs.blit_cmd < 8)         # Wait for blitter to have at least 4 free slots in command queue
+            val dummy = 1
+        hwregs.blit_cmd = CMD_COPY_RECT     # CMD COPY
+        hwregs.blit_cmd = y1 lsl 16 | x1          # dest x1,y1
+        hwregs.blit_cmd = y2 lsl 16 | x2          # dest x2,y2
+        hwregs.blit_cmd = (srcY lsl 16 | srcX)    # src x,y
+
 
 const fontData = const [
     0x00000000,

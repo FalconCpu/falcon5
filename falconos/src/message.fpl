@@ -1,6 +1,9 @@
 
-const MESSAGE_WRITE = 0x0100
-const MESSAGE_READ  = 0x0101
+const MESSAGE_OPEN  = 0x0100
+const MESSAGE_CLOSE = 0x0101
+const MESSAGE_WRITE = 0x0102
+const MESSAGE_READ  = 0x0103
+const MESSAGE_KEYPRESS = 0x0200
 
 
 class Message(var data0: Int, var data1: Int, var data2: Int, var data3: Int)

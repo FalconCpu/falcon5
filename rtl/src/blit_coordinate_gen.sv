@@ -22,6 +22,7 @@ module blit_coordinate_gen(
     input logic [15:0]   reg_src_x,      // Source X for copy operations
     input logic [15:0]   reg_src_y,      // Source Y for copy
     output logic         busy,
+    output logic         ack,            // Pulsed when operation is started
     input logic          fifo_full,
 
     // Outputs to the next stage in the pipeline
@@ -38,21 +39,16 @@ wire [15:0] p1_x_inc = p1_x + 1'b1;
 wire [15:0] p1_y_inc = p1_y + 1'b1;
 
 always_ff @(posedge clock) begin
+    ack <= 1'b0;
+
     if (!p2_ready) begin
         // Hold current state
-        if (start)
-            $display("BLIT_DRAW: Warning: Started new operation while stalled");
 
     end else if (fifo_full) begin
         // Hold current state, but don't assert write
         p1_valid <= 1'b0;
-        if (start)
-            $display("BLIT_DRAW: Warning: Started new operation while stalled");
 
     end else if (busy) begin
-        if (start)
-            $display("BLIT_DRAW: Warning: Started new operation while busy");
-
         p1_valid <= 1'b1;
         p1_x <= p1_x_inc;
         if (reg_command==`BLIT_TEXT) begin
@@ -79,7 +75,7 @@ always_ff @(posedge clock) begin
 
     end else if (start) begin
         // Start new operation
-
+        ack <= 1'b1;
         if (reg_command == `BLIT_RECT || reg_command == `BLIT_COPY || reg_command==`BLIT_TEXT) begin
             // Rectangle
             if (reg_x1 < reg_x2 && reg_y1 < reg_y2) begin

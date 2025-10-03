@@ -28,27 +28,27 @@ Then (short form if)
 casts
 unsafe casts
 inline arrays
+Common subexpression elimination
+Destructors
+when statement
+if expressions
+Constant folding
+Function pointers
 
 
 
 TODO - Front end:
 abstract class / abstract functions
-Destructors
-when statement
-if expressions
 ?. ?:
 in range test
 Local class instances
 const class instances ?
 unsafe array access
 super.calls to parent class methods
-Function pointers
 public/private/protected
 
 
 Backend:
-Constant folding
-Common subexpression elimination
 Dead Store elimination
 Loop invariant code motion
 vcall devirtualisation

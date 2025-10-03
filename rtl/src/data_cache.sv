@@ -278,15 +278,16 @@ always_ff @(posedge clock) begin
     dcache_sdram_wstrb   <= next_dcache_sdram_wstrb;
     dcache_sdram_wdata   <= next_dcache_sdram_wdata;
 
+    // Write data to the cache
+    if (write_enable) begin
+        cache_data[write_index][write_offset] = write_data;
+        cache_tag[write_index] = {write_valid, write_tag};
+    end
+
     // Fetch data from the cache
     {fetch_valid, fetch_tag}   <= cache_tag[next_fetch_index];
     fetch_data  <= cache_data[next_fetch_index][next_fetch_offset];
 
-    // Write data to the cache
-    if (write_enable) begin
-        cache_data[write_index][write_offset] <= write_data;
-        cache_tag[write_index] <= {write_valid, write_tag};
-    end
 
     state <= next_state;
     reset_index <= next_reset_index;

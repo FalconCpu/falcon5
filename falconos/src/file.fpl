@@ -1,9 +1,222 @@
+class FileHandle(val handler:TaskControlBlock, val task:TaskControlBlock, val hostFh:Int)
 
-class FileHandle(val handler:TaskControlBlock, val task:TaskControlBlock)
+extern fun syscall_io_error(task:TaskControlBlock, errcode:Int)
+extern fun syscall_io_result(task:TaskControlBlock, result:Int)
+extern fun syscall_file_opened(fd:FileHandle)
 
-fun openFile(taak:TaskControlBlock, name:String, mode:Int) -> FileHandle!
-    kprintf("openFile %s mode %d\n", name, mode)
-    if (name="CON:")
-        return new FileHandle(uartTask, taak)
-    else 
-        return Error.FILE_NOT_FOUND  # only console supported for now
+# ===================================================================
+# UART frame format:
+# 0xB0 0x02    ( 2 bytes - start of frame marker)
+# Command word ( 2 bytes)
+# Length       ( 4 bytes)
+# Data         (Length bytes)
+# Checksum     ( 4 bytes - sum of all bytes up to this point)
+# ===================================================================
+
+var checksum = 0
+
+const NETFS_CMD_OPEN   = 0x0101
+const NETFS_CMD_CLOSE  = 0x0102
+const NETFS_CMD_READ   = 0x0103
+const NETFS_CMD_WRITE  = 0x0104
+const NETFS_RESP_OK    = 0x0201
+const NETFS_RESP_ERROR = 0x0202
+
+fun uartSendByte(b: Int)
+    while hwregs.uart_tx < 2 # wait for space in FIFO
+        val dummy = 1       # TODO - consider yielding here if blocking is acceptable
+    hwregs.uart_tx = b & 0xFF
+    checksum += b & 0xFF
+
+fun uartSendWord(w: Int)
+    uartSendByte((w lsr 0) & 0xFF)
+    uartSendByte((w lsr 8) & 0xFF)
+    uartSendByte((w lsr 16) & 0xFF)
+    uartSendByte((w lsr 24) & 0xFF)
+
+fun uartSendFrame(command:Int, length:Int, data:Pointer<Char>)
+    checksum = 0
+    uartSendByte(0xB0)
+    uartSendByte(0x02)
+    uartSendByte(command & 0xFF)
+    uartSendByte((command lsr 8) & 0xFF)
+    uartSendWord(length)
+    for i in 0..<length
+        uartSendByte(data[i] as Int)
+    uartSendWord(checksum)
+
+fun uartSendFrame(command:Int, data1:Int, data2:Int)
+    checksum = 0
+    uartSendByte(0xB0)
+    uartSendByte(0x02)
+    uartSendByte(command & 0xFF)
+    uartSendByte((command lsr 8) & 0xFF)
+    uartSendWord(8)
+    uartSendWord(data1)
+    uartSendWord(data2)
+    uartSendWord(checksum)
+
+
+fun uartSendFrame(command:Int, word:Int, length:Int, data:Pointer<Char>)
+    checksum = 0
+    uartSendByte(0xB0)
+    uartSendByte(0x02)
+    uartSendByte(command & 0xFF)
+    uartSendByte((command lsr 8) & 0xFF)
+    uartSendWord(length+4)
+    uartSendWord(word)
+    for i in 0..<length
+        uartSendByte(data[i] as Int)
+    uartSendWord(checksum)
+
+fun uartSendFrame(command:Int, word:Int, string:String)
+    checksum = 0
+    uartSendByte(0xB0)
+    uartSendByte(0x02)
+    uartSendByte(command & 0xFF)
+    uartSendByte((command lsr 8) & 0xFF)
+    uartSendWord(string.length+4)
+    uartSendWord(word)
+    for i in 0..<length
+        uartSendByte(data[i] as Int)
+    uartSendWord(checksum)
+
+
+fun uartReceiveByte() -> Int!
+    var count = 0
+    repeat
+        val data = hwregs.uart_rx
+        if data != -1
+            val ret = data & 0xFF
+            checksum += ret
+            return ret
+        count += 1
+        if count > 1000000
+            return Error.TIMEOUT
+    until false
+
+fun uartReceiveCommand() -> Int!
+    var cmd = 0
+    var state = 0
+    checksum = 0
+    while true
+        val b = try uartReceiveByte()
+        if (state=0 and b=0xB0)
+            state = 1
+        else if (state=1 and b=0x02)
+            state = 2
+        else if (state=2)
+            cmd = b
+            state = 3
+        else if (state=3)
+            cmd = cmd | (b lsl 8)
+            return cmd
+        else
+            state = 0
+
+fun uartRecieveInt() -> Int!
+    var ret = 0
+    for i in 0..3
+        val b = try uartReceiveByte()
+        ret = ret | (b lsl (i*8))
+    return ret
+
+class UartFrame(val command:Int, val data:Array<Char>)
+
+fun uartReceiveFrame() -> UartFrame!
+    val cmd = try uartReceiveCommand()
+    val length = try uartRecieveInt()
+    if length < 0 or length > 1000000
+        return Error.INVALID_ARGUMENT
+    val data = new Array<Char>(length)
+    for i in 0..<length
+        val b = uartReceiveByte()
+        if (b is Error)
+            free data
+            return b
+        data[i] = unsafe(b as Char)
+    val recvChecksum = uartRecieveInt()
+    if recvChecksum is Error
+        free data
+        return recvChecksum
+    if recvChecksum != checksum
+        free data
+        return Error.PROTOCOL_ERROR
+    return new UartFrame(cmd, data)
+
+class UartFrame1(val cmd:Int, val data:Int)
+
+fun uartReceiveFrame1() -> UartFrame1!
+    val cmd = try uartReceiveCommand()
+    val length = try uartRecieveInt()
+    if length != 4
+        kprintf("uartReceiveFrame: expected length 4, got %d\n", length)
+        return Error.PROTOCOL_ERROR
+    val data = try uartRecieveInt()
+    val csum = checksum
+    val recvChecksum = try uartRecieveInt()
+    if recvChecksum != csum
+        kprintf("uartReceiveFrame: checksum error, expected %x got %x\n", recvChecksum, csum)
+        return Error.PROTOCOL_ERROR
+    return new UartFrame1(cmd, data)
+
+
+
+# ===================================================================
+#                     Filesystem task
+# ===================================================================
+
+fun filesysOpenFile(name:String, mode:Int, task:TaskControlBlock)
+    uartSendFrame(NETFS_CMD_OPEN, mode, name.length, unsafe(name as Pointer<Char>))
+    val frame = uartReceiveFrame1()
+    if (frame is Error)
+        kprintf("Error receiving UART frame: %s\n", frame.message)
+        return frame
+    kprintf("filesysOpenFile: got response cmd=%x data=%x\n", frame.cmd, frame.data)
+    if frame.cmd != NETFS_RESP_OK
+        return frame.data as Error
+    return new FileHandle(filesysTask, task, frame.data)
+
+fun filesysTaskCode()
+    while true  
+        val (msg1,msg2,msg3,msg4) = getMessage()
+        when(msg1)
+            MESSAGE_OPEN -> 
+                val name = unsafe(msg2 as String)
+                val mode = msg3
+                val destTask = unsafe(msg4 as TaskControlBlock)
+                kprintf("Filesys task: openFile %s mode %d for task %s\n", name, mode, destTask.name)
+                val fh = filesysOpenFile(name, mode, destTask)
+                if fh is Error
+                    kprintf("fh error\n")
+                    syscall_io_error(destTask, Error.FILE_NOT_FOUND as Int)
+                else
+                    kprintf("fh ok\n")
+                    syscall_file_opened(fh)
+
+            MESSAGE_WRITE -> 
+                val fd = unsafe(msg2 as FileHandle) # TODO check that this file handle belongs to this task
+                val ptr = unsafe(msg3 as Pointer<Char>) # TODO check that this pointer is in the task's memory space
+                val len = msg4
+                kprintf("Filesys task: writeFile fd=%d len=%d\n", fd.hostFh, len)
+                uartSendFrame(NETFS_CMD_WRITE, fd.hostFh, len, ptr)
+                val frame = uartReceiveFrame1()
+                if frame is Error
+                    kprintf("Error receiving UART frame: %s\n", frame.message)
+                    syscall_io_error(fd.task, frame as Int)
+                elsif frame.cmd != NETFS_RESP_OK
+                    syscall_io_error(fd.task, frame.data)
+                else
+                    syscall_io_result(fd.task, frame.data)
+
+            MESSAGE_READ  ->
+                val fd = unsafe(msg2 as FileHandle) # TODO check that this file handle belongs to this task
+                val ptr = unsafe(msg3 as Pointer<Char>) # TODO check that this pointer is in the task's memory space
+                val len = msg4
+                kprintf("Filesys task: readFile fd=%d len=%d\n", fd.hostFh, len)
+                uartSendFrame(NETFS_CMD_READ, fd.hostFh, len)  
+            
+
+            else ->
+                kprintf("filesys task got message: %x %x %x %x\n", msg1, msg2, msg3, msg4)
+

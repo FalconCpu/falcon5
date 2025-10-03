@@ -4,10 +4,14 @@ extern fun runTask(task:TaskControlBlock)
 extern fun endTask()
 extern fun openFile(name:String, mode:Int) -> Int!
 extern fun writeFile(fd:Int, data:Pointer<Char>, length:Int) -> Int!
+extern fun readFile(fd:Int, data:Pointer<Char>, length:Int) -> Int!
+
+var keyboard : Keyboard
 
 fun main()
     initializeBuddyAllocator()
     copyFontData()
+    keyboard = new Keyboard()
 
     # create a dummy task to act as a sentinel in the allTasks and readyTasks lists
     val systemTask = createSystemTask("system", unsafe(systemTask as Int))
@@ -16,7 +20,8 @@ fun main()
     systemTask.nextReady = systemTask
     systemTask.prevReady = systemTask
 
-    initializeUART()
+    initializeFilesys()
+    initializeTerminal()
     
     val task1 = createTask("task1", unsafe(task1Code as Int), 4096, 4096)
     task1.setReady()
@@ -29,7 +34,9 @@ fun main()
 
 fun systemTask()
     while true
-        kprintf("In system task\n")
+        val key = keyboard.getKey()
+        if (key != 0 as Char)
+            sendMessage(terminalTask, MESSAGE_KEYPRESS, key as Int, 0, 0)
         yield()
 
 
@@ -40,12 +47,21 @@ extern fun sendMessage(task:TaskControlBlock, data0:Int, data1:Int, data2:Int, d
 extern fun findTask(name:String) -> TaskControlBlock?
 
 fun task1Code()
-    val fh = openFile("CON:", 0)  # open console for reading
-    if (fh is Int)
-        writeFile(fh, "Hello world\n", 12)
-    else
-        kprintf("Failed to open console for writing\n")
-    kprintf("Task 1 completed file write\n")
+    val fh = openFile("fred.txt", 0)  # open console for reading
+    kprintf("task1: openFile returned\n")
+    if fh is Error
+        kprintf("Error opening file: %s\n", fh.message)
+        return
+    kprintf("task1: fh=%d\n", fh)
+    val buf = new Array<Char>(128)
+    val len = readFile(fh, buf, 128)
+    if len is Error
+        kprintf("Error reading from file: %s\n", len.message)
+        return
+    kprintf("task1: readFile returned %d\n", len)
+    for i in 0..<len
+        kprintf("%c", buf[i])
+    yield()
 
 # fun task2Code()
 #     val task1 = findTask("task1")

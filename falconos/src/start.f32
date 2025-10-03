@@ -209,14 +209,32 @@ jsr /main()
     sys 19
     ret
 
+/syscall_file_opened(FileHandle):
+    sys 32
+    ret
+
+/syscall_file_closed(FileHandle):
+    sys 33
+    ret 
+
+/syscall_io_error(TaskControlBlock,Int):
+    sys 34
+    ret 
+
+/syscall_io_result(TaskControlBlock,Int):
+    sys 35
+    ret 
+
+
+
 # #######################################################################
 #                          Exit
 # #######################################################################
 # On the simulator, we exit by doing a jump to address 0
 /exit():
 
-ld $1, HWREGS_BASE           # Load base address of hardware registers
-ldw $2, $1[HWREGS_SIM_MODE]  # Load simulator mode register
+ld $20, HWREGS_BASE          # Load base address of hardware registers
+ldw $2, $20[HWREGS_SIM_MODE] #  Load simulator mode register
 beq $2, 0, .on_hardware      # If in hardware mode then we have nowhere to return to
 
 # On simulator, so do a jump to address 0 to stop the simulator
@@ -225,7 +243,7 @@ ret
 
 .on_hardware:
 # On hardware, So indicate complete by flashing the LEDs forever
-stw $8, $1[HWREGS_SEVEN_SEG]  # Display the return code on the 7-segment display
+stw $8, $20[HWREGS_SEVEN_SEG]  # Display the return code on the 7-segment display
 
 ld $1, 0x1
 .forever:
@@ -468,6 +486,37 @@ stb 0, $1[0]          # Store 0 at the current byte
 add $1, 1
 bne $1, $4, .unaligned # Repeat until we reach the end
 ret
+
+# ============================================================
+#                        memcpy
+# ============================================================
+# Copy memory from one location to another
+# $1 = destination pointer
+# $2 = source pointer
+# $3 = size in bytes to copy
+/memcpy(Pointer<Char>,Pointer<Char>,Int):
+beq $3, 0, .done         # If size is 0, nothing to do
+add $5, $1, $3           # Calculate end pointer    
+or $4, $1, $2            # Check the source and destination pointers are aligned
+or $4, $3                # Check the size is multiple of 4
+and $4, 3
+bne $4, 0, .unaligned
+.loop:
+    ldw $4, $2[0]          # Load word from source
+    stw $4, $1[0]          # Store word at destination
+    add $1, 4
+    add $2, 4
+    bne $1, $5, .loop      # Repeat until we reach the end
+    jmp .done
+.unaligned:
+    ldb $4, $2[0]          # Load byte from source
+    stb $4, $1[0]          # Store byte at destination
+    add $1, 1
+    add $2, 1
+    bne $1, $5, .unaligned # Repeat until we reach the end
+.done:
+ret
+
 
 
 # ==========================================================

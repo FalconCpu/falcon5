@@ -1,0 +1,132 @@
+extern fun memcpy(dest:Pointer<Char>, src:Pointer<Char>, len:Int)
+
+var terminalTask : TaskControlBlock
+
+class Terminal
+    val terminalGc = new GraphicsContext()
+    var cursorX = 0             # character position
+    var cursorY = 0             # line position
+    var terminalColor = 15
+    var termWidth = 80          # characters per line
+    var termHeight = 30         # lines on screen
+    val editBuffer = new StringBuilder()
+    val inputBuffer = new StringBuilder()
+    var inputLineYStart = -1     # y position of start of current input line
+    var inputLinePos = 0       # position in current input line
+
+    fun scrollUp()
+        terminalGc.copyRect(0,0, 640,464, 0, 16)    # scroll up 1 line
+        terminalGc.drawRect(0,464,640,480,0) # clear bottom line
+        if inputLineYStart >= 0
+            inputLineYStart -= 1
+        cursorY -= 1
+
+    fun initialize()
+        terminalGc.setup()
+        terminalGc.drawRect(0,0,640,480,0) # clear screen to black
+        terminalTask.setReady()
+
+    fun printChar(c:Char, color:Int)
+        if c!='\n'
+            terminalGc.drawChar(cursorX*8, cursorY*16, color, c)
+            cursorX += 1
+        else
+            cursorX = 0
+            cursorY += 1
+
+        if cursorX >= termWidth
+            cursorX = 0
+            cursorY += 1
+
+        while cursorY >= termHeight
+            scrollUp()
+
+    fun printEditBuffer()
+        for i in 0..<=editBuffer.length+1
+            val y = inputLineYStart + (i / termWidth)
+            val x = i % termWidth
+            val c = if i<editBuffer.length then editBuffer.get(i) else ' '
+            val color = if i=inputLinePos then 0x0e0f else 0x000d
+            terminalGc.drawChar(x*8, y*16, color, c)
+
+    fun keyPress(key:Char)
+        inputLineYStart = cursorY+1
+
+        when(key)
+            '\n' -> # enter
+                inputLinePos = -1   # redraw the line without cursor
+                printEditBuffer()
+                inputLineYStart += (editBuffer.length / termWidth) + 1
+                while inputLineYStart >= termHeight
+                    scrollUp()
+                inputBuffer.append(editBuffer)
+                inputBuffer.append('\n')
+                editBuffer.clear()
+                inputLinePos = 0
+            KEY_BACKSPACE -> 
+                if inputLinePos > 0
+                    editBuffer.removeAt(inputLinePos-1)
+                    inputLinePos -= 1
+            KEY_DELETE -> 
+                if inputLinePos < editBuffer.length
+                    editBuffer.removeAt(inputLinePos)
+            KEY_LEFT -> 
+                if inputLinePos > 0
+                    inputLinePos -= 1
+            KEY_RIGHT ->    
+                if inputLinePos < editBuffer.length
+                    inputLinePos += 1
+            KEY_HOME -> 
+                inputLinePos = 0
+            KEY_END -> 
+                inputLinePos = editBuffer.length
+            KEY_UP -> 
+                if inputLinePos > termWidth
+                    inputLinePos -= termWidth
+                else
+                    inputLinePos = 0
+            KEY_DOWN -> 
+                if inputLinePos + termWidth < editBuffer.length
+                    inputLinePos += termWidth
+                else
+                    inputLinePos = editBuffer.length
+            else -> # regular character
+                editBuffer.insertAt(inputLinePos, key)
+                inputLinePos += 1
+        printEditBuffer()
+    
+fun initializeTerminal()
+    terminalTask = createSystemTask("terminal", unsafe(terminalTaskCode as Int))
+
+fun terminalTaskCode()
+    val terminal = new Terminal()
+    terminal.initialize()
+
+    while true  
+        val (msg1,msg2,msg3,msg4) = getMessage()
+        when(msg1)
+            MESSAGE_WRITE -> 
+                val fd = unsafe(msg2 as FileHandle)
+                val ptr = unsafe(msg3 as Pointer<Char>)
+                val len = msg4
+                for index in 0..<len
+                    terminal.printChar(ptr[index],0x0f)
+
+                fd.task.completeIO(0, len)
+
+            MESSAGE_READ -> 
+                val fd = unsafe(msg2 as FileHandle)
+                val ptr = unsafe(msg3 as Pointer<Char>)
+                val len = msg4
+                val available = if len<terminal.inputBuffer.length then len else terminal.inputBuffer.length
+                if available != 0
+                    memcpy(ptr, terminal.inputBuffer.array, available)
+                    terminal.inputBuffer.removeRange(0, available-1)
+                    kprintf("Terminal task read %d chars, %d remain in input buffer\n", available, terminal.inputBuffer.length)
+                fd.task.completeIO(0, available)
+
+            MESSAGE_KEYPRESS -> 
+                val key = msg2 as Char
+                terminal.keyPress(key)
+            else ->
+                kprintf("Terminal task got message: %x %x %x %x\n", msg1, msg2, msg3, msg4)
