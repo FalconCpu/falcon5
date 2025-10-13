@@ -7,7 +7,8 @@ class Function (
     val parameters: List<VarSymbol>,
     val returnType : Type,
     val qualifier: TokenKind,
-    val isVararg: Boolean = false
+    val isVararg: Boolean = false,
+    val syscallNumber: Int = -1       // Syscall number, -1 if not a syscall
 ) {
     var virtualFunctionNumber = -1      // Virtual function number, -1 if not a virtual function
 

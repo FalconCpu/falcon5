@@ -296,7 +296,8 @@ always_ff @(posedge clock) begin
 
 end
 
-wire unused_ok = &{ 1'b0, dcache_sdram_raddress[1:0], cpu_byte_offset };
+
+
 
 
 endmodule

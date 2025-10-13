@@ -1253,7 +1253,8 @@ private fun AstBlock.findFunctionDefinitions(scope:AstBlock) {
                 name + paramsSymbols.joinToString(separator = ",", prefix = "(", postfix = ")") { it.type.name }
             val thisSym = if (scope is AstClassDefStmt) VarSymbol(location, "this", scope.klass.toClassInstance(), false) else null
             val isVararg = params.any { it.kind==TokenKind.VARARG }
-            function = Function(location, longName, thisSym, paramsSymbols, returnType, qualifier, isVararg)
+            val syscallNumber = syscall?.value ?: -1
+            function = Function(location, longName, thisSym, paramsSymbols, returnType, qualifier, isVararg, syscallNumber)
             for (sym in paramsSymbols)
                 addSymbol(sym)
             if (thisSym != null)
@@ -1266,6 +1267,7 @@ private fun AstBlock.findFunctionDefinitions(scope:AstBlock) {
                     Log.error(location, "Virtual function '${name}' must be defined in a class context")
             }
             val functionInstance = function.toFunctionInstance()
+
             if (qualifier==TokenKind.OVERRIDE)
                 scope.addFunctionOverride(location, name, functionInstance)
             else

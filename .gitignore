@@ -12,3 +12,5 @@ rtl/a.out
 rtl/asm.labels
 rtl/cpu.vcd
 fgpa/
+*.mod
+*.wav

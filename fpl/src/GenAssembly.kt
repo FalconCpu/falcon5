@@ -93,6 +93,7 @@ private fun Instr.genAssembly() = when(this) {
     is InstrStoreField -> "${storeOp(size)} $src, $addr[${offset.offset}]"
     is InstrIndex -> "idx$size $dest, $src, $bounds"
     is InstrNullCheck -> "tiz $src\n"
+    is InstrSyscall -> "sys $num"
 }
 
 fun Function.genAssembly(sb:StringBuilder) {

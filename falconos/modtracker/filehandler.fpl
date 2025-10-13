@@ -1,8 +1,3 @@
-class FileHandle(val handler:TaskControlBlock, val task:TaskControlBlock, val hostFh:Int)
-
-extern fun syscall_io_error(task:TaskControlBlock, errcode:Int)
-extern fun syscall_io_result(task:TaskControlBlock, result:Int)
-extern fun syscall_file_opened(fd:FileHandle)
 
 # ===================================================================
 # UART frame format:
@@ -69,14 +64,13 @@ fun uartSendFrame(command:Int, word:Int, length:Int, data:Pointer<Char>)
         uartSendByte(data[i] as Int)
     uartSendWord(checksum)
 
-fun uartSendFrame(command:Int, word:Int, string:String)
+fun uartSendFrame(command:Int, string:String)
     checksum = 0
     uartSendByte(0xB0)
     uartSendByte(0x02)
     uartSendByte(command & 0xFF)
     uartSendByte((command lsr 8) & 0xFF)
-    uartSendWord(string.length+4)
-    uartSendWord(word)
+    uartSendWord(string.length)
     for i in 0..<string.length
         uartSendByte(string[i] as Int)
     uartSendWord(checksum)
@@ -92,13 +86,14 @@ fun uartReceiveByte() -> Int!
             return ret
         count += 1
         if count > 1000000
+            kprintf("uartReceiveByte: timeout\n")
             return Error.TIMEOUT
     until false
 
 fun uartReceiveCommand() -> Int!
+    #kprintf("uartReceiveCommand: waiting for command\n")
     var cmd = 0
     var state = 0
-    checksum = 0
     while true
         val b = try uartReceiveByte()
         if (state=0 and b=0xB0)
@@ -112,6 +107,7 @@ fun uartReceiveCommand() -> Int!
             cmd = cmd | (b lsl 8)
             return cmd
         else
+            kprintf("uartReceiveCommand: invalid byte %x in state %d\n", b, state)
             state = 0
 
 fun uartRecieveInt() -> Int!
@@ -126,27 +122,42 @@ class UartFrame(val command:Int, val data:Array<Char>)
 fun uartReceiveFrame() -> UartFrame!
     val cmd = try uartReceiveCommand()
     val length = try uartRecieveInt()
+    checksum = 0
+    hwregs.count_rx_bytes = 0
     if length < 0 or length > 1000000
         return Error.INVALID_ARGUMENT
     val data = new Array<Char>(length)
+    # kprintf("uartReceiveFrame: receiving %d bytes\n", length)
     for i in 0..<length
+        val overflow = hwregs.fifo_overflow
+        if overflow != 0
+            kprintf("uartReceiveFrame: fifo overflow detected at bit %d: %d\n", i, overflow)
+            free data
+            return Error.IO_ERROR
         val b = uartReceiveByte()
+        hwregs.seven_seg = i
         if (b is Error)
+            kprintf("uartReceiveFrame: error receiving data byte %d [%d]: %s %d\n", i, hwregs.count_rx_bytes,  b.message, hwregs.fifo_overflow)
             free data
             return b
         data[i] = unsafe(b as Char)
+    val calcChecksum = checksum
+    kprintf("uartReceiveFrame: received %d bytes, checksum=%x\n", length, calcChecksum)
     val recvChecksum = uartRecieveInt()
     if recvChecksum is Error
+        kprintf("uartReceiveFrame: error receiving checksum: %s %x\n", recvChecksum.message, hwregs.fifo_overflow)
         free data
         return recvChecksum
-    if recvChecksum != checksum
-        free data
+    kprintf("uartReceiveFrame: received checksum %x\n", recvChecksum)
+    if recvChecksum != calcChecksum
+        kprintf("uartReceiveFrame: checksum error, expected %x got %x\n", recvChecksum, calcChecksum)
         return Error.IO_ERROR
     return new UartFrame(cmd, data)
 
 class UartFrame1(val cmd:Int, val data:Int)
 
 fun uartReceiveFrame1() -> UartFrame1!
+    checksum = 0
     val cmd = try uartReceiveCommand()
     val length = try uartRecieveInt()
     if length != 4
@@ -159,3 +170,30 @@ fun uartReceiveFrame1() -> UartFrame1!
         kprintf("uartReceiveFrame: checksum error, expected %x got %x\n", recvChecksum, csum)
         return Error.IO_ERROR
     return new UartFrame1(cmd, data)
+
+
+
+fun readFile(filename:String) -> Array<Char>!
+    kprintf("readFile: filename=%s\n", filename)
+    
+    val overflow = hwregs.fifo_overflow
+    if overflow != 0
+        kprintf("readFile: fifo overflow detected at start: %d\n", overflow)
+        return Error.IO_ERROR
+
+
+    uartSendFrame(NETFS_CMD_OPEN, filename)
+
+    val overflow2= hwregs.fifo_overflow
+    if overflow2 != 0
+        kprintf("readFile: fifo overflow detected after send: %d\n", overflow2)
+        return Error.IO_ERROR
+
+
+    val frame = try uartReceiveFrame()
+    if frame.command != NETFS_RESP_OK
+        kprintf("readFile: open failed, command=%x\n", frame.command)
+        free frame.data
+        return Error.IO_ERROR
+
+    return frame.data

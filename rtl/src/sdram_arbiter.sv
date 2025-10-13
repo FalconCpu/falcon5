@@ -56,6 +56,20 @@ module sdram_arbiter(
     output logic [31:0]  m4_rdata,      // Read data
     output logic         m4_complete,   // Burst complete
 
+    // Master 5
+    input  logic         m5_request,    // Request access
+    output logic         m5_ready,      // Access granted
+    input  logic         m5_write,      // 1 = write, 0 = read
+    input  logic         m5_burst,      // 1 = 64 byte burst, 0 = single word
+    input  logic [25:0]  m5_address,    // Address
+    input  logic [31:0]  m5_wdata,      // Write data / tag for read
+    input  logic [3:0]   m5_wstrb,      // Write strobe
+    output logic         m5_rvalid,     // Read data valid
+    output logic [25:0]  m5_raddress,   // Address of read data
+    output logic [31:0]  m5_rdata,      // Read data
+    output logic         m5_complete,   // Burst complete
+
+
 
     // SDRAM interface
     output logic [2:0]  sdram_request,      // Which bus master requests SDRAM access
@@ -90,22 +104,27 @@ always_comb begin
     m2_ready     = 1'b0;
     m3_ready     = 1'b0;
     m4_ready     = 1'b0;
+    m5_ready     = 1'b0;
     m1_rvalid    = 1'b0;
     m1_raddress  = 26'bx;
     m1_rdata     = 32'hx;
-    m1_complete  = 1'bx;
+    m1_complete  = 1'b0;
     m2_rvalid    = 1'b0;
     m2_raddress  = 26'bx;
     m2_rdata     = 32'hx;
-    m2_complete  = 1'bx;
+    m2_complete  = 1'b0;
     m3_rvalid    = 1'b0;
     m3_raddress  = 26'bx;
     m3_rdata     = 32'hx;
-    m3_complete  = 1'bx;
+    m3_complete  = 1'b0;
     m4_rvalid    = 1'b0;
     m4_raddress  = 26'bx;
     m4_rdata     = 32'hx;
-    m4_complete  = 1'bx;
+    m4_complete  = 1'b0;
+    m5_rvalid    = 1'b0;
+    m5_raddress  = 26'bx;
+    m5_rdata     = 32'hx;
+    m5_complete  = 1'b0;
 
     if (sdram_ready) begin
         // SDRAM is ready for a new request
@@ -144,6 +163,15 @@ always_comb begin
             next_wstrb   = m4_wstrb;
             next_wdata   = m4_wdata;
             m4_ready     = 1'b1;
+        end else if (m5_request) begin
+            // Master 4
+            next_request = 3'b101;
+            next_address = m5_address;
+            next_write   = m5_write;
+            next_burst   = m5_burst;
+            next_wstrb   = m5_wstrb;
+            next_wdata   = m5_wdata;
+            m5_ready     = 1'b1;
         end else begin
             // No requests
             next_request = 3'b000;
@@ -176,6 +204,11 @@ always_comb begin
         m4_raddress = sdram_raddress;
         m4_rdata    = sdram_rdata;
         m4_complete = sdram_complete;
+    end else if (sdram_rvalid == 3'h5) begin
+        m5_rvalid   = 1'b1;
+        m5_raddress = sdram_raddress;
+        m5_rdata    = sdram_rdata;
+        m5_complete = sdram_complete;
     end
 
     // reset

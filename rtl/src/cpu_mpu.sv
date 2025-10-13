@@ -74,7 +74,7 @@ always_ff @(posedge clock) begin
     end else if (p3_mpu_add && p3_mpu_data[5:4]!=2'b0) begin
         // Add a new region - overwrite the oldest if full
         region_address[region_count] <= p3_mpu_data[31:12];
-        region_mask[region_count]    <= ~( (1 << (p3_mpu_data[3:0])) - 1'b1);
+        region_mask[region_count]    <= ~( (20'b1 << (p3_mpu_data[3:0])) - 1'b1);
         region_write[region_count]   <= p3_mpu_data[5];
         region_read[region_count]    <= p3_mpu_data[4];
         region_count <= region_count + 1'b1;

@@ -6,17 +6,14 @@
 module Falcon5(
 
 	//////////// Audio //////////
-	input 		          		AUD_ADCDAT,
-	inout 		          		AUD_ADCLRCK,
+	// input 		          		AUD_ADCDAT,
+	// inout 		          		AUD_ADCLRCK,
 	inout 		          		AUD_BCLK,
 	output		          		AUD_DACDAT,
 	inout 		          		AUD_DACLRCK,
 	output		          		AUD_XCK,
 
 	//////////// CLOCK //////////
-	input 		          		CLOCK2_50,
-	input 		          		CLOCK3_50,
-	input 		          		CLOCK4_50,
 	input 		          		CLOCK_50,
 
 	//////////// SDRAM //////////
@@ -109,6 +106,8 @@ logic [3:0]  hwregs_wmask;
 logic [31:0] hwregs_wdata;
 logic        hwregs_rvalid;
 logic [8:0]  hwregs_rtag;
+logic [31:0] hwregs_rdata_regs;
+logic [31:0] hwregs_rdata_audio;
 logic [31:0] hwregs_rdata;
 
 logic        iram_request;
@@ -162,6 +161,15 @@ logic         blitw_sdram_ready;
 logic [25:0]  blitw_sdram_address;
 logic [3:0]   blitw_sdram_wstrb;
 logic [31:0]  blitw_sdram_wdata;
+
+logic         audio_sdram_request;
+logic         audio_sdram_ready;
+logic [25:0]  audio_sdram_address;
+logic         audio_sdram_rvalid;
+logic [31:0]  audio_sdram_rdata;
+logic [25:0]  audio_sdram_raddress;
+logic         audio_sdram_complete;
+
 
 logic         hwregs_blit_valid;
 logic [31:0]  hwregs_blit_command;
@@ -221,6 +229,8 @@ cpu  cpu_inst (
     .perf_count(perf_count)
   );
 
+assign hwregs_rdata = hwregs_rdata_regs | hwregs_rdata_audio;
+
 aux_decoder  aux_decoder_inst (
     .clock(clock),
     .cpu_aux_request(cpu_aux_request),
@@ -260,7 +270,7 @@ aux_decoder  aux_decoder_inst (
     .hwregs_wdata(hwregs_wdata),
     .hwregs_rvalid(hwregs_rvalid),
     .hwregs_rtag(hwregs_rtag),
-    .hwregs_rdata(hwregs_rdata),
+    .hwregs_rdata(hwregs_rdata_regs),
     .hwregs_blit_valid(hwregs_blit_valid),
     .hwregs_blit_command(hwregs_blit_command),
     .hwregs_blit_privaledge(hwregs_blit_privaledge),
@@ -282,6 +292,8 @@ aux_decoder  aux_decoder_inst (
     .PS2_DAT(PS2_DAT),
     .PS2_CLK2(PS2_CLK2),
     .PS2_DAT2(PS2_DAT2),
+    .SCL(FPGA_I2C_SCLK),
+    .SDA(FPGA_I2C_SDAT),
     .mouse_x(mouse_x),
     .mouse_y(mouse_y),
     .perf_count(perf_count)
@@ -335,6 +347,17 @@ sdram_arbiter  sdram_arbiter_inst (
     .m4_raddress(),
     .m4_rdata(),
     .m4_complete(),
+    .m5_request(audio_sdram_request),
+    .m5_ready(audio_sdram_ready),
+    .m5_write(1'b0),
+    .m5_burst(1'b1),
+    .m5_address(audio_sdram_address),
+    .m5_wdata(32'bx),
+    .m5_wstrb(4'bx),
+    .m5_rvalid(audio_sdram_rvalid),
+    .m5_raddress(audio_sdram_raddress),
+    .m5_rdata(audio_sdram_rdata),
+    .m5_complete(audio_sdram_complete),
     .sdram_request(sdram_request),
     .sdram_ready(sdram_ready),
     .sdram_address(sdram_address),
@@ -439,5 +462,28 @@ blitter  blitter_inst (
     .blitw_sdram_wstrb(blitw_sdram_wstrb),
     .blitw_sdram_wdata(blitw_sdram_wdata)
   );
+
+audio  audio_inst (
+    .clock(clock),
+    .reset(reset),
+    .hwregs_request(hwregs_request),
+    .hwregs_write(hwregs_write),
+    .hwregs_addr(hwregs_addr),
+    .hwregs_wdata(hwregs_wdata),
+    .hwregs_rdata(hwregs_rdata_audio),
+    .AUD_XCK(AUD_XCK),
+    .AUD_BCLK(AUD_BCLK),
+    .AUD_DACLRCK(AUD_DACLRCK),
+    .AUD_DACDAT(AUD_DACDAT),
+    .sdram_request(audio_sdram_request),
+    .sdram_ready(audio_sdram_ready),
+    .sdram_address(audio_sdram_address),
+    .sdram_rvalid(audio_sdram_rvalid),
+    .sdram_raddress(audio_sdram_raddress),
+    .sdram_rdata(audio_sdram_rdata),
+    .sdram_complete(audio_sdram_complete)
+  );
+
+
 
 endmodule

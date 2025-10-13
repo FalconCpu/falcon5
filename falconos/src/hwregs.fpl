@@ -15,7 +15,8 @@ class HwRegs
     var timer          : Int  # 32 bit free running timer
     var blit_cmd       : Int  # Write=Blitter Command Read=Fifo full
     var blit_ctrl      : Int  # Blitter Control register 
-    var reserved2      : Int  # 
+    var i2c_out        : Int  # 
+    var reserved1      : Int  #
     var simulation     : Int  # Reads as 1 in simulation, 0 in hardware
     var perf_ctrl      : Int  # Performance counter control register
     var perf_count_ok  : Int  # Performance counter: Number of instructions executed successfully
@@ -23,6 +24,8 @@ class HwRegs
     var perf_count_if  : Int  # Performance counter: Number of nulls due to instruction fetch stalls
     var perf_count_sb  : Int  # Performance counter: Number of nulls due to scoreboard stalls
     var perf_count_rs  : Int  # Performance counter: Number of nulls due to resource stalls (divider/memory)
+    var count_rx_bytes : Int  # Number of bytes received on the UART
+    var fifo_overflow  : Int  # Flag to indicate which fifos have overflowed
 
 const hwregs = unsafe(0xE0000000 as HwRegs)
 
@@ -33,3 +36,22 @@ fun uartTx(c:Char)
         a = hwregs.uart_tx
     until a>8
     hwregs.uart_tx = (c as Int)
+
+
+class HwRegsAudio
+    var addr       : Int  # Address register for audio buffer
+    var length     : Int  # Length of audio buffer in bytes. Write to this register starts playback
+    var volume     : Int  # Volume (0-255)
+    var pitch      : Int  # Sample rate. 0x10000=48kHz, 0x8000=24kHz, 0x4000=12kHz etc
+    var rep_addr   : Int  # Address to loop back to when the sample loops
+    var rep_length : Int  # Length of loop section in bytes. 0 = no
+
+const hwregsAudio = const Array<HwRegsAudio>[
+    unsafe(0xE0000200 as HwRegsAudio),
+    unsafe(0xE0000220 as HwRegsAudio),
+    unsafe(0xE0000240 as HwRegsAudio),
+    unsafe(0xE0000260 as HwRegsAudio),
+    unsafe(0xE0000280 as HwRegsAudio),
+    unsafe(0xE00002A0 as HwRegsAudio),
+    unsafe(0xE00002C0 as HwRegsAudio),
+    unsafe(0xE00002E0 as HwRegsAudio) ]

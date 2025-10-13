@@ -19,7 +19,7 @@ class ParserTest {
         val expected = """
             AstTop parent=null symbols={}
             . AstFile parent=null symbols={}
-            . . AstFunctionDefStmt name=main parent=null qualifier=<End of Line> retType=null symbols={}
+            . . AstFunctionDefStmt name=main parent=null qualifier=<End of Line> retType=null symbols={} syscall=null
             . . . AstVarDeclStmt astType=null mutable=true name=b
             . . . . AstIdentifier name=a
             . . . AstParameter kind=<End of Line> name=a

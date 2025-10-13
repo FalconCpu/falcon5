@@ -257,7 +257,7 @@ static void generate_dch(Token* line) {
     while(1) {
         switch(line[i]->kind) {
             case 'i':
-                if (line[i]->value<-0x8000 || line[i]->value>=0x8000)
+                if (line[i]->value<-0x8000 || line[i]->value>=0x10000)
                     error("Invalid halfword %d", line[i]->value);
                 out_byte(line[i]->value & 0xff);
                 out_byte((line[i]->value >> 8) & 0xff);

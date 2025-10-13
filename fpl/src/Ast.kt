@@ -56,7 +56,8 @@ class AstFunctionDefStmt(
     val params: List<AstParameter>,
     val retType: AstType?,
     body: List<AstStmt>,
-    val qualifier: TokenKind
+    val qualifier: TokenKind,
+    val syscall : AstIntLiteral? = null
 ) : AstBlock(location, body) {
     lateinit var function : Function
 }

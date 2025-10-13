@@ -4,15 +4,10 @@ module tb;
   // Parameters
 
   //Ports
-  reg AUD_ADCDAT;
-  wire AUD_ADCLRCK;
   wire AUD_BCLK;
   wire AUD_DACDAT;
   wire AUD_DACLRCK;
   wire AUD_XCK;
-  reg CLOCK2_50;
-  reg CLOCK3_50;
-  reg CLOCK4_50;
   reg CLOCK_50;
   wire [12:0] DRAM_ADDR;
   wire [1:0] DRAM_BA;
@@ -51,16 +46,17 @@ module tb;
   wire [35:0] GPIO_0;
   wire [35:0] GPIO_1;
 
+  // I2S receiver outputs
+  wire signed [15:0] left_sample;
+  wire signed [15:0] right_sample;
+  wire        sample_valid;
+
+
   Falcon5  Falcon5_inst (
-    .AUD_ADCDAT(AUD_ADCDAT),
-    .AUD_ADCLRCK(AUD_ADCLRCK),
     .AUD_BCLK(AUD_BCLK),
     .AUD_DACDAT(AUD_DACDAT),
     .AUD_DACLRCK(AUD_DACLRCK),
     .AUD_XCK(AUD_XCK),
-    .CLOCK2_50(CLOCK2_50),
-    .CLOCK3_50(CLOCK3_50),
-    .CLOCK4_50(CLOCK4_50),
     .CLOCK_50(CLOCK_50),
     .DRAM_ADDR(DRAM_ADDR),
     .DRAM_BA(DRAM_BA),
@@ -123,11 +119,21 @@ end
 initial begin
     SW = 10'b0;
     $dumpfile("cpu.vcd");
-    $dumpvars(5, tb);
-    #2000000;
+    $dumpvars(2, tb);
+    $dumpvars(5, Falcon5_inst.audio_inst);
+    #400000000;
     $display("Timeout");
     $finish;
 end
 
+
+i2s_receiver  i2s_receiver_inst (
+    .bclk(AUD_BCLK),
+    .lrclk(AUD_DACLRCK),
+    .sdata(AUD_DACDAT),
+    .left_sample(left_sample),
+    .right_sample(right_sample),
+    .sample_valid(sample_valid)
+  );
 
 endmodule

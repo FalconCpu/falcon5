@@ -10,5 +10,5 @@ enum Error(message:String) [
     INVALID_ARGUMENT("Invalid argument"),
     NOT_IMPLEMENTED ("Not implemented"),
     FILE_NOT_FOUND  ("File not found"),
-    PROTOCOL_ERROR  ("Protocol error"),
+    IO_ERROR        ("I/O error"),
     TIMEOUT         ("Operation timed out") ]

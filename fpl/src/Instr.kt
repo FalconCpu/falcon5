@@ -52,6 +52,7 @@ sealed class Instr() {
         is InstrStoreField -> "ST$size $src, $addr[$offset]"
         is InstrIndex -> "IDX$size $dest, $src, $bounds"
         is InstrNullCheck -> "TIZ $src"
+        is InstrSyscall -> "SYSCALL $num"
     }
 
     fun getDestReg(): Reg? = when (this) {
@@ -75,6 +76,7 @@ sealed class Instr() {
         is InstrStoreField -> null
         is InstrIndex -> dest
         is InstrNullCheck -> null
+        is InstrSyscall -> null
     }
 
     fun getSrcReg(): List<Reg> = when (this) {
@@ -98,6 +100,7 @@ sealed class Instr() {
         is InstrStoreField -> listOf(src, addr)
         is InstrIndex -> listOf(src, bounds)
         is InstrNullCheck -> listOf(src)
+        is InstrSyscall -> emptyList()
     }
 }
 
@@ -121,3 +124,4 @@ class InstrIndex(val size:Int, val dest:Reg, val src:Reg, val bounds:Reg) : Inst
 class InstrNullCheck(val src: Reg) : Instr()
 class InstrStart() : Instr()
 class InstrEnd() : Instr()
+class InstrSyscall (val num: Int) : Instr()

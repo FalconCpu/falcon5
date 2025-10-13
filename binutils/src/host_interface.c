@@ -9,7 +9,7 @@
 
 typedef const char* string;
 
-#define COM_PORT "COM3"
+#define COM_PORT "COM4"
 #define BAUD_RATE 2000000
 
 static HANDLE hSerial = INVALID_HANDLE_VALUE;
@@ -68,7 +68,7 @@ static void open_com_port() {
 
     dcbSerialParams.BaudRate = BAUD_RATE;    // Set your baud rate here
     dcbSerialParams.ByteSize = 8;            // 8-bit data
-    dcbSerialParams.StopBits = ONESTOPBIT;  // Two stop bit
+    dcbSerialParams.StopBits = ONESTOPBIT;            // Two stop bit
     dcbSerialParams.Parity = NOPARITY;       // No parity
     if (!SetCommState(hSerial, &dcbSerialParams))
         fatal("Error setting serial port state.\n");
@@ -137,6 +137,8 @@ static int output_to_com_port(char* s, int length) {
     if (!WriteFile(hSerial, s, length, &bytesWritten, NULL) || bytesWritten != length)
         fatal("Error sending string to com port");
     
+    if (bytesWritten != length)
+        fatal("Error sending string to com port (only %ld of %d bytes sent)", bytesWritten, length);
     // Also save a copy to the dump file
     if (dump_file != NULL) {
         for(int i=0; i<bytesWritten; i++)
@@ -166,15 +168,18 @@ static void send_word_to_com_port(int word) {
 /// send the boot rom to the com port
 
 static void send_packet_to_com_port(int command, int length, char* data) {
-    checksum = 0;
     send_word_to_com_port(command);
     send_word_to_com_port(length);
-    DWORD bytesWritten = 0;
+
+    int checksum = 0;
+    for(int i=0; i<length; i++) {
+        checksum += data[i] & 0xff; 
+    }
+
     output_to_com_port((char*)data, length);
 
-    for(int i=0; i<length; i++)
-        checksum += data[i] & 0xff; 
     send_word_to_com_port(checksum);
+    printf("%sSent %d bytes, checksum=%x%s\n", YELLOW, length, checksum, RESET);
 }
 
 
@@ -233,7 +238,7 @@ Frame* read_frame() {
     int l3 = read_from_com_port();     if (l3==-1) return 0;
     int len = (l0) | (l1<<8) | (l2<<16) | (l3<<24);
 
-    Frame* frame = malloc(sizeof(Frame)+len+1);
+    Frame* frame = calloc(1,sizeof(Frame)+len+4);
     frame->length = len;
     for(int i=0; i<len; i++) {
         int d0 = read_from_com_port();  if (d0==-1) return 0;
@@ -258,37 +263,74 @@ Frame* read_frame() {
 
 static void cmd_open_file() {
     Frame* frame = read_frame();
-    if (frame==0) 
+    if (frame==0) {
+        printf("%sError reading open file frame%s\n", RED, RESET);
         return;
-    int mode = frame->data[0] | (frame->data[1]<<8) | (frame->data[2]<<16) | (frame->data[3]<<24);
-    char* filename = (char*)(frame->data + 4);
-    printf("%sOpen file '%s' mode %x%s\n", YELLOW, filename, mode, RESET);
+    }
 
-    FILE *fh = 0;
-    if (mode==0)
-        fh = fopen(filename, "rb");
-    else if (mode==1)
-        fh = fopen(filename, "wb");
-    else if (mode==2)
-        fh = fopen(filename, "ab");
-    else
-        fatal("Unknown file mode %d", mode);
-
+    FILE *fh = fopen(frame->data, "rb");
     if (fh==0) {
-        printf("%sError opening file '%s' mode %x: %s%s\n", RED, filename, mode, strerror(errno), RESET);
-        int response[2];
-        response[1] = errno;
-        send_packet_to_com_port(NETFS_RESP_ERROR, 4, (char*)response);
+        printf("%sError opening file '%s'%s\n", RED, frame->data, RESET);
+        send_packet_to_com_port(NETFS_RESP_ERROR, 0, "");
         free(frame);
         return;
-    } else {
-        printf("%sFile opened ok %p%s\n", YELLOW, fh, RESET);
-        int response[2];
-        response[0] = (int)fh;
-        send_packet_to_com_port(NETFS_RESP_OK, 4, (char*)response);
-    }   
+    }
+
+    printf("%sOpened file '%s'%s\n", YELLOW, frame->data, RESET);
+    
+    // Get file size
+    fseek(fh, 0, SEEK_END);    // Seek to end of file
+    long file_size = ftell(fh); // Get current position (= file size)
+    fseek(fh, 0, SEEK_SET);    // Seek back to beginning
+    
+    if (file_size == -1) {
+        printf("%sError getting file size for '%s'%s\n", RED, frame->data, RESET);
+        fclose(fh);
+        send_packet_to_com_port(NETFS_RESP_ERROR, 0, "");
+        free(frame);
+        return;
+    }
+
+    // Allocate memory for the file content
+    char* file_buffer = malloc(file_size);
+    if (file_buffer == NULL) {
+        printf("%sError allocating memory for file '%s' (size: %ld bytes)%s\n", RED, frame->data, file_size, RESET);
+        fclose(fh);
+        send_packet_to_com_port(NETFS_RESP_ERROR, 0, "");
+        free(frame);
+        return;
+    }
+
+    // Read file content into buffer
+    size_t bytes_read = fread(file_buffer, 1, file_size, fh);   
+
+    if (bytes_read != file_size) {
+        printf("%sError reading file '%s'%s\n", RED, frame->data, RESET);
+        free(file_buffer);
+        fclose(fh);
+        send_packet_to_com_port(NETFS_RESP_ERROR, 0, "");
+        free(frame);
+        return;
+    }
+
+    fclose(fh);
+
+    // Send the file content back
+    send_packet_to_com_port(NETFS_RESP_OK, file_size, file_buffer);
     free(frame);
 }
+
+/// -----------------------------------------------------------------
+///                    cmd_read_file
+/// -----------------------------------------------------------------
+
+void cmd_read_file() {
+    Frame* frame = read_frame();
+    if (frame==0) 
+        return;
+
+}
+
 
 
 
@@ -312,6 +354,7 @@ static void command_mode() {
     switch(cmd) {
         case NETFS_CMD_BOOT:   send_boot_image("asm.hex");       break;
         case NETFS_CMD_OPEN:   cmd_open_file(); break;
+        case NETFS_CMD_READ:   cmd_read_file(); break;
         default:
             printf("%sUnknown command %x%s\n", RED, cmd, RESET);
             break;

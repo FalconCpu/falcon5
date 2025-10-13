@@ -1,0 +1,8 @@
+start.f32
+../src/errors.fpl
+../src/hwregs.fpl
+memory.fpl
+../src/kprintf.fpl
+main.fpl
+exceptions.fpl
+filehandler.fpl

@@ -605,7 +605,10 @@ fun genCall(func:Function, thisArg:Reg?, args: List<Reg>) : Reg {
                 currentFunc.addMov(cpuRegs[index++], reg)
         else
             currentFunc.addMov(cpuRegs[index++], arg)
-    if (func.virtualFunctionNumber==-1)
+
+    if (func.syscallNumber!=-1)
+        currentFunc.addInstr( InstrSyscall(func.syscallNumber) )
+    else if (func.virtualFunctionNumber==-1)
         currentFunc.addCall(func)
     else
         currentFunc.addVCall(func)

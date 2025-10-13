@@ -43,6 +43,15 @@ class Parser(val lexer: Lexer) {
             return false
     }
 
+    private fun canTake(value:String) : Boolean {
+        if (currentToken.value == value) {
+            nextToken()
+            return true
+        } else
+            return false
+    }
+
+
     // =====================================================================================
     //                                 Expressions
     // =====================================================================================
@@ -535,10 +544,11 @@ class Parser(val lexer: Lexer) {
         val name = expect(IDENTIFIER, FREE)
         val params = parseParameterList(false)
         val retType = if (canTake(ARROW)) parseType() else null
+        val syscall = if (canTake("syscall")) parseIntLit() else null
         expectEol()
         val body = if (currentToken.kind== INDENT) parseIndentedBlock() else emptyList()
         optionalEnd(FUN)
-        return AstFunctionDefStmt(name.location, name.value, params, retType, body, qualifier)
+        return AstFunctionDefStmt(name.location, name.value, params, retType, body, qualifier, syscall)
     }
 
     private fun parseClassDef() : AstClassDefStmt {

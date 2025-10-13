@@ -52,3 +52,4 @@ Backend:
 Dead Store elimination
 Loop invariant code motion
 vcall devirtualisation
+syscalls

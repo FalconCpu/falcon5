@@ -18,9 +18,10 @@
 // E0000024  MOUSE_Y        R    Mouse Y coordinate
 // E0000028  MOUSE_BUTTONS  R    Mouse buttons (bit 0 = left, bit 1 = right, bit 2 = middle)
 // E000002C  KEYBOARD       R    Keyboard data (-1 if no data)
-// E0000030  TIMER          RW   32 bit free running timer
+// E0000030  TIMER          RW   Timer, count in milliseconds
 // E0000034  BLIT_CMD       RW   Write=Blitter Command Read=Fifo full
 // E0000038  BLIT_CTRL      RW   Blitter Control register 
+// E000003C  I2C_OUT        W    I2C Data to send (24 bits). Reads 0=Ready, 1=Busy, 2=Error
 // E0000044  SIMULATION     R    Reads as 1 in simulation, 0 in hardware
 // E0000048  PERF_CTRL      RW   Performance counter control register
 // E000004C  PERF_COUNT_OK  R    Performance counter: Number of instructions executed successfully
@@ -28,6 +29,11 @@
 // E0000054  PERF_COUNT_IF  R    Performance counter: Number of nulls due to instruction fetch stalls
 // E0000058  PERF_COUNT_SB  R    Performance counter: Number of nulls due to scoreboard stalls
 // E000005C  PERF_COUNT_RS  R    Performance counter: Number of nulls due to resource stalls (divider/memory)
+// E0000060  COUNT_RX       RW   Count the number of bytes received from the UART
+// E0000064  OVERFLOW       R    Overflow status of the FIFOs
+// E00001XX  VGA layers registers       
+// E00002XX  AUDIO registers
+// E0001XXX  VGA Palette registers
 
 // verilator lint_off PINCONNECTEMPTY
 
@@ -71,6 +77,8 @@ module hwregs (
     inout               PS2_DAT,
     inout               PS2_CLK2,
     inout               PS2_DAT2,
+    inout               SDA,
+    output              SCL,
     output logic [9:0]  mouse_x,
     output logic [9:0]  mouse_y,
 
@@ -81,7 +89,7 @@ logic [23:0] seven_seg;
 logic [7:0]  fifo_tx_data;
 logic        fifo_tx_complete;
 logic        fifo_tx_not_empty;
-logic [9:0]  fifo_tx_slots_free;
+logic [11:0] fifo_tx_slots_free;
 logic [7:0]  fifo_rx_data;
 logic        fifo_rx_not_empty;
 logic [7:0]  uart_rx_data;
@@ -101,9 +109,14 @@ logic [7:0]  keyboard_code;
 logic        keyboard_strobe;
 logic [7:0]  key_read_data;
 logic        key_read_valid;
+logic        i2c_busy;
+logic        i2c_ack_error;
+logic        i2c_start;
+logic [23:0] i2c_data;
+logic [17:0] milli_counter;
 
-
-logic [8:0]   count_keys;
+logic [31:0] count_rx_bytes;
+logic [2:0]  fifo_overflow;
 
 // synthesis translate_off
 integer fh;
@@ -118,7 +131,14 @@ always_ff @(posedge clock) begin
     hwregs_blit_valid <= 1'b0;
     hwregs_blit_command <= 32'bx;
     perf_reset <= 1'b0;
-    timer <= timer + 1;
+    i2c_start <= 1'b0;
+
+    // Increment the millisecond timer
+    if (milli_counter == 124999) begin
+        milli_counter <= 0;
+        timer <= timer + 1;
+    end else
+        milli_counter <= milli_counter + 1;
 
     if (hwregs_request && hwregs_write) begin
         // Write to hardware registers
@@ -133,8 +153,8 @@ always_ff @(posedge clock) begin
             16'h0004: begin
                 if (hwregs_wdata[9:0] != LEDR)
                     $display("[%t] LED = %03X", $time, hwregs_wdata[9:0]);
-                //if (hwregs_wmask[0])  LEDR[7:0] <= hwregs_wdata[7:0];
-                //if (hwregs_wmask[1])  LEDR[9:8] <= hwregs_wdata[9:8];
+                if (hwregs_wmask[0])  LEDR[7:0] <= hwregs_wdata[7:0];
+                if (hwregs_wmask[1])  LEDR[9:8] <= hwregs_wdata[9:8];
             end
             16'h0010: begin 
                 // Writes to the UART TX are handled by the FIFO
@@ -169,6 +189,11 @@ always_ff @(posedge clock) begin
                 // Blitter control register - currently unused
                 hwregs_blit_privaledge <= hwregs_wdata[0];
             end
+            16'h003C: begin
+                // I2C data out register
+                i2c_data <= hwregs_wdata[23:0];
+                i2c_start <= 1'b1;
+            end
             16'h0048: begin
                 // Performance counter control register
                 if (hwregs_wmask[0]) begin
@@ -176,6 +201,10 @@ always_ff @(posedge clock) begin
                     perf_run <= hwregs_wdata[1];
                     perf_div_1024 <= hwregs_wdata[2];
                 end
+            end
+
+            16'h0060: begin
+                count_rx_bytes <= hwregs_wdata;
             end
             default: begin end
         endcase
@@ -187,7 +216,7 @@ always_ff @(posedge clock) begin
             16'h0004: hwregs_rdata <= {22'b0, LEDR};
             16'h0008: hwregs_rdata <= {22'b0, SW};
             16'h000C: hwregs_rdata <= {28'b0, KEY};
-            16'h0010: hwregs_rdata <= {22'b0, fifo_tx_slots_free};
+            16'h0010: hwregs_rdata <= {20'b0, fifo_tx_slots_free};
             16'h0014: hwregs_rdata <= fifo_rx_not_empty ? {24'b0, fifo_rx_data} : 32'hffffffff;
             16'h0018: hwregs_rdata <= GPIO_0;
             16'h001C: hwregs_rdata <= GPIO_1[31:0];
@@ -197,6 +226,8 @@ always_ff @(posedge clock) begin
             16'h002C: hwregs_rdata <= key_read_valid ? {24'b0, key_read_data} : 32'hffffffff;
             16'h0030: hwregs_rdata <= timer;
             16'h0034: hwregs_rdata <= {22'b0, blit_fifo_slots_free};
+            16'h0038: hwregs_rdata <= {31'b0, hwregs_blit_privaledge};
+            16'h003C: hwregs_rdata <= {30'b0, i2c_ack_error, i2c_busy};
             16'h0044: begin
                         hwregs_rdata <= 32'h00000000; // SIMULATION register
                         // synthesis translate_off
@@ -209,7 +240,9 @@ always_ff @(posedge clock) begin
             16'h0054: hwregs_rdata <= perf_div_1024 ? perf_count_if[41:10] : perf_count_if[31:0];
             16'h0058: hwregs_rdata <= perf_div_1024 ? perf_count_sb[41:10] : perf_count_sb[31:0];
             16'h005C: hwregs_rdata <= perf_div_1024 ? perf_count_rs[41:10] : perf_count_rs[31:0];
-            default:  hwregs_rdata <= 32'bx;
+            16'h0060: hwregs_rdata <= count_rx_bytes;
+            16'h0064: hwregs_rdata <= {29'b0, fifo_overflow};
+            default:  hwregs_rdata <= 32'b0;
         endcase
     end
 
@@ -232,6 +265,13 @@ always_ff @(posedge clock) begin
         endcase
     end
 
+    // Count the number of bytes received from the UART
+    if (reset) begin
+        count_rx_bytes <= 32'b0;
+//    end else if (uart_rx_complete) begin
+    end else if (hwregs_request && !hwregs_write && hwregs_addr==16'h0014 && fifo_rx_not_empty) begin
+        count_rx_bytes <= count_rx_bytes + 1;
+    end
 
     if (reset) begin
         seven_seg <= 24'h000000;
@@ -275,7 +315,8 @@ byte_fifo  uart_tx_fifo (
     .read_enable(fifo_tx_complete),
     .read_data(fifo_tx_data),
     .slots_free(fifo_tx_slots_free),
-    .not_empty(fifo_tx_not_empty)
+    .not_empty(fifo_tx_not_empty),
+    .overflow(fifo_overflow[0])
   );
 
 wire rx_strobe = hwregs_request && !hwregs_write && hwregs_addr[15:0] == 16'h0014;
@@ -288,7 +329,8 @@ byte_fifo  uart_rx_fifo (
     .read_enable(rx_strobe),
     .read_data(fifo_rx_data),
     .slots_free(),
-    .not_empty(fifo_rx_not_empty)
+    .not_empty(fifo_rx_not_empty),
+    .overflow(fifo_overflow[1])
   );
 
 mouse_interface  mouse_interface_inst (
@@ -320,16 +362,19 @@ byte_fifo  keyboard_rx_fifo (
     .read_enable(key_read_strobe),
     .read_data(key_read_data),
     .slots_free(),
-    .not_empty(key_read_valid)
+    .not_empty(key_read_valid),
+    .overflow(fifo_overflow[2])
   );
 
-always_ff @(posedge clock) begin
-    if (reset)
-        count_keys <= 0;
-    else if (keyboard_strobe)
-        count_keys <= count_keys + 1;
-end
-
-assign LEDR = {1'b0,count_keys};
+i2c_master  i2c_master_inst (
+    .clock(clock),
+    .reset(reset),
+    .SDA(SDA),
+    .SCL(SCL),
+    .start(i2c_start),
+    .data_in(i2c_data),
+    .busy(i2c_busy),
+    .ack_error(i2c_ack_error)
+  );
 
 endmodule
