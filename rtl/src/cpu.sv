@@ -38,7 +38,8 @@ module cpu(
     input  logic [31:0]  cpu_icache_raddr,     // The address of the read data.
     input  logic [8:0]   cpu_icache_rtag,      // The returned tag of the read data.
 
-    output logic [2:0]   perf_count       // Performance counter output
+    output logic [2:0]   perf_count,       // Performance counter output
+    output logic [31:0]  cpu_pc           // Current CPU PC (for debug)
 );
 
 // Outputs from IFetch
@@ -125,6 +126,8 @@ logic [4:0]  mem_dest;
 logic [31:0] mem_result;
 logic        p4_mem_busy;
 
+always @(posedge clock)
+  cpu_pc <= p2_pc;
 
   cpu_ifetch  cpu_ifetch_inst (
     .clock(clock),

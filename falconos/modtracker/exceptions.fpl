@@ -16,6 +16,6 @@ class TaskControlBlock
     val name:String
     # other fields omitted for brevity
 
-fun exceptionHandler(cause:Exception, data:Int, task:TaskControlBlock)
-    kprintf("exceptionHandler: cause=%s data=%08x task=%x\n", cause.text, data, task)
+fun exceptionHandler(cause:Int, data:Int, addr:Int)
+    kprintf("exceptionHandler: cause=%x data=%08x addr=%x\n", cause, data, addr)
     exit()

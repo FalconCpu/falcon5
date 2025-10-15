@@ -30,13 +30,14 @@ module vga(
 
     // Mouse coordinates
     input  logic [9:0]  mouse_x,
-    input  logic [9:0]  mouse_y
+    input  logic [9:0]  mouse_y,
+    output logic [9:0]  vga_row
 );
 
 logic new_pixel;   // New pixel available
 logic       new_frame;   // New frame started
 logic [7:0] pixel_data;  // Pixel data (grayscale)
-logic [9:0] slots_free;
+logic [11:0] slots_free;
 logic [9:0] pixel_x;     // Current pixel X coordinate  
 logic [9:0] pixel_y;     // Current pixel Y coordinate
 genvar g;
@@ -154,6 +155,7 @@ byte_fifo  byte_fifo_inst (
     .read_enable(new_pixel),
     .read_data(pixel_data),
     .slots_free(slots_free),
+    .overflow(),
     .not_empty()
   );
 
@@ -183,7 +185,8 @@ vga_output  vga_output_inst (
     .VGA_SYNC_N(VGA_SYNC_N),
     .VGA_BLANK_N(VGA_BLANK_N),
     .mouse_x(mouse_x),
-    .mouse_y(mouse_y)
+    .mouse_y(mouse_y),
+    .vga_row(vga_row)
   );
 
 wire unused_ok = &{1'b0, cache_raddress[25:2]};

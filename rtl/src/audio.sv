@@ -7,6 +7,10 @@
 // 0xE000020C     AUDIO_PITCH          sample rate. 0x10000=48kHz, 0x8000=24kHz, 0x4000=12kHz etc
 // 0xE0000210     AUDIO_LOOP_ADDRESS   address to loop back to 
 // 0xE0000214     AUDIO_LOOP_LENGTH    length of loop section in samples (0 = no loop)
+// The above registers repeat *8
+// 0xE00002F8     AUDIO_WRITE_ADDR     Address for writeback
+// 0xE00002FC     AUDIO_WRITE_LENGTH   Number of samples to writeback
+
 
 module audio (
     input logic        clock,
@@ -27,6 +31,8 @@ module audio (
 
     // SDRAM interface (externally wired to always read bursts)
     output logic         sdram_request,  // Request memory
+    output logic         sdram_write,
+    output logic [31:0]  sdram_wdata,
     input  logic         sdram_ready,    // SDRAM is ready for a request
     output logic [25:0]  sdram_address,  // Address
     input  logic         sdram_rvalid,   // Read data valid
@@ -44,6 +50,8 @@ logic [7:0]   reg_volume_right[0:7];  // Volume control (0-256)
 logic [25:0]  reg_loop_address[0:7]; // Address to loop back to
 logic [25:0]  reg_loop_length[0:7];  // Length of loop section in samples
 logic [16:0]  reg_pitch[0:7];         // Pitch control
+logic [25:0]  reg_write_addr;         // Address for writeback
+logic [25:0]  reg_write_length;        // count of the number of words still to write
 
 logic        sample_strobe;
 
@@ -62,7 +70,9 @@ logic        [23:0] mult_result;
 logic         mem_request, next_mem_request;   // A transaction is ready to be processed
 logic [25:0]  mem_address, next_mem_address;   // Address to read
 logic         mem_valid;                       // Memory read has completed
+logic         mem_write, next_mem_write;
 logic [15:0]  mem_data;                        // Data read#
+logic [31:0]  next_wdata;
 
 // Current position in audio stream
 logic [25:0]  current_address[0:7], next_current_address[0:7];
@@ -87,6 +97,7 @@ localparam START=4'h0,
            MUL_RIGHT=4'h8, 
            COMPLETE =4'h9,
            NEXT_VOICE=4'ha,
+           WRITEBACK=4'hb,
            DONE=4'hf;
 
 // clamp to signed 16-bit range
@@ -106,6 +117,9 @@ always_comb begin
     mult_b = 8'h0;
     next_mem_request = 1'b0;
     next_mem_address = mem_address;
+    next_wdata = sdram_wdata;
+    next_mem_write = 1'b0;
+
     for (i=0; i<8; i=i+1) begin
         next_current_address[i] = current_address[i];
         next_words_remaining[i] = words_remaining[i];
@@ -123,6 +137,7 @@ always_comb begin
             next_sample_left = 18'h0;
             next_sample_right = 18'h0;
             next_current_channel = 0;
+            next_wdata = 0;
             next_state = INC_PHASE;
         end
 
@@ -133,7 +148,7 @@ always_comb begin
                 next_start_voice[current_channel] = 1'b0;
                 next_words_remaining[current_channel] = reg_length[current_channel];
                 next_current_address[current_channel] = reg_address[current_channel];
-                next_phase_acc[current_channel] = 18'h0;
+                next_phase_acc[current_channel] = 18'h10000;
                 next_prev_sample[current_channel] = 16'h0;
                 next_current_sample[current_channel] = 16'h0;
             end else if (words_remaining[current_channel]==0 && next_current_address[current_channel]!=0) begin
@@ -194,8 +209,6 @@ always_comb begin
         end
 
         MUL_LEFT: begin   // Multiply left channel sample by left volume
-            if (current_channel==0)
-                $display("Interpolation %t: prev=%d curr=%d frac=%d result=%d", $time, prev_sample[current_channel], current_sample[current_channel], phase_acc[current_channel][15:0], $signed(interpolated_sample));
             mult_a = interpolated_sample;
             mult_b = reg_volume_left[current_channel];
             next_state = MUL_RIGHT;
@@ -206,21 +219,34 @@ always_comb begin
             mult_a = interpolated_sample;
             mult_b = reg_volume_right[current_channel];
             next_state = COMPLETE;
+
+            // Capture outputs for writeback
+            if (current_channel==0)   next_wdata[7:0]   = mult_result[23:16];
+            if (current_channel==1)   next_wdata[15:8]  = mult_result[23:16];
+            if (current_channel==2)   next_wdata[23:16] = mult_result[23:16];
+            if (current_channel==3)   next_wdata[31:24] = mult_result[23:16];
         end
 
         COMPLETE: begin  // Add to right channel sample
-            next_sample_right = sample_right + {mult_result[23],mult_result[23],mult_result[23:8]}; // Sign-extend
+            next_sample_right = sample_right + {mult_result[23],mult_result[23],mult_result[23:8]}; // Sign-extend            
             next_state = NEXT_VOICE;
         end
 
         NEXT_VOICE: begin
             if (current_channel==7)
-                next_state = DONE;
+                next_state = WRITEBACK;
             else begin
                 next_current_channel = current_channel + 1'b1;
                 next_state = INC_PHASE;
             end
         end
+
+        WRITEBACK: begin
+            next_mem_request = reg_write_length != 0;
+            next_mem_write = 1'b1;
+            next_mem_address = reg_write_addr;
+            next_state = DONE;
+        end 
 
         DONE: begin  // All channels processed - wait for I2S to consume samples
             // Saturate outputs to 16 bits
@@ -271,6 +297,9 @@ always_ff @(posedge clock) begin
     mult_result <= {{8{mult_a[15]}},mult_a} * {1'b0,mult_b};
     mem_request <= next_mem_request;
     mem_address <= next_mem_address;
+    mem_write <= next_mem_write;
+    sdram_wdata <= next_wdata;
+
     for (i=0; i<8; i=i+1) begin
         current_address[i] <= next_current_address[i];
         words_remaining[i] <= next_words_remaining[i];
@@ -297,6 +326,8 @@ always_ff @(posedge clock) begin
             16'b0000_0010_???0_1100: reg_pitch[hwregs_addr[7:5]] <= hwregs_wdata[16:0];        // AUDIO_PITCH register
             16'b0000_0010_???1_0000: reg_loop_address[hwregs_addr[7:5]] <= hwregs_wdata[25:0]; // AUDIO_LOOP_ADDRESS register
             16'b0000_0010_???1_0100: reg_loop_length[hwregs_addr[7:5]] <= hwregs_wdata[25:0];  // AUDIO_LOOP_LENGTH register
+            16'b0000_0010_1111_1000: reg_write_addr <= hwregs_wdata[25:0];
+            16'b0000_0010_1111_1100: reg_write_length <= hwregs_wdata[25:0];
             default: begin  // Ignore writes to other addresses
             end
         endcase
@@ -311,20 +342,30 @@ always_ff @(posedge clock) begin
             16'b0000_0010_???0_1100: hwregs_rdata <=  {15'b0, reg_pitch[hwregs_addr[7:5]]};        // AUDIO_PITCH register
             16'b0000_0010_???1_0000: hwregs_rdata <= {6'b0, reg_loop_address[hwregs_addr[7:5]]}; // AUDIO_LOOP_ADDRESS register
             16'b0000_0010_???1_0100: hwregs_rdata <= {6'b0, reg_loop_length[hwregs_addr[7:5]]};
+            16'b0000_0010_1111_1000: hwregs_rdata <= {6'b0, reg_write_addr};
+            16'b0000_0010_1111_1100: hwregs_rdata <= {6'b0, reg_write_length};
             default: begin  // Ignore reads from other addresses
                 hwregs_rdata <= 32'h0000_0000;
             end
         endcase
     end
 
+    // Increment memory write address
+    if (mem_request && mem_write) begin
+        reg_write_addr <= reg_write_addr + 26'd4;
+        reg_write_length <= reg_write_length - 1'd1;    
+    end
+
     if (reset) begin
         for (i=0; i<8; i=i+1) begin
             reg_address[i] <= 26'h0;
             reg_length[i] <= 26'h0;
-            reg_volume_left[i] <= 8'h0FF;
-            reg_volume_right[i] <= 8'h0FF;
+            reg_volume_left[i] <= 8'hFF;
+            reg_volume_right[i] <= 8'hFF;
             reg_pitch[i] <= 17'h10000; // Normal pitch
         end
+        reg_write_length <= 0;
+        start_voice <= 0;
     end
 end
 
@@ -346,10 +387,12 @@ audio_readmem  audio_readmem_inst (
     .reset(reset),
     .current_channel(current_channel),
     .mem_request(mem_request),
+    .mem_write(mem_write),
     .mem_address(mem_address),
     .mem_valid(mem_valid),
     .mem_data(mem_data),
     .sdram_request(sdram_request),
+    .sdram_write(sdram_write),
     .sdram_ready(sdram_ready),
     .sdram_address(sdram_address),
     .sdram_rvalid(sdram_rvalid),

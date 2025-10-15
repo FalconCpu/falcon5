@@ -16,7 +16,7 @@ class HwRegs
     var blit_cmd       : Int  # Write=Blitter Command Read=Fifo full
     var blit_ctrl      : Int  # Blitter Control register 
     var i2c_out        : Int  # 
-    var reserved1      : Int  #
+    var vga_pos        : Int  # Current VGA row (Y) being drawn
     var simulation     : Int  # Reads as 1 in simulation, 0 in hardware
     var perf_ctrl      : Int  # Performance counter control register
     var perf_count_ok  : Int  # Performance counter: Number of instructions executed successfully
@@ -45,6 +45,8 @@ class HwRegsAudio
     var pitch      : Int  # Sample rate. 0x10000=48kHz, 0x8000=24kHz, 0x4000=12kHz etc
     var rep_addr   : Int  # Address to loop back to when the sample loops
     var rep_length : Int  # Length of loop section in bytes. 0 = no
+    var write_addr : Int  # Current write address (channel 7 only)
+    var write_len  : Int  # Current write length (channel 7 only)
 
 const hwregsAudio = const Array<HwRegsAudio>[
     unsafe(0xE0000200 as HwRegsAudio),

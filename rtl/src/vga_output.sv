@@ -21,13 +21,15 @@ module vga_output(
     
     // Mouse coordinates
     input  logic [9:0]  mouse_x,
-    input  logic [9:0]  mouse_y
+    input  logic [9:0]  mouse_y,
+    output logic [9:0]  vga_row
 );
 
 
 assign VGA_SYNC_N = 1'b1;     // Not used
 assign VGA_BLANK_N = 1'b1;    // Not used
 assign VGA_CLK = !clk_div[1]; // 25MHz pixel clock
+assign vga_row = pos_y;
 
 // VGA 640x480 @ 60Hz timings
 localparam H_VISIBLE  = 640;

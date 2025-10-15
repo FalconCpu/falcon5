@@ -37,6 +37,8 @@ module aux_decoder (
 
 logic x_hwregs_request;    // request signals prior to gating with abort
 logic x_iram_request;
+logic err_valid;            // Error response valid
+logic [8:0] err_tag;
 
 assign hwregs_request = x_hwregs_request && !cpu_aux_abort;
 assign iram_request   = x_iram_request && !cpu_aux_abort;
@@ -53,21 +55,28 @@ always_ff @(posedge clock) begin
     iram_addr <= 16'bx;
     iram_wmask   <= 4'bx;
     iram_wdata   <= 32'bx;
+    err_valid <= 1'b0;
 
     // Route requests to the appropriate peripheral based on address
     // For now, we only have hardware registers at E0000000 - E000FFFF
-    if (cpu_aux_request && cpu_aux_addr[31:16]==16'hE000) begin
+    if (cpu_aux_request==1'b0) begin
+        // No request.
+    end else if (cpu_aux_addr[31:16]==16'hE000) begin
         x_hwregs_request <= cpu_aux_request;
         hwregs_write   <= cpu_aux_write;
         hwregs_addr <= cpu_aux_addr[15:0];
         hwregs_wmask   <= cpu_aux_wstrb;
         hwregs_wdata   <= cpu_aux_wdata;
-    end else if (cpu_aux_request && cpu_aux_addr[31:16]==16'hFFFF) begin
+    end else if (cpu_aux_addr[31:16]==16'hFFFF) begin
         x_iram_request <= cpu_aux_request;
         iram_write   <= cpu_aux_write;
         iram_addr <= cpu_aux_addr[15:0];
         iram_wmask   <= cpu_aux_wstrb;
         iram_wdata   <= cpu_aux_wdata;
+    end else begin
+        // Invalid address
+        err_valid <= !cpu_aux_write;    // Only generate error on read
+        err_tag   <= cpu_aux_wdata[8:0];
     end
 
     // Route read data back to the CPU
@@ -79,6 +88,10 @@ always_ff @(posedge clock) begin
         cpu_aux_rvalid <= iram_rvalid;
         cpu_aux_rdata  <= iram_rdata;
         cpu_aux_rtag   <= iram_rtag;
+    end else if (err_valid) begin
+        cpu_aux_rvalid <= 1'b1;
+        cpu_aux_rdata  <= 32'hDEADBEEF; // Error value
+        cpu_aux_rtag   <= err_tag;
     end else begin
         cpu_aux_rvalid <= 1'b0;
         cpu_aux_rdata  <= 32'b0;

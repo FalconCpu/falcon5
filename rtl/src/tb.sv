@@ -119,9 +119,9 @@ end
 initial begin
     SW = 10'b0;
     $dumpfile("cpu.vcd");
-    $dumpvars(2, tb);
+    $dumpvars(5, tb);
     $dumpvars(5, Falcon5_inst.audio_inst);
-    #400000000;
+    #4000000;
     $display("Timeout");
     $finish;
 end

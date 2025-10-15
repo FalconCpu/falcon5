@@ -85,7 +85,7 @@ fun uartReceiveByte() -> Int!
             checksum += ret
             return ret
         count += 1
-        if count > 1000000
+        if count > 10000000
             kprintf("uartReceiveByte: timeout\n")
             return Error.TIMEOUT
     until false
@@ -124,7 +124,7 @@ fun uartReceiveFrame() -> UartFrame!
     val length = try uartRecieveInt()
     checksum = 0
     hwregs.count_rx_bytes = 0
-    if length < 0 or length > 1000000
+    if length < 0 or length > 2000000
         return Error.INVALID_ARGUMENT
     val data = new Array<Char>(length)
     # kprintf("uartReceiveFrame: receiving %d bytes\n", length)

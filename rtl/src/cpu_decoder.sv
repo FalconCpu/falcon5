@@ -78,6 +78,7 @@ logic        hazard_a2, hazard_b2;        // Latency hazard on A or B
 logic        hazard_mem, hazard_div;      // Resource hazards
 logic [2:0]  next_perf_count, next2_perf_count;
 logic        prev_jump;
+logic [4:0]  p4_latent_dest;
 // Combinatorial logic
 
 always_comb begin
@@ -260,8 +261,10 @@ always_comb begin
     if (p5_is_mem_read)
         scoreboard[p5_dest] = 1'b0; // Clear the scoreboard for the instruction that just completed
     scoreboard[p2_latent_dest] = 1'b1;
-    if (p4_jump)
-        scoreboard[p3_latent_dest] = 1'b0; // Clear the scoreboard for the instruction that was in the ALU stage when a jump occurs
+    if (p4_jump) begin
+        scoreboard[p4_latent_dest] = 1'b0; // Clear the scoreboard for the instruction that was in the ALU stage when a jump occurs
+        scoreboard[p3_latent_dest] = 1'b0; // Also clear the scoreboard for the instruction that was in the ALU stage when a jump occurs
+    end
     scoreboard[0]       = 1'b0; // R0 is always ready
 
     // Update performance counter
@@ -298,6 +301,7 @@ always_ff @(posedge clock) begin
     p3_literal      <= p2_literal;
     prev_scoreboard <= scoreboard;
     p3_latent_dest  <= p2_latent_dest;
+    p4_latent_dest  <= p3_latent_dest;
     p3_latent2      <= p2_latent2;
     perf_count      <= p4_jump ? `PERF_JUMP : next2_perf_count;
     next2_perf_count<= next_perf_count;

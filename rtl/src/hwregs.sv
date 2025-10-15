@@ -22,6 +22,7 @@
 // E0000034  BLIT_CMD       RW   Write=Blitter Command Read=Fifo full
 // E0000038  BLIT_CTRL      RW   Blitter Control register 
 // E000003C  I2C_OUT        W    I2C Data to send (24 bits). Reads 0=Ready, 1=Busy, 2=Error
+// E0000040  VGA_ROW        R    Current VGA row (for vsync timing)
 // E0000044  SIMULATION     R    Reads as 1 in simulation, 0 in hardware
 // E0000048  PERF_CTRL      RW   Performance counter control register
 // E000004C  PERF_COUNT_OK  R    Performance counter: Number of instructions executed successfully
@@ -82,6 +83,8 @@ module hwregs (
     output logic [9:0]  mouse_x,
     output logic [9:0]  mouse_y,
 
+    input  logic [9:0]  vga_row,        // Current VGA row (for vsync timing)
+    input  logic [23:0] cpu_pc,         // Current CPU PC (for capture on seven seg)
     input  logic [2:0]  perf_count      // Performance counter output
 );
 
@@ -117,6 +120,9 @@ logic [17:0] milli_counter;
 
 logic [31:0] count_rx_bytes;
 logic [2:0]  fifo_overflow;
+
+logic [23:0] captured_pc;
+logic        prev_key0;
 
 // synthesis translate_off
 integer fh;
@@ -228,6 +234,7 @@ always_ff @(posedge clock) begin
             16'h0034: hwregs_rdata <= {22'b0, blit_fifo_slots_free};
             16'h0038: hwregs_rdata <= {31'b0, hwregs_blit_privaledge};
             16'h003C: hwregs_rdata <= {30'b0, i2c_ack_error, i2c_busy};
+            16'h0040: hwregs_rdata <= {22'b0, vga_row}; // Current VGA row (for vsync timing)
             16'h0044: begin
                         hwregs_rdata <= 32'h00000000; // SIMULATION register
                         // synthesis translate_off
@@ -282,9 +289,18 @@ always_ff @(posedge clock) begin
     end
 end
 
+always_ff @(posedge clock) begin
+    // Capture the CPU PC when KEY0 is pressed
+    if (KEY[0]==0 && prev_key0==1) begin
+        // Key 0 pressed
+        captured_pc <= cpu_pc;
+    end
+    prev_key0 <= KEY[0];
+end
+
 
 seven_seg  seven_seg_inst (
-    .seven_seg_data(seven_seg),
+    .seven_seg_data(KEY[0] ? seven_seg : captured_pc[23:0]),
     .HEX0(HEX0),
     .HEX1(HEX1),
     .HEX2(HEX2),

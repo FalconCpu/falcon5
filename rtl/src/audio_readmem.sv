@@ -8,6 +8,7 @@ module audio_readmem(
 
     // Request interface
     input  logic         mem_request,   // A transaction is ready to be processed
+    input  logic         mem_write,     // write transaction
     input  logic [25:0]  mem_address,   // Address to read
     output logic         mem_valid,     // We have completed the request
     output logic [15:0]  mem_data,      // Data read or passed through
@@ -15,6 +16,7 @@ module audio_readmem(
 
     // SDRAM interface (externally wired to always read bursts)
     output logic         sdram_request,  // Request memory
+    output logic         sdram_write,
     input  logic         sdram_ready,    // SDRAM is ready for a request
     output logic [25:0]  sdram_address,  // Address
 
@@ -31,6 +33,7 @@ logic        next_mem_valid;
 logic [1:0]  addr_lab, next_addr_lab;
 logic        next_sdram_request;  // Request memory
 logic [25:0] next_sdram_address;  // Address
+logic        next_sdram_write;
 logic        transaction_in_progress, next_transaction_in_progress;
 
 
@@ -43,6 +46,7 @@ always_comb begin
     next_mem_valid = 1'b0;
     next_transaction_in_progress = transaction_in_progress;
     next_addr_lab = addr_lab;
+    next_sdram_write = sdram_write;
 
     // Clear request when SDRAM is ready
     if (sdram_ready)
@@ -63,13 +67,18 @@ always_comb begin
 
     // Process the incoming request
     if (mem_request) begin
-        if (mem_address[25:6] == ram_tag[current_channel][25:6]) begin
+        if (mem_write) begin
+            next_sdram_request = 1;
+            next_sdram_address = mem_address;
+            next_sdram_write = 1'b1;
+        end else if (mem_address[25:6] == ram_tag[current_channel][25:6]) begin
             // Hit in cache
             next_addr_lab = mem_address[1:0];
             next_mem_valid = 1;
         end else if (transaction_in_progress==0) begin
             // Miss - request new data from SDRAM
             next_sdram_address = {mem_address[25:6], 6'b0};
+            next_sdram_write = 1'b0;
             next_sdram_request = 1;
             next_transaction_in_progress = 1;
         end
@@ -94,6 +103,7 @@ always_ff @(posedge clock) begin
     addr_lab <= next_addr_lab;
     sdram_request <= next_sdram_request;
     sdram_address <= next_sdram_address;
+    sdram_write <= next_sdram_write;
     transaction_in_progress <= next_transaction_in_progress;
     if (sdram_rvalid)    // Store incoming data from SDRAM into RAM
         // verilator lint_off BLKSEQ

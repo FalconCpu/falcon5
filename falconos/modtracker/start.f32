@@ -23,52 +23,12 @@ jmp start
 # control block of the current task, which holds the saved registers for that task.
 
 ExceptionHandler:
-    cfg $29, !escratch, $29     # Swap $29 and escratch
-    stw $1, $29[4]              # Save registers
-    stw $2, $29[8]
-    stw $3, $29[12]
-    stw $4, $29[16]
-    stw $5, $29[20]
-    stw $6, $29[24]
-    stw $7, $29[28]
-    stw $8, $29[32]
-    stw $9, $29[36]
-    stw $10, $29[40]
-    stw $11, $29[44]
-    stw $12, $29[48]
-    stw $13, $29[52]
-    stw $14, $29[56]
-    stw $15, $29[60]
-    stw $16, $29[64]
-    stw $17, $29[68]
-    stw $18, $29[72]    
-    stw $19, $29[76]
-    stw $20, $29[80]
-    stw $21, $29[84]
-    stw $22, $29[88]
-    stw $23, $29[92]
-    stw $24, $29[96]
-    stw $25, $29[100]
-    stw $26, $29[104]
-    stw $27, $29[108]
-    stw $28, $29[112]
-    stw $30, $29[120]
-    stw $31, $29[124]
-    cfg $1, !escratch, $29     # Swap $29 and escratch back (now !escratch has TCB pointer again)
-    stw $1, $29[116]           # Save updated TCB pointer
-
-    cfg $1, !estatus
-    stw $1, $29[132]           # Save ESTATUS into task control
-
-    cfg $1, !epc
-    stw $1, $29[0]             # Save EPC into task control block
-
     cfg $1, !ecause
     cfg $2, !edata
-    ld $3, $29                 # Load pointer to task control block
+    cfg $3, !epc
     ld $31, 0x4000000          # Set up stack pointer for calling fpl function
     ld $29, 0x200              # Setup global pointer for calling fpl function
-    jsr /exceptionHandler(Exception,Int,TaskControlBlock)  # Call the exception handler function
+    jsr /exceptionHandler(Int,Int,Int)  # Call the exception handler function
     jmp /exit()
 
 # #######################################################################

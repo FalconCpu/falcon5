@@ -98,6 +98,7 @@ logic         cpu_aux_abort;
 logic         cpu_aux_rvalid;
 logic [31:0]  cpu_aux_rdata;
 logic [8:0]   cpu_aux_rtag;
+logic [31:0]  cpu_pc;
 
 logic        hwregs_request;
 logic        hwregs_write;
@@ -163,6 +164,8 @@ logic [3:0]   blitw_sdram_wstrb;
 logic [31:0]  blitw_sdram_wdata;
 
 logic         audio_sdram_request;
+logic         audio_sdram_write;
+logic [31:0]  audio_sdram_wdata;
 logic         audio_sdram_ready;
 logic [25:0]  audio_sdram_address;
 logic         audio_sdram_rvalid;
@@ -179,9 +182,12 @@ logic [9:0]   blit_fifo_slots_free;
 
 logic [9:0]  mouse_x;
 logic [9:0]  mouse_y;
+logic [9:0]  vga_row;
 logic [2:0]  perf_count;
 
 
+assign GPIO_1 = {blitw_sdram_wstrb,sdram_write, sdram_request, 2'b0,sdram_address};
+assign GPIO_0[4:2] = perf_count;
 
 
 pll  pll_inst (
@@ -226,7 +232,8 @@ cpu  cpu_inst (
     .cpu_icache_rdata(cpu_icache_rdata),
     .cpu_icache_raddr(cpu_icache_raddr),
     .cpu_icache_rtag(cpu_icache_rtag),
-    .perf_count(perf_count)
+    .perf_count(perf_count),
+    .cpu_pc(cpu_pc)
   );
 
 assign hwregs_rdata = hwregs_rdata_regs | hwregs_rdata_audio;
@@ -286,8 +293,8 @@ aux_decoder  aux_decoder_inst (
     .SW(SW),
     .UART_TX(GPIO_0[0]),
     .UART_RX(GPIO_0[1]),
-    .GPIO_0(GPIO_0[35:4]),
-    .GPIO_1(GPIO_1[35:4]),
+    .GPIO_0(),
+    .GPIO_1(),
     .PS2_CLK(PS2_CLK),
     .PS2_DAT(PS2_DAT),
     .PS2_CLK2(PS2_CLK2),
@@ -296,7 +303,9 @@ aux_decoder  aux_decoder_inst (
     .SDA(FPGA_I2C_SDAT),
     .mouse_x(mouse_x),
     .mouse_y(mouse_y),
-    .perf_count(perf_count)
+    .perf_count(perf_count),
+    .vga_row(vga_row),
+    .cpu_pc(cpu_pc[23:0])
   );
 
 // verilator lint_off PINCONNECTEMPTY
@@ -314,50 +323,50 @@ sdram_arbiter  sdram_arbiter_inst (
     .m1_raddress(vga_sdram_raddress),
     .m1_rdata(vga_sdram_rdata),
     .m1_complete(vga_sdram_complete),
-    .m2_request(dcache_sdram_request),
-    .m2_ready(dcache_sdram_ready),
-    .m2_write(dcache_sdram_write),
-    .m2_burst(dcache_sdram_burst),
-    .m2_address(dcache_sdram_addr),
-    .m2_wdata(dcache_sdram_wdata),
-    .m2_wstrb(dcache_sdram_wstrb),
-    .m2_rvalid(dcache_sdram_rvalid),
-    .m2_raddress(dcache_sdram_raddress),
-    .m2_rdata(dcache_sdram_rdata),
-    .m2_complete(dcache_sdram_complete),
-    .m3_request(blitr_sdram_request),
-    .m3_ready(blitr_sdram_ready),
-    .m3_write(1'b0),
-    .m3_burst(1'b1),
-    .m3_address(blitr_sdram_address),
-    .m3_wdata(32'bx),
-    .m3_wstrb(4'bx),
-    .m3_rvalid(blitr_sdram_rvalid),
-    .m3_raddress(blitr_sdram_raddress),
-    .m3_rdata(blitr_sdram_rdata),
-    .m3_complete(blitr_sdram_complete),
-    .m4_request(blitw_sdram_request),
-    .m4_ready(blitw_sdram_ready),
-    .m4_write(1'b1),
-    .m4_burst(1'b0),
-    .m4_address(blitw_sdram_address),
-    .m4_wdata(blitw_sdram_wdata),
-    .m4_wstrb(blitw_sdram_wstrb),
-    .m4_rvalid(),
-    .m4_raddress(),
-    .m4_rdata(),
-    .m4_complete(),
-    .m5_request(audio_sdram_request),
-    .m5_ready(audio_sdram_ready),
-    .m5_write(1'b0),
-    .m5_burst(1'b1),
-    .m5_address(audio_sdram_address),
-    .m5_wdata(32'bx),
-    .m5_wstrb(4'bx),
-    .m5_rvalid(audio_sdram_rvalid),
-    .m5_raddress(audio_sdram_raddress),
-    .m5_rdata(audio_sdram_rdata),
-    .m5_complete(audio_sdram_complete),
+    .m2_request(audio_sdram_request),
+    .m2_ready(audio_sdram_ready),
+    .m2_write(audio_sdram_write),
+    .m2_burst(1'b1),
+    .m2_address(audio_sdram_address),
+    .m2_wdata(audio_sdram_wdata),
+    .m2_wstrb(4'hf),
+    .m2_rvalid(audio_sdram_rvalid),
+    .m2_raddress(audio_sdram_raddress),
+    .m2_rdata(audio_sdram_rdata),
+    .m2_complete(audio_sdram_complete),
+    .m3_request(dcache_sdram_request),
+    .m3_ready(dcache_sdram_ready),
+    .m3_write(dcache_sdram_write),
+    .m3_burst(dcache_sdram_burst),
+    .m3_address(dcache_sdram_addr),
+    .m3_wdata(dcache_sdram_wdata),
+    .m3_wstrb(dcache_sdram_wstrb),
+    .m3_rvalid(dcache_sdram_rvalid),
+    .m3_raddress(dcache_sdram_raddress),
+    .m3_rdata(dcache_sdram_rdata),
+    .m3_complete(dcache_sdram_complete),
+    .m4_request(blitr_sdram_request),
+    .m4_ready(blitr_sdram_ready),
+    .m4_write(1'b0),
+    .m4_burst(1'b1),
+    .m4_address(blitr_sdram_address),
+    .m4_wdata(32'bx),
+    .m4_wstrb(4'bx),
+    .m4_rvalid(blitr_sdram_rvalid),
+    .m4_raddress(blitr_sdram_raddress),
+    .m4_rdata(blitr_sdram_rdata),
+    .m4_complete(blitr_sdram_complete),
+    .m5_request(blitw_sdram_request),
+    .m5_ready(blitw_sdram_ready),
+    .m5_write(1'b1),
+    .m5_burst(1'b0),
+    .m5_address(blitw_sdram_address),
+    .m5_wdata(blitw_sdram_wdata),
+    .m5_wstrb(blitw_sdram_wstrb),
+    .m5_rvalid(),
+    .m5_raddress(),
+    .m5_rdata(),
+    .m5_complete(),
     .sdram_request(sdram_request),
     .sdram_ready(sdram_ready),
     .sdram_address(sdram_address),
@@ -439,7 +448,8 @@ vga  vga_inst (
     .vga_sdram_raddress(vga_sdram_raddress),
     .vga_sdram_complete(vga_sdram_complete),
     .mouse_x(mouse_x),
-    .mouse_y(mouse_y)
+    .mouse_y(mouse_y),
+    .vga_row(vga_row)
   );
 
 blitter  blitter_inst (
@@ -477,13 +487,13 @@ audio  audio_inst (
     .AUD_DACDAT(AUD_DACDAT),
     .sdram_request(audio_sdram_request),
     .sdram_ready(audio_sdram_ready),
+    .sdram_write(audio_sdram_write),
+    .sdram_wdata(audio_sdram_wdata),
     .sdram_address(audio_sdram_address),
     .sdram_rvalid(audio_sdram_rvalid),
     .sdram_raddress(audio_sdram_raddress),
     .sdram_rdata(audio_sdram_rdata),
     .sdram_complete(audio_sdram_complete)
   );
-
-
 
 endmodule

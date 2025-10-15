@@ -30,7 +30,8 @@ class GraphicsContext
 
     fun drawRect(x1:Int, y1:Int, x2:Int, y2:Int, color:Int)
         while (hwregs.blit_cmd < 3)         # Wait for blitter to have at least 3 free slots in command queue
-            val dummy = 1
+            hwregs.ledr = 1
+        hwregs.ledr = 0
         
         hwregs.blit_cmd = CMD_DRAW_RECT | color  # CMD RECT COLOR = color
         hwregs.blit_cmd = y1 lsl 16 | x1          # x,y

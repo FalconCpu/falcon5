@@ -175,10 +175,10 @@ always_comb begin
         end else begin
             // No requests
             next_request = 3'b000;
-            next_address = 26'bx;
-            next_write   = 1'bx;
+            next_address = 26'b0;
+            next_write   = 1'b0;
             next_burst   = 1'bx;
-            next_wstrb   = 4'bx;
+            next_wstrb   = 4'b0;
             next_wdata   = 32'bx;
         end
     end

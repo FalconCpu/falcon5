@@ -3,6 +3,7 @@ start.f32
 ../src/hwregs.fpl
 memory.fpl
 ../src/kprintf.fpl
+../src/graphicsContext.fpl
 main.fpl
 exceptions.fpl
 filehandler.fpl
