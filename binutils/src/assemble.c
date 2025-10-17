@@ -369,6 +369,8 @@ static void assemble_line(Token* line) {
     CASE("Z")               { add_instr(fmt_i(KIND_CFG, 2, 0, 0, V0)); }         // RTE
     CASE("X$,$,$")          { add_instr(fmt_r(KIND_IDX, V0, V1, V3, V5)); }
     CASE("Yi")              { add_instr(fmt_i(KIND_CFG, 3, 0, 0, V1)); }        // SYSCALL
+    CASE("F$,r,r")          { add_instr(fmt_r(KIND_FPU, V0, V1, V3, V5)); }
+    CASE("F$,r")            { add_instr(fmt_r(KIND_FPU, V0, V1, V1, V3)); }
     else                    { error("Unrecognized instruction"); for(int k=0; line[k]; k++) printf("%s ", line[k]->text); printf("\n"); }
 }
 

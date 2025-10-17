@@ -110,6 +110,18 @@ static struct Token predefined_tokens[] = {
     { 'A', 0, "clt",  6 , 0},
     { 'A', 0, "cltu", 7 , 0},
 
+    { 'F', 0, "fadd", 0, 0},
+    { 'F', 0, "fsub", 1, 0},
+    { 'F', 0, "fmul", 2, 0},
+    { 'F', 0, "fdiv", 3, 0},
+    { 'F', 0, "fsqrt",4, 0},
+    { 'F', 0, "fcmp" ,5, 0},
+
+    { 'N', 0, "not", 0 , 0},
+
+    { 'S', 0, "shl", 0 , 0},
+    { 'S', 0, "shr", -1 , 0},
+
     { 'H', 0, "lsl",  0 , 0},
     { 'H', 0, "lsr", -2 , 0},
     { 'H', 0, "asr", -1 , 0},
@@ -329,7 +341,7 @@ static string read_word() {
         add_to_string_buffer(c);
     } while (isalnum(lookahead) || lookahead=='_' || lookahead=='/' || lookahead=='@' || lookahead=='(' || lookahead==')' ||
              (lookahead==',' && in_bracket)  || lookahead=='<' || lookahead=='>' || lookahead=='&' || 
-             lookahead=='|' || lookahead=='.' || lookahead=='?' || lookahead=='!');
+             lookahead=='|' || lookahead=='.' || lookahead=='?' || lookahead=='!' || lookahead=='+' || lookahead=='-');
 
     return string_buffer;
 }
@@ -432,10 +444,25 @@ static Token new_token(int kind, string text, int value) {
 }
 
 // ================================================
+//             my_atof
+// ================================================
+
+static int my_atof(string s) {
+    float f = atof(s);
+    int value = *((int*)&f);
+    return value;
+}
+
+
+// ================================================
 //             my_atoi
 // ================================================
 
 static int my_atoi(string s) {
+    for(int i=0; s[i]; i++)
+        if (s[i]=='.')
+            return my_atof(s); // Represent floating point numbers as integers
+
     int sign = 1;
     if (s[0]=='-') {
         sign = -1;

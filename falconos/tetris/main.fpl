@@ -1,0 +1,506 @@
+class Point(val x:Int, val y:Int, var color:Int)
+
+
+# A tetromino shape definition
+class Shape(val blocks:Array<Point>)
+
+fun playSound(audio:Array<Char>)
+    hwregsAudio[7].addr = unsafe(audio as Int)
+    hwregsAudio[7].length = audio.length
+    hwregsAudio[7].volume = 255
+    hwregsAudio[7].pitch = 0x10000   # 48kHz
+    hwregsAudio[7].rep_addr = 0
+    hwregsAudio[7].rep_length = 0
+    hwregsAudio[7].write_addr = 0
+    hwregsAudio[7].write_len = 0
+
+
+# Workaround for now until we get better string handling
+fun atos(n:Int) -> String
+    var len = if n<10 then 1 else if n<100 then 2 else if n<1000 then 3 else 4
+    var nn = n
+    val ret = new Array<Char>(len+1)
+    ret[len] = ' '
+    while len>0
+        len -= 1
+        ret[len] = ((nn % 10) + 48) as Char
+        nn = nn / 10
+    return unsafe(ret as String)
+
+const BOARD_Y = 100
+const TILE_WIDTH = 16
+const TILE_HEIGHT = 16
+const BOARD_WIDTH = 10
+const BOARD_HEIGHT = 20
+
+# Bit masks to indicate which edge of a shape are internal edges
+const SHAPE_MASK_LEFT = 256
+const SHAPE_MASK_RIGHT = 512
+const SHAPE_MASK_UP = 1024
+const SHAPE_MASK_DOWN = 2048
+
+class TetrisPlayer(val gc:GraphicsContext, val playerNo:Int)
+    # PlayerNo = 0 for 1 player game, 1 for first player in 2 player game, 2 for second player in 2 player game
+    val shapes = new Array<Array<Shape>>(7){new Array<Shape>(4)}
+    val board = new Array<Array<Int>>(20){new Array<Int>(10)}
+    val fullLines = new Array<Int>(4)
+
+    var level = 0
+    var pieceX = 4
+    var pieceY = 0
+    var pieceRot = 0
+    var pieceType = 0
+    var timeCount = 0
+    var nextPieceType = 1
+    var speed = 20
+    var score = 0
+    var lineAnimation = 0   # flash counter for line clear animation
+    var gameOver = false
+    var pieceTouch = false  # True if piece has touched down this frame
+    val boardX = if playerNo=0 then 240 else if playerNo=1 then 20 else 340
+
+    var noLineClearAudio : Array<Char>
+    var lineClearAudio1 : Array<Char>
+    var lineClearAudio2 : Array<Char>
+    var lineClearAudio3 : Array<Char>
+    var lineClearAudio4 : Array<Char>
+
+    var randSeed = 12345   # You can initialize this to any non-zero number
+    fun rand() -> Int
+        randSeed = (randSeed * 1103515245 + 12345) & 0x7fffffff
+        return randSeed
+
+    fun precomputeEdges(shape:Shape) 
+        for a in 0..3
+            for b in 0..3
+                if shape.blocks[a].x=shape.blocks[b].x and shape.blocks[a].y=shape.blocks[b].y+1
+                    # a is directly below  b
+                    shape.blocks[a].color = shape.blocks[a].color | SHAPE_MASK_UP
+                    shape.blocks[b].color = shape.blocks[b].color | SHAPE_MASK_DOWN
+                if shape.blocks[a].x=shape.blocks[b].x+1 and shape.blocks[a].y=shape.blocks[b].y
+                    # a is directly right of b
+                    shape.blocks[a].color = shape.blocks[a].color | SHAPE_MASK_LEFT
+                    shape.blocks[b].color = shape.blocks[b].color | SHAPE_MASK_RIGHT
+        for p in shape.blocks
+            kprintf("Block at %d,%d color=%d ", p.x, p.y, p.color&0xff)
+            if (p.color & SHAPE_MASK_LEFT)!=0 then kprintf("L")
+            if (p.color & SHAPE_MASK_RIGHT)!=0 then kprintf("R")
+            if (p.color & SHAPE_MASK_UP)!=0 then kprintf("U")
+            if (p.color & SHAPE_MASK_DOWN)!=0 then kprintf("D")
+            kprintf("\n")
+        kprintf("\n")
+
+
+    fun rotateShape(shape:Shape) -> Shape
+        val ret = new Array<Point>(4)
+        for i in 0..3
+            ret[i] = new Point(3-shape.blocks[i].y, shape.blocks[i].x, shape.blocks[i].color)
+        return new Shape(ret)
+
+    fun createShape(color:Int, vararg points:Int) -> Shape
+        val blocks = new Array<Point>(4)
+        # Create the base rotation
+        for i in 0..3
+            blocks[i] = new Point(points[i*2],points[i*2+1], color)
+        return new Shape(blocks)
+
+    fun clearBoard()
+        for y in 0..<BOARD_HEIGHT
+            for x in 0..<BOARD_WIDTH
+                board[y][x] = 0
+
+    fun drawPoint(x:Int, y:Int, color:Int)
+        val xx = boardX + x * TILE_WIDTH
+        val yy = BOARD_Y + y * TILE_HEIGHT
+        if color=0
+            gc.drawRect(xx, yy, xx+TILE_WIDTH, yy+TILE_HEIGHT, 0)
+            gc.drawRect(xx+1, yy+1, xx+TILE_WIDTH-1, yy+TILE_HEIGHT-1, 233)
+            return
+        else
+            gc.drawRect(xx, yy, xx+TILE_WIDTH, yy+TILE_HEIGHT, color & 7)
+
+            # calculate inner rect coords
+            val x1 = xx + (if color&SHAPE_MASK_LEFT!=0 then 0 else 1)
+            val y1 = yy + (if color&SHAPE_MASK_UP!=0 then 0 else 1)
+            val x2 = xx + TILE_WIDTH - (if color&SHAPE_MASK_RIGHT!=0 then 0 else 1)
+            val y2 = yy + TILE_HEIGHT - (if color&SHAPE_MASK_DOWN!=0 then 0 else 1)
+            gc.drawRect(x1, y1, x2, y2, color&0xFF + 8)
+
+    fun drawShape(x:Int, y:Int,rot:Int, type:Int)
+        val shape = shapes[type][rot]
+        for point in shape.blocks
+            drawPoint(x + point.x, y + point.y, point.color)
+
+    fun undrawShape(x:Int, y:Int,rot:Int, type:Int)
+        val shape = shapes[type][rot]
+        for point in shape.blocks
+            val xx = boardX + (x + point.x) * TILE_WIDTH
+            val yy = BOARD_Y + (y + point.y) * TILE_HEIGHT
+            gc.drawRect(xx, yy, xx+TILE_WIDTH, yy+TILE_HEIGHT, 0)
+            gc.drawRect(xx+1, yy+1, xx+TILE_WIDTH-1, yy+TILE_HEIGHT-1, 233)
+
+    fun undrawPreveiwShape(x:Int, y:Int,rot:Int, type:Int)
+        val xx = boardX + x * TILE_WIDTH
+        val yy = BOARD_Y + y * TILE_HEIGHT
+        gc.drawRect(xx, yy, xx+4*TILE_WIDTH, yy+4*TILE_HEIGHT, 0)
+
+
+    fun collision(x:Int, y:Int, rot:Int, type:Int) -> Bool
+        val shape = shapes[type][rot]
+        for p in shape.blocks
+            val xx = x + p.x
+            val yy = y + p.y
+
+            # If outside board
+            if xx < 0 or xx >= BOARD_WIDTH or yy >= BOARD_HEIGHT
+                return true
+
+            # If hitting filled cell
+            if yy >= 0 and board[yy][xx] != 0
+                return true
+        return false
+
+    fun placePiece(x:Int, y:Int, rot:Int, type:Int)
+        val shape = shapes[type][rot]
+        for p in shape.blocks
+            val xx = x + p.x
+            val yy = y + p.y
+            if yy >= 0 and yy < BOARD_HEIGHT
+                board[yy][xx] = p.color
+
+    fun newPiece()
+        pieceX = 4
+        pieceY = 0
+        pieceRot = 0
+        undrawPreveiwShape(12, 6, 0, nextPieceType)
+        pieceType = nextPieceType
+        nextPieceType = rand() % 7
+        drawShape(12, 6, 0, nextPieceType)
+        if collision(pieceX, pieceY, pieceRot, pieceType)
+            gameOver = true
+        
+
+    fun drawBoard()
+        kprintf("drawBoard: splayer=%d\n", playerNo)
+        for y in 0..<BOARD_HEIGHT
+            for x in 0..<BOARD_WIDTH
+                drawPoint(x, y, board[y][x])
+
+        val borderColor = 8
+        val boardBottom = BOARD_Y + BOARD_HEIGHT * TILE_HEIGHT
+        val boardRight = boardX + BOARD_WIDTH * TILE_WIDTH
+        val boardLeft = boardX - TILE_WIDTH                
+        gc.drawRect(boardLeft, BOARD_Y, boardLeft+TILE_WIDTH, boardBottom, borderColor)  # Left border
+        gc.drawRect(boardRight, BOARD_Y, boardRight+TILE_WIDTH, boardBottom, borderColor)  # Right border
+        gc.drawRect(boardLeft, boardBottom, boardRight+TILE_WIDTH, boardBottom+TILE_HEIGHT, borderColor)  # Bottom border
+        gc.drawText(boardX, 20, 15, "Score")
+        val scoreString = atos(score)
+        gc.drawText(boardX+6*8, 20, 15, scoreString)
+        free unsafe(scoreString as Array<Char>)
+
+    fun initialize()
+        gc.drawRect(0, 0, gc.screenWidth, gc.screenHeight, 0)
+        shapes[0][0] = createShape(1, 0,1, 1,1, 2,1, 3,1)  # I
+        shapes[1][0] = createShape(2, 1,1, 2,1, 1,2, 2,2)  # O
+        shapes[2][0] = createShape(3, 1,1, 0,2, 1,2, 2,2)  # T
+        shapes[3][0] = createShape(4, 0,1, 0,2, 1,2, 2,2)  # J
+        shapes[4][0] = createShape(5, 2,1, 0,2, 1,2, 2,2)  # L
+        shapes[5][0] = createShape(6, 1,1, 2,1, 0,2, 1,2)  # S
+        shapes[6][0] = createShape(7, 0,1, 1,1, 1,2, 2,2)  # Z
+        for i in 1..3
+            for j in 0..6
+                shapes[j][i] = rotateShape(shapes[j][i-1])
+        for j in 0..6
+            for i in 0..3
+                precomputeEdges(shapes[j][i])
+
+        val sound1 = readFile("line_clear1.pcm")
+        if sound1 is Error
+            kprintf("Error loading line_clear1.pcm\n")
+            return 
+        lineClearAudio1 = sound1
+
+        val sound2 = readFile("line_clear2.pcm")
+        if sound2 is Error
+            kprintf("Error loading line_clear.pcm\n")
+            return 
+        lineClearAudio2 = sound2
+
+        val sound3 = readFile("line_clear3.pcm")
+        if sound3 is Error
+            kprintf("Error loading line_clear3.pcm\n")
+            return      
+        lineClearAudio3 = sound3
+
+        val sound4 = readFile("line_clear4.pcm")
+        if sound4 is Error
+            kprintf("Error loading line_clear4.pcm\n")
+            return
+        lineClearAudio4 = sound4
+
+        val sound0 = readFile("noline.pcm")
+        if sound0 is Error
+            kprintf("Error loading no_line_clear.pcm\n")
+            return
+        noLineClearAudio = sound0
+
+
+    fun nextLevel()
+        level += 1
+        if level > 6
+            level = 7
+        when level
+            1 -> speed = 20
+            2 -> speed = 15
+            3 -> speed = 12
+            4 -> speed = 10
+            5 -> speed = 8
+            6 -> speed = 6
+            else -> speed = 4
+
+    fun startGame(seed:Int)
+        gameOver = false
+        score = 0
+        randSeed = seed
+        nextPieceType = rand() % 7
+        clearBoard()
+        newPiece()
+        drawBoard()
+
+    fun movePieceDown()
+        if not collision(pieceX, pieceY+1, pieceRot, pieceType)
+            undrawShape(pieceX, pieceY, pieceRot, pieceType)
+            pieceY += 1
+            drawShape(pieceX, pieceY, pieceRot, pieceType)
+        else if not pieceTouch
+            # Piece has touched down this frame, give player a chance to move it
+            pieceTouch = true
+            timeCount = speed / 2
+            playSound(noLineClearAudio)
+        else
+            # Place piece on board
+            pieceTouch = false
+            placePiece(pieceX, pieceY, pieceRot, pieceType)
+            checkForFullLines()
+            newPiece()
+
+    fun doLineAnimation()
+        lineAnimation += 1
+        if lineAnimation=32
+            lineAnimation = 0
+            drawBoard()
+            return
+        for i in 0..3
+            val y = fullLines[i]
+            if y = -1
+                break
+            for x in 0..<BOARD_WIDTH
+                val yy = BOARD_Y + y * TILE_HEIGHT
+                gc.drawRect(boardX, yy, boardX + 10* TILE_WIDTH, yy+TILE_HEIGHT, 255-lineAnimation)
+
+    fun keyLeft()
+        if not collision(pieceX-1, pieceY, pieceRot, pieceType)
+            undrawShape(pieceX, pieceY, pieceRot, pieceType)
+            pieceX -= 1
+            drawShape(pieceX, pieceY, pieceRot, pieceType)
+
+    fun keyRight()
+        if not collision(pieceX+1, pieceY, pieceRot, pieceType)
+            undrawShape(pieceX, pieceY, pieceRot, pieceType)
+            pieceX += 1
+            drawShape(pieceX, pieceY, pieceRot, pieceType)
+
+    fun keyUp()
+        val newRot = (pieceRot + 1) % 4
+        if not collision(pieceX, pieceY, newRot, pieceType)
+            undrawShape(pieceX, pieceY, pieceRot, pieceType)
+            pieceRot = newRot
+            drawShape(pieceX, pieceY, pieceRot, pieceType)
+        elsif not collision(pieceX-1, pieceY, newRot, pieceType)
+            undrawShape(pieceX, pieceY, pieceRot, pieceType)
+            pieceX -= 1
+            pieceRot = newRot
+            drawShape(pieceX, pieceY, pieceRot, pieceType)
+        elsif not collision(pieceX+1, pieceY, newRot, pieceType)
+            undrawShape(pieceX, pieceY, pieceRot, pieceType)
+            pieceX += 1
+            pieceRot = newRot
+            drawShape(pieceX, pieceY, pieceRot, pieceType)
+
+    fun keyDown()
+        movePieceDown()
+
+    fun checkForFullLines()
+        var linesCleared = 0
+        for i in 0..3
+            fullLines[i] = -1
+        for y in 0..<BOARD_HEIGHT
+            var full = true
+            for x in 0..<BOARD_WIDTH
+                if board[y][x] = 0
+                    full = false
+            if full
+                # Move all lines above down
+                fullLines[linesCleared] = y
+                linesCleared += 1
+                for yy in (y-1)..>=0
+                    for x in 0..<BOARD_WIDTH
+                        board[yy+1][x] = board[yy][x]
+                # Clear top line
+                for x in 0..<BOARD_WIDTH
+                    board[0][x] = 0
+        if linesCleared > 0
+            # Update score
+            lineAnimation = 1
+            when linesCleared
+                1 -> 
+                    score += 1
+                    playSound(lineClearAudio1)
+                2 -> 
+                    score += 3
+                    playSound(lineClearAudio2)
+                3 -> 
+                    score += 6
+                    playSound(lineClearAudio3)
+                4 -> 
+                    score += 10
+                    playSound(lineClearAudio4)
+
+    fun waitNewGame()
+        gc.drawText(boardX+40, 200, timeCount & 0xFF , "Game Over")
+
+    fun timeStep()
+        timeCount += 1
+
+        if gameOver
+            waitNewGame()
+            return
+        elsif lineAnimation != 0
+            doLineAnimation()
+        else
+            if timeCount >= speed
+                timeCount = 0
+                movePieceDown()
+end class
+
+
+fun loadModfiles(gc:GraphicsContext) -> Array<ModPlayer>!
+    val modfiles = new Array<ModPlayer>(7)
+
+    var data = try readFile("tetris.mod")
+    modfiles[0] = new ModPlayer(data, gc)
+    modfiles[0].initialize()
+    modfiles[0].fixedBpm = 3
+
+    data = try readFile("../modtracker/bohemian.mod")
+    modfiles[1] = new ModPlayer(data, gc)
+    modfiles[1].initialize()
+
+    data = try readFile("../modtracker/eyeoftgr.mod")
+    modfiles[2] = new ModPlayer(data, gc)
+    modfiles[2].initialize()
+
+    data = try readFile("../modtracker/tocatta.mod")
+    modfiles[3] = new ModPlayer(data, gc)
+    modfiles[3].initialize()
+
+    data = try readFile("../modtracker/007.mod")
+    modfiles[4] = new ModPlayer(data, gc)
+    modfiles[4].initialize()
+
+    data = try readFile("../modtracker/tocatta.mod")
+    modfiles[5] = new ModPlayer(data, gc)
+    modfiles[5].initialize()
+
+    data = try readFile("../modtracker/xmas_pud.mod")
+    modfiles[6] = new ModPlayer(data, gc)
+    modfiles[6].initialize()
+
+    return modfiles
+
+class TetrisGame(val gc:GraphicsContext, val kb:Keyboard, val modfiles:Array<ModPlayer>, val playerNo:Int)
+    var level = 0
+    val player1 = new TetrisPlayer(gc, 1)
+    val player2 = new TetrisPlayer(gc, 2)
+
+    fun initialize()
+        gc.drawRect(0, 0, gc.screenWidth, gc.screenHeight, 0)
+        player1.initialize()
+        player2.initialize()
+        player1.startGame(0)
+        player2.startGame(0)
+
+        level = 0
+        for i in 0..5
+            modfiles[i].songPos=0
+            modfiles[i].patternPos=0
+
+    fun nextLevel()
+        level += 1
+        if level > 6
+            level = 6
+        kprintf("Advancing to level %d\n", level)
+        modfiles[level].songPos=0
+        modfiles[level].patternPos=0
+        modfiles[level].countBpm=0
+        player1.nextLevel()
+        player2.nextLevel()
+
+    fun newGame()
+        if not player1.gameOver and not player2.gameOver
+            return
+        level = 0
+        for i in 0..5
+            modfiles[i].songPos=0
+            modfiles[i].patternPos=0
+        val randSeed = hwregs.timer
+        player1.startGame(randSeed)
+        player2.startGame(randSeed)
+        kprintf("Starting new game\n")
+
+    fun playGame()
+        while true
+            # wait for vsync
+            while hwregs.vga_pos>480
+                kprintf("")
+            while hwregs.vga_pos<=480
+                kprintf("")
+
+            # Handle key presses
+            val key = kb.getKey()
+            when key
+                'z' -> player1.keyLeft()
+                'x' -> player1.keyRight()
+                'q' -> player1.keyUp()
+                'a' -> player1.keyDown()
+                KEY_LEFT -> player2.keyLeft()
+                KEY_RIGHT -> player2.keyRight()
+                KEY_UP -> player2.keyUp()
+                KEY_DOWN -> player2.keyDown()
+                'n' -> newGame()
+
+            player1.timeStep()
+            player2.timeStep()
+
+            val musicEnd = modfiles[level].timeStep()  # Update music player
+            if musicEnd
+                nextLevel()  # Advance to next level if music ended
+
+
+
+fun main() 
+    copyFontData()
+    val gc = new GraphicsContext()
+    gc.setup()
+
+    val kb = new Keyboard()
+
+    val modfiles = loadModfiles(gc)
+    if modfiles is Error
+        kprintf("main: loadModfiles failed: %s\n", modfiles.message)
+        return
+
+    val game = new TetrisGame(gc, kb, modfiles, 2)
+    game.initialize()
+    game.playGame()
+

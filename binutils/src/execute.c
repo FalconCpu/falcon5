@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "f32.h"
+#include <math.h>
 
 static int reg[32];  // The CPU registers
 static unsigned int pc;       // The program counter
@@ -15,6 +16,7 @@ extern FILE* trace_file;
 static FILE* blit_log;
 static FILE* uart_input;
 static FILE* mem_log;
+static int isFloat;
 
 
 // ================================================
@@ -134,8 +136,13 @@ static void set_reg(int reg_num, int value) {
     reg[reg_num] = value;
     if (reg_log)
         fprintf(reg_log, "$%2d = %08x\n", reg_num, value);
-    if (trace_file)
+    if (trace_file) {
         fprintf(trace_file, "$%2d = %08x", reg_num, value);
+        if (isFloat) {
+            float f = *((float*)&value);
+            fprintf(trace_file, " (%f)", f);
+        }
+    }
 }
 
 // ================================================
@@ -160,6 +167,41 @@ static int alu_op(int op, int a, int b, int c) {
         default: return 0;
     }
 }
+
+// ================================================
+//                  fpu operation
+// ================================================
+
+static int fpu_op(int op, int a, int b) {
+    // convert to float
+    float fa = *((float*)&a);
+    float fb = *((float*)&b);
+    float fr;
+
+    switch(op) {
+        case 0: fr = fa + fb; break;
+        case 1: fr = fa - fb; break;
+        case 2: fr = fa * fb; break;
+        case 3: fr = (fb==0.0) ? 0.0 : fa / fb; break;
+        case 4: fr = sqrt(fa); break;
+        case 5: if      (fa < fb) return -1;        // Returns integer value
+                else if (fa > fb) return 1; 
+                else              return 0;
+        case 6: { // ftoi
+            int ia = (int)fa;
+            return ia;
+        }
+        case 7: { // itof
+            float fx = (float)a;
+            return *((int*)&fx);
+        }
+        default: return 0;
+    }
+    isFloat = 1;
+    return *((int*)&fr);    // convert back to int
+}
+
+
 
 // ================================================
 //                  mul operation
@@ -529,6 +571,7 @@ static void execute_instruction(int instr) {
     if (c&0x80)
         c = c | 0xffffff00; // sign extend
     int b = (instr >> 0) & 0x1f;
+    isFloat = 0;            // for trace output
 
     int n13  = (c<<5) | b;
     int n13s = (c<<5) | d;
@@ -561,7 +604,8 @@ static void execute_instruction(int instr) {
         case KIND_LDPC: set_reg(d, pc + n21*4); break;
         case KIND_MUL:  set_reg(d, mul_op(i, reg[a],  reg[b])); break;
         case KIND_MULI: set_reg(d, mul_op(i, reg[a],  n13)); break;
-        case KIND_CFG:  int tmp = read_cfg(n13);
+        case KIND_FPU:  set_reg(d, fpu_op(i, reg[a], reg[b])); break;
+        case KIND_CFG: {int tmp = read_cfg(n13);
                         if (i==1)
                             write_cfg(n13, reg[a]);
                         if (i==0 || i==1)
@@ -583,6 +627,7 @@ static void execute_instruction(int instr) {
                             raise_exception(CAUSE_SYSTEM_CALL, n13);
                         }
                         break;
+                    }
         case KIND_IDX:  set_reg(d, idx_op(i, reg[a], reg[b])); break;
         default: raise_exception(CAUSE_ILLEGAAL_INSTRUCTION, instr);
     }

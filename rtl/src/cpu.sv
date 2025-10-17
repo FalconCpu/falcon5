@@ -112,6 +112,15 @@ logic [8:0]  cpu_dcache_tag;
 logic        p4_load_fault;
 logic        p4_store_fault;
 
+// connections to fpu
+logic [3:0]  p3_fpu_op;
+logic [31:0] p3_fpu_a;
+logic [31:0] p3_fpu_b;
+
+logic        fpu_valid;
+logic [4:0]  fpu_dest_reg;
+logic [31:0] fpu_result;
+
 
 
 // Outputs from COMBINE
@@ -212,6 +221,9 @@ cpu_regfile  cpu_regfile_inst (
     .p3_mpu_add(p3_mpu_add),
     .p3_mpu_data(p3_mpu_data),
     .p4_mult_result(p4_mult_result),
+    .p3_fpu_op(p3_fpu_op),
+    .p3_fpu_a(p3_fpu_a),
+    .p3_fpu_b(p3_fpu_b),
     .supervisor_mode(supervisor_mode),
     .p4_load_fault(p4_load_fault),
     .p4_store_fault(p4_store_fault),
@@ -340,7 +352,21 @@ data_cache  data_cache_inst (
     .cpu_aux_rtag(cpu_aux_rtag),
     .div_valid(div_valid),
     .div_result(div_result),
-    .div_dest_reg(div_dest_reg)
+    .div_dest_reg(div_dest_reg),
+    .fpu_valid(fpu_valid),
+    .fpu_result(fpu_result),
+    .fpu_dest_reg(fpu_dest_reg)
+  );
+
+fpu  fpu_inst (
+    .clock(clock),
+    .fpu_op(p3_fpu_op),
+    .fpu_in_a(p3_fpu_a),
+    .fpu_in_b(p3_fpu_b),
+    .fpu_in_dest(p3_latent_dest),
+    .fpu_dest(fpu_dest_reg),
+    .fpu_result(fpu_result),
+    .fpu_valid(fpu_valid)
   );
 
 endmodule

@@ -339,12 +339,12 @@ class Keyboard
             else ->
                 if pressed
                     if lshift or rshift
-                        return keycode_table[key*4+1]
+                        return keycode_table[key*4+1] 
                     elsif lctrl or rctrl
-                        return keycode_table[key*4+3]
+                        return keycode_table[key*4+3] 
                     elsif caps
-                        return keycode_table[key*4+2]
+                        return keycode_table[key*4+2] 
                     else
-                        return keycode_table[key*4]
+                        return keycode_table[key*4] 
         return 0
     end fun

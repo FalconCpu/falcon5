@@ -15,6 +15,7 @@ typedef struct Reference Reference;
 #define KIND_MULI  0x1A
 #define KIND_CFG   0x1B
 #define KIND_IDX   0x1C
+#define KIND_FPU   0x1D
 
 #define FLAG_DEFINED   0x01
 

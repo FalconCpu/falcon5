@@ -13,6 +13,7 @@
 `define KIND_MUL_IMM    6'h1A
 `define KIND_CFG        6'h1B
 `define KIND_IDX        6'h1C
+`define KIND_FPU        6'h1D
 
 // Operations that can be performed
 `define OP_AND          6'b000_000
@@ -39,8 +40,11 @@
 `define OP_STB          6'b011_000
 `define OP_STH          6'b011_001
 `define OP_STW          6'b011_010
-`define OP_LDIMM        6'b100_000
-`define OP_LDPC         6'b100_001
+`define OP_FADD         6'b100_000
+`define OP_FSUB         6'b100_001
+`define OP_FMUL         6'b100_010
+`define OP_FDIV         6'b100_011
+`define OP_FSQRT        6'b100_100
 `define OP_MUL          6'b101_000
 `define OP_DIVU         6'b101_100
 `define OP_DIVS         6'b101_101
@@ -50,6 +54,8 @@
 `define OP_CFGW         6'b110_001
 `define OP_RTE          6'b110_010
 `define OP_SYSCALL      6'b110_011
+`define OP_LDIMM        6'b110_100
+`define OP_LDPC         6'b110_101
 `define OP_IDX1         6'b111_000
 `define OP_IDX2         6'b111_001
 `define OP_IDX4         6'b111_010

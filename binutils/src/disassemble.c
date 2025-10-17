@@ -113,6 +113,18 @@ string mul_names[] = {
     "mods",
 };
 
+string fpu_names[] = {
+    "fadd",
+    "fsub",
+    "fmul",
+    "fdiv",
+    "fsqrt",
+    "fcmp",
+    "",
+    "",
+};
+
+
 string cfg_name[] = {
     "!version",
     "!epc",
@@ -236,6 +248,7 @@ char *disassemble_line(int op, int pc) {
                 sprintf(line, "undefined cfg %d",i);
                 break;
         case 0x1c: sprintf(line, "%s %s, %s, %s", idx_name[i], reg_name[d], reg_name[a], reg_name[b]); break;
+        case 0x1d: sprintf(line, "%s %s, %s, %s", fpu_names[i], reg_name[d], reg_name[a], reg_name[b]); break;
         default: sprintf(line, "undefined"); break;
     }
     return line;

@@ -202,6 +202,9 @@ fun Type.isAssignableTo(other: Type): Boolean {
     // any type can be assigned to TypeAny
     if (other == TypeAny) return true
 
+    // Char can be promoted to Int
+    if (this==TypeChar && other==TypeInt) return true
+
     // Arrays can be converted to Pointer
     if (this is TypeArray && other is TypePointer && this.elementType.isAssignableTo(other.elementType)) return true
     if (this is TypeString && other is TypePointer && TypeChar.isAssignableTo(other.elementType)) return true
@@ -252,7 +255,6 @@ fun commonAncestorType(type1:Type, type2:Type) : Type? {
 }
 
 fun enclosingType(location: Location, typ1:Type, type2:Type) : Type {
-    // Find the closest common ancestor type
     val isNullable = (typ1 is TypeNullable) || (type2 is TypeNullable)
     val base1 = if (typ1 is TypeNullable) typ1.elementType else typ1
     val base2 = if (type2 is TypeNullable) type2.elementType else type2
@@ -274,7 +276,8 @@ fun enclosingType(location: Location, typ1:Type, type2:Type) : Type {
 }
 
 fun Type.getSize(): Int = when (this) {
-    TypeUnit, TypeBool, TypeChar -> 1
+    TypeChar -> 1
+    TypeUnit, TypeBool -> 4
     TypeInt, TypeReal -> 4
     TypeString -> 4
     is TypeArray -> 4

@@ -22,7 +22,12 @@ module cpu_readpath(
     // Inputs from divider unit
     input  logic        div_valid,           // result is complete
     input  logic [31:0] div_result,
-    input  logic [4:0]  div_dest_reg
+    input  logic [4:0]  div_dest_reg,
+
+    // Inputs from FPU
+    input  logic        fpu_valid,           // result is complete
+    input  logic [31:0] fpu_result,
+    input  logic [4:0]  fpu_dest_reg
 );
 
 logic        mem_valid, next_mem_valid;
@@ -142,6 +147,26 @@ always_comb begin
             next_skid2_dest   = aux_dest;
             next_skid2_result = aux_data;
         end else if (aux_dest!=5'b0) begin        
+            // No space in the pipeline for the new data
+            error_skid_overflow = 1'b1;
+        end
+    end
+
+    if (fpu_valid) begin
+        // New data from the FPU
+        if (!next_mem_valid) begin
+            next_mem_valid    = 1'b1;
+            next_mem_dest_reg = fpu_dest_reg;
+            next_mem_result   = fpu_result;
+        end else if (!next_skid1_valid) begin
+            next_skid1_valid  = 1'b1;
+            next_skid1_dest   = fpu_dest_reg;
+            next_skid1_result = fpu_result;
+        end else if (!next_skid2_valid) begin
+            next_skid2_valid  = 1'b1;
+            next_skid2_dest   = fpu_dest_reg;
+            next_skid2_result = fpu_result;
+        end else if (fpu_dest_reg!=5'b0) begin        
             // No space in the pipeline for the new data
             error_skid_overflow = 1'b1;
         end

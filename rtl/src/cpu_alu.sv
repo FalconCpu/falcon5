@@ -34,6 +34,11 @@ module cpu_alu(
     input  logic        p4_load_fault,   // The instruction issues last cycle caused a load fault
     input  logic        p4_store_fault,  // The instruction issues last cycle caused a store fault
 
+    // Connections to the floating point unit
+    output logic [3:0]  p3_fpu_op,       // FPU operation to perform
+    output logic [31:0] p3_fpu_a,        // Input A to the FPU
+    output logic [31:0] p3_fpu_b,        // Input B to the FPU
+
     // Connections to the divider unit
     output logic        p3_div_start,        // pulsed to start division
     output logic [31:0] p3_numerator,        // Numerator for the division
@@ -122,6 +127,9 @@ always_comb begin
     p3_div_sign    = 1'bx;
     p3_div_mod     = 1'bx;
     p3_index_fault = 1'b0;
+    p3_fpu_op      = 4'b0;  
+    p3_fpu_a       = 32'bx;
+    p3_fpu_b       = 32'bx;
 
 
     // Select ALU inputs, with bypassing
@@ -282,6 +290,15 @@ always_comb begin
                             p3_mem_wstrb   = 4'b1111;
                         end
                     end
+        `OP_FADD,
+        `OP_FSUB,
+        `OP_FMUL,
+        `OP_FDIV,
+        `OP_FSQRT:  begin
+                        p3_fpu_op   = {1'b1,p3_op[2:0]}; // Map to 4-bit FPU op
+                        p3_fpu_a    = alu_a;
+                        p3_fpu_b    = alu_b;
+                     end
         `OP_LDIMM: p3_alu_result = p3_literal;
         `OP_LDPC:  p3_alu_result = jump_target;
         `OP_MUL: p3_mult_result = alu_a * alu_b;

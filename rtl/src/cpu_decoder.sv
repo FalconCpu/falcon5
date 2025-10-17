@@ -213,6 +213,13 @@ always_comb begin
             p2_illegal = (instr_opcode[2]);
         end
 
+        `KIND_FPU: begin
+            p2_op      = {3'b100, instr_opcode};
+            p2_use_a   = 1'b1;
+            p2_use_b   = 1'b1;
+            p2_latent_dest = instr_d;
+        end
+
         `KIND_IDX: begin
             p2_op        = {3'b111, instr_opcode};
             p2_use_a     = 1'b1;

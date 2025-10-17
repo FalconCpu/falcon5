@@ -1,0 +1,58 @@
+# ==============================================================
+# Floating Point Multiply – Comprehensive Corner Test
+# ==============================================================
+
+# --- Basic positive numbers ---
+ld   $1, 3.0
+ld   $2, 2.0
+fmul $3, $1, $2          # 3 * 2 = 6.0
+
+# --- Negative operands ---
+ld   $4, -3.0
+fmul $5, $2, $4          # 2 * (-3) = -6.0
+fmul $6, $4, $4          # (-3) * (-3) = 9.0
+
+# --- Multiply by zero ---
+ld   $7, 0.0
+fmul $8, $1, $7          # 3 * 0 = 0.0
+fmul $9, $7, $4          # 0 * (-3) = -0.0 (tests signed zero)
+
+# --- Multiply by one ---
+ld   $10, 1.0
+fmul $11, $10, $4        # 1 * (-3) = -3.0
+fmul $12, $10, $10       # 1 * 1 = 1.0
+
+# --- Infinity and NaN cases ---
+#ld   $13, +inf
+#ld   $14, -inf
+#ld   $15, nan
+
+#fmul $16, $13, $10       # +inf * 1 = +inf
+#fmul $17, $14, $10       # -inf * 1 = -inf
+#fmul $18, $13, $14       # +inf * -inf = -inf
+#fmul $19, $13, $15       # inf * NaN = NaN
+#fmul $20, $15, $14       # NaN * inf = NaN
+#fmul $21, $15, $15       # NaN * NaN = NaN
+#fmul $22, $13, $7        # inf * 0 = NaN (special case)
+
+# --- Large magnitude (overflow) ---
+ld   $23, 1e38
+fmul $24, $23, $23       # overflow -> +inf
+
+# --- Tiny magnitude (underflow / subnormal) ---
+ld   $25, 1e-38
+ld   $26, 1e-10
+fmul $27, $25, $26       # subnormal / underflow -> likely 0.0
+
+# --- Mixed sign checks ---
+ld   $28, -2.5
+ld   $29, 4.0
+fmul $1, $28, $29        # -10.0
+fmul $2, $29, $28        # -10.0
+fmul $3, $28, $28        # +6.25
+
+# ==============================================================
+# Terminate
+# ==============================================================
+ld $30, 0
+ret
