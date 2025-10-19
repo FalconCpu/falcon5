@@ -1,0 +1,55 @@
+# ==============================================================
+# Floating point add/sub corner-case test
+# ==============================================================
+
+# Basic positive numbers
+ld   $1, 3.0
+ld   $2, 2.0
+fadd $3, $1, $2          # 3 + 2 = 5
+fsub $4, $2, $1          # 2 - 3 = -1
+
+# Opposite signs – cancellation and reinforcement
+ld   $5, 3.0
+ld   $6, -2.0
+fadd $7, $5, $6          # 3 + (-2) = 1
+fsub $8, $5, $6          # 3 - (-2) = 5
+
+# Same magnitude opposite signs – should yield zero
+ld   $9, 2.5
+ld   $10, -2.5
+fadd $11, $9, $10        # 0.0
+fsub $12, $9, $10        # 5.0
+
+# Very small + very large (alignment stress)
+ld   $13, 10000000000000000
+ld   $14, 0.000000000000001
+fadd $15, $13, $14       # ≈ 1.0e30 (small term lost)
+fsub $16, $13, $14       # ≈ 1.0e30 (small term lost)
+
+# Underflow test (numbers near zero)
+ld   $17,  0.0000000000000000000000000000000001
+ld   $18, -0.0000000000000000000000000000000001
+fadd $19, $17, $18       # should go to 0.0
+fsub $20, $17, $18       # ≈ 2.0e-37
+
+# Overflow test (large magnitudes)
+ld   $21, 300000000000000000000000000000000000000
+ld   $22, 200000000000000000000000000000000000000
+fadd $23, $21, $22       # expect +Inf
+fsub $24, $22, $21       # expect 0.0
+
+# Subnormal addition
+ld   $25, 1.0e-45
+ld   $26, 1.0e-45
+fadd $27, $25, $26       # may normalize upward
+
+# Negative overflow
+ld   $28, -3.4e38
+ld   $29, -3.4e38
+fadd $1, $28, $29        # expect -Inf
+
+# ==============================================================
+# Terminate
+# ==============================================================
+ld $30, 0
+ret

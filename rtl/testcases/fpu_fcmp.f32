@@ -1,0 +1,15 @@
+# Floating Point Compare Test
+
+ld $1, 0.0          # load first floating point number
+ld $2, 4.0          # load second floating point number
+fcmp $3,$1,$2      # compare $1 and $2, store result in $3
+fcmp $4,$2,$1      # compare $2 and $1, store result in $4
+fcmp $5,$1,$1      # multiply $1 and $2, store result in $5
+
+ld $4,$5           # access the result of the previous multiplication
+
+# ==============================================================
+# Terminate
+# ==============================================================
+ld $30, 0
+ret
