@@ -45,6 +45,9 @@
 `define OP_FMUL         6'b100_010
 `define OP_FDIV         6'b100_011
 `define OP_FSQRT        6'b100_100
+`define OP_FCMP         6'b100_101
+`define OP_ITOF         6'b100_110
+`define OP_FTOI         6'b100_111
 `define OP_MUL          6'b101_000
 `define OP_DIVU         6'b101_100
 `define OP_DIVS         6'b101_101

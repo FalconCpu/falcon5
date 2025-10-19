@@ -172,6 +172,8 @@ fun Instr.peephole() {
             // Remove a jump instruction that jumps to the next instruction
             if (label.index == index + 1)
                 changeToNop()
+            else if (label.index==index+2 && currentFunction.prog[index+1] is InstrLabel)
+                changeToNop()
             else
                 unreachable = true  // Mark code after a jump as unreachable until a label is encountered
         }

@@ -116,6 +116,8 @@ static struct Token predefined_tokens[] = {
     { 'F', 0, "fdiv", 3, 0},
     { 'F', 0, "fsqrt",4, 0},
     { 'F', 0, "fcmp" ,5, 0},
+    { 'F', 0, "itof" ,6, 0},
+    { 'F', 0, "ftoi" ,7, 0},
 
     { 'N', 0, "not", 0 , 0},
 

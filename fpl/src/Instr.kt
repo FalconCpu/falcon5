@@ -35,6 +35,7 @@ sealed class Instr() {
         is InstrNop -> "NOP"
         is InstrAlu -> "$op $dest, $src1, $src2"
         is InstrAluLit -> "$op $dest, $src, $lit"
+        is InstrFpu -> "$op $dest, $src1, $src2"
         is InstrBranch -> "${op.branchName()} $src1, $src2, $label"
         is InstrCall -> "CALL $func"
         is InstrVCall -> "VCALL $func"
@@ -58,6 +59,7 @@ sealed class Instr() {
     fun getDestReg(): Reg? = when (this) {
         is InstrAlu -> dest
         is InstrAluLit -> dest
+        is InstrFpu -> dest
         is InstrLea -> dest
         is InstrMov -> dest
         is InstrMovLit -> dest
@@ -82,6 +84,7 @@ sealed class Instr() {
     fun getSrcReg(): List<Reg> = when (this) {
         is InstrAlu -> listOf(src1, src2)
         is InstrAluLit -> listOf(src)
+        is InstrFpu -> listOf(src1, src2)
         is InstrBranch -> listOf(src1, src2)
         is InstrMov -> listOf(src)
         is InstrCall -> emptyList()
@@ -107,6 +110,7 @@ sealed class Instr() {
 class InstrNop() : Instr()
 class InstrAlu(val op:BinOp, val dest:Reg, val src1: Reg, val src2: Reg) : Instr()
 class InstrAluLit(val op: BinOp, val dest: Reg, val src: Reg, val lit: Int) : Instr()
+class InstrFpu(val op:FpuOp, val dest:Reg, val src1: Reg, val src2: Reg) : Instr()
 class InstrMov(val dest: Reg, val src: Reg) : Instr()
 class InstrMovLit(val dest: Reg, val lit: Int) : Instr()
 class InstrLabel(val label: Label) : Instr()

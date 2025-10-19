@@ -8,10 +8,11 @@ module fpu_div (
     input logic [4:0]  fpu_dest,        // destination register
 
     output logic        div_valid,        
-    output logic [26:0] div_mantissa,       
+    output logic [31:0] div_mantissa,       
     output logic [7:0]  div_exponent,       
     output logic        div_sign,       
-    output logic [4:0]  div_dest
+    output logic [4:0]  div_dest,
+    output logic        fpu_div_busy
 );
 
 logic        sign_a;
@@ -22,9 +23,11 @@ logic [7:0]  exp_b;
 logic [22:0] mant_b;
 
 logic [23:0] denominator;
-logic [23:0] remainder;
+logic [24:0] remainder;
 logic [4:0]  count;
 logic [24:0] s;
+
+assign fpu_div_busy = fpu_div_start || (count != 0);
 
 // verilator lint_off BLKSEQ
 always_ff @(posedge clock) begin
@@ -38,20 +41,20 @@ always_ff @(posedge clock) begin
         exp_b  = fpu_b[30:23];
         mant_b = fpu_b[22:0];
         div_sign <= sign_a ^ sign_b;
-        remainder  <= { (exp_a!=8'd0) , mant_a};
+        remainder  <= { 1'b0, (exp_a!=8'd0) , mant_a};
         denominator <= { (exp_b!=8'd0) , mant_b};
         div_exponent <= exp_a - exp_b + 8'd127;
-        div_mantissa <= 27'd0;
+        div_mantissa <= 32'd0;
         div_dest  <= fpu_dest;
-        count <= 5'd26;
+        count <= 5'd31;
     end else if (count!=0) begin
         s = remainder - {1'b0,denominator};
         if (s[24] == 1'b0) begin
-            remainder <= {s[22:0],1'b0};
-            div_mantissa <= {div_mantissa[25:0], 1'b1};
+            remainder <= {s[23:0],1'b0};
+            div_mantissa <= {div_mantissa[30:0], 1'b1};
         end else begin
-            remainder <= {remainder[22:0],1'b0};
-            div_mantissa <= {div_mantissa[25:0], 1'b0};
+            remainder <= {remainder[23:0],1'b0};
+            div_mantissa <= {div_mantissa[30:0], 1'b0};
         end
         count <= count - 5'd1;
         if (count == 5'd1) begin

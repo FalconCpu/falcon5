@@ -7,7 +7,9 @@ class Lexer(private val fileHandle:Reader, private val filename: String) {
     private var lineNumber = 1
     private var columnNumber = 1
     private var atEof = false
+    private var atEof2 = false
     private var currentChar = readChar()
+    private var lookaheadChar = readChar()
 
     // keep track of whether we are at the start of a line
     private var atStartOfLine = true
@@ -25,7 +27,7 @@ class Lexer(private val fileHandle:Reader, private val filename: String) {
     private fun readChar(): Char {
         val c = fileHandle.read()
         if (c == -1) {
-            atEof = true
+            atEof2 = true
             return '\u0000'
         } else
             return c.toChar()
@@ -36,7 +38,9 @@ class Lexer(private val fileHandle:Reader, private val filename: String) {
         lastLine = lineNumber
         lastColumn = columnNumber
         val ret = currentChar
-        currentChar = readChar()
+        currentChar = lookaheadChar
+        atEof = atEof2
+        lookaheadChar = readChar()
 
         if (ret == '\n') {
             lineNumber++
@@ -76,6 +80,15 @@ class Lexer(private val fileHandle:Reader, private val filename: String) {
             sb.append(nextChar())
         return sb.toString()
     }
+
+    // Read a number from the input stream and return it
+    private fun readNumber(): String {
+        val sb = StringBuilder()
+        while (currentChar.isLetterOrDigit() || currentChar == '_' || (currentChar == '.' && lookaheadChar.isDigit()))
+            sb.append(nextChar())
+        return sb.toString()
+    }
+
 
     private fun readEscapedChar() : Char {
         val c = nextChar()
@@ -172,8 +185,8 @@ class Lexer(private val fileHandle:Reader, private val filename: String) {
             kind = TokenKind.toKind.getOrDefault(value, IDENTIFIER)
 
         } else if (currentChar.isDigit()) {
-            value = readWord()
-            kind = INTLITERAL
+            value = readNumber()
+            kind = if (value.contains(".")) REALLITERAL else INTLITERAL
 
         } else if (currentChar == '"') {
             value = readStringLiteral()

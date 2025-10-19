@@ -46,6 +46,10 @@ class TctAbortExpr(location: Location, val abortCode: TctExpr) : TctExpr(locatio
 class TctGlobalVarExpr(location: Location, val sym: GlobalVarSymbol, type:Type) : TctExpr(location, type)
 class TctIndirectCallExpr(location: Location, val func:TctExpr, val args:List<TctExpr>, type:Type) : TctExpr(location,type)
 class TctIfExpr(location: Location, val cond:TctExpr, val trueExpr:TctExpr, val falseExpr:TctExpr, type:Type) : TctExpr(location,type)
+class TctIntToRealExpr(location: Location, val expr:TctExpr) : TctExpr(location, TypeReal)
+class TctRealToIntExpr(location: Location, val expr:TctExpr) : TctExpr(location, TypeInt)
+class TctFpuExpr(location: Location, val op:FpuOp, val lhs:TctExpr, val rhs:TctExpr, type:Type) : TctExpr(location, type)
+class TctRealCompareExpr(location: Location, val op: BinOp, val lhs: TctExpr, val rhs: TctExpr) : TctExpr(location, TypeBool)
 
 class TctErrorExpr(location: Location, val message: String = "") : TctExpr(location, TypeError) {
     init {

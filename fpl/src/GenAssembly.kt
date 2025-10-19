@@ -58,6 +58,18 @@ private fun InstrBranch.genAssembly() : String = when (op) {
     else -> error("Not a valid branch operand")
 }
 
+private fun InstrFpu.genAssembly() : String = when(op) {
+    FpuOp.ADD_F -> "fadd $dest, $src1, $src2"
+    FpuOp.SUB_F -> "fsub $dest, $src1, $src2"
+    FpuOp.MUL_F -> "fmul $dest, $src1, $src2"
+    FpuOp.DIV_F -> "fdiv $dest, $src1, $src2"
+    FpuOp.SQRT_F -> TODO()
+    FpuOp.CMP_F -> "fcmp $dest, $src1, $src2"
+    FpuOp.FTOI_F -> "ftoi $dest, $src2"
+    FpuOp.ITOF_F -> "itof $dest, $src2"
+}
+
+
 fun loadOp(size:Int) = when(size) {
     1 -> "ldb"
     2 -> "ldh"
@@ -94,6 +106,7 @@ private fun Instr.genAssembly() = when(this) {
     is InstrIndex -> "idx$size $dest, $src, $bounds"
     is InstrNullCheck -> "tiz $src\n"
     is InstrSyscall -> "sys $num"
+    is InstrFpu -> genAssembly()
 }
 
 fun Function.genAssembly(sb:StringBuilder) {

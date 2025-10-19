@@ -102,6 +102,13 @@ class Function (
         return dest
     }
 
+    fun addFpu(op: FpuOp, src1: Reg, src2: Reg): TempReg {
+        val dest = newTemp()
+        prog += InstrFpu(op, dest, src1, src2)
+        return dest
+    }
+
+
     fun addMov(dest: Reg, src: Reg) {
         prog += InstrMov(dest, src)
     }

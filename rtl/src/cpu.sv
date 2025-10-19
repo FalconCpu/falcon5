@@ -116,6 +116,7 @@ logic        p4_store_fault;
 logic [3:0]  p3_fpu_op;
 logic [31:0] p3_fpu_a;
 logic [31:0] p3_fpu_b;
+logic        fpu_div_busy;
 
 logic        fpu_valid;
 logic [4:0]  fpu_dest_reg;
@@ -181,6 +182,7 @@ always @(posedge clock)
     .p5_is_mem_read(p5_is_mem_read),
     .p4_divider_busy(!div_ready),
     .p4_mem_busy(p4_mem_busy),
+    .fpu_div_busy(fpu_div_busy),
     .p4_jump(p4_jump),
     .perf_count(perf_count)
   );
@@ -366,7 +368,8 @@ fpu  fpu_inst (
     .fpu_in_dest(p3_latent_dest),
     .fpu_dest(fpu_dest_reg),
     .fpu_result(fpu_result),
-    .fpu_valid(fpu_valid)
+    .fpu_valid(fpu_valid),
+    .fpu_div_busy(fpu_div_busy)
   );
 
 endmodule

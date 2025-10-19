@@ -11,7 +11,13 @@
 // 00 = NOP
 // 01 = DRAW_RECT   Params: (color) (x1/y1) (x2/y2)
 // 02 = COPY_RECT   Params: (color) (x1/y1) (x2/y2) (src_x/src_y)
+// 03 = DRAW_TEXT   Params: (color/bgcolor) (x1/y1) (char0) (char1) ... (NUL)
+// 04 = SET_TRANSPARENCY Params: (transparent_color)
+// 05 = SET_AFFINE  Params: () (src_dx_x) (src_dy_y) (src_dy_x) (src_dx_y)
+
+
 // FF = SETUP       Params: (dest_stride) (dest_addr) (clip_x1/y1) (clip_x2/y2) (offset_x/y) (src_addr) (src_stride)
+// FE = SET_SRC     Params: (src_stride) (src_addr)
 
 `include "blit.vh"
 
@@ -42,8 +48,13 @@ module blit_command_parser(
     output logic [15:0]   dest_stride,     // Width of the screen in bytes
     output logic [25:0]   src_base_addr, // Base address of the bitmap in memory
     output logic [15:0]   src_stride,     // Width of the screen in bytes
+    output logic [31:0]   reg_src_dx_x,   // Delta X for source address calculation (16.16 fixed point)
+    output logic [31:0]   reg_src_dy_y,   // Delta Y for source address calculation
+    output logic [31:0]   reg_src_dy_x,   // Delta X for source address calculation
+    output logic [31:0]   reg_src_dx_y,   // Delta Y for source address calculation
     output logic [7:0]    reg_color,       // Color to write
     output logic [7:0]    reg_bgcolor,     // Background color for text
+    output logic [8:0]    transparent_color, // Transparent color for blitting (set to 9'b1xxxx_xxxx to disable)
     input  logic          busy,            // 1 = blitter is busy
     input  logic          ack             // 1 = blitter has accepted start
 );
@@ -78,6 +89,11 @@ logic [7:0]    font_height, next_font_height;
 logic [2:0]    arg_count, next_arg_count;
 logic [25:0]   reg_src, next_reg_src;
 logic [15:0]   next_src_stride;
+logic [8:0]    next_transparent_color;  
+logic [31:0]   next_reg_src_dx_x;
+logic [31:0]   next_reg_src_dy_y;
+logic [31:0]   next_reg_src_dy_x;
+logic [31:0]   next_reg_src_dx_y;
 
 logic [3:0]   state, next_state;    
 localparam STATE_IDLE=0, 
@@ -89,7 +105,9 @@ localparam STATE_IDLE=0,
            STATE_TEXT=6,
            STATE_TEXT2=7,
            STATE_TEXT3=8,
-           STATE_TEXT4=9;
+           STATE_TEXT4=9,
+           STATE_SET_SRC=10,
+           STATE_SET_AFFINE=11;
 logic         consume_cmd;
 logic         next_start;
 
@@ -97,7 +115,10 @@ localparam CMD_NOP        = 8'h00;
 localparam CMD_DRAW_RECT  = 8'h01;
 localparam CMD_COPY_RECT  = 8'h02;
 localparam CMD_DRAW_TEXT  = 8'h03;  // Setup for text rendering
+localparam CMD_SET_TRANSPARENCY = 8'h04;
+localparam CMD_SET_AFFINE = 8'h05;
 localparam CMD_SETUP      = 8'hFF;
+localparam CMD_SET_SRC    = 8'hFE;
 
 wire  [9:0] inc_wr_ptr = fifo_wr_ptr + 10'd1;
 
@@ -136,6 +157,11 @@ always_comb begin
     consume_cmd          = 1'b0;
     next_arg_count       = arg_count;
     next_state           = state;
+    next_transparent_color = transparent_color;
+    next_reg_src_dx_x    = reg_src_dx_x;
+    next_reg_src_dy_y    = reg_src_dy_y;
+    next_reg_src_dy_x    = reg_src_dy_x;
+    next_reg_src_dx_y    = reg_src_dx_y;
     
     // Handle writes to the FIFO
     if (hwregs_blit_valid) begin
@@ -175,6 +201,11 @@ always_comb begin
                         consume_cmd = 1'b1;
                      end
 
+                CMD_SET_AFFINE: begin
+                        next_state = STATE_SET_AFFINE;
+                        consume_cmd = 1'b1;
+                     end
+
                 CMD_SETUP: begin
                         if (this_cmd[32]==0)
                             $display("BLIT_CMD: Warning: Ignoring SETUP command without privaledge");
@@ -184,6 +215,26 @@ always_comb begin
                         end
                         consume_cmd = 1'b1;
                      end
+
+                CMD_SET_SRC: begin
+                        if (this_cmd[32]==0)
+                            $display("BLIT_CMD: Warning: Ignoring SET_SRC command without privaledge");
+                        else begin  
+                            next_state = STATE_SET_SRC;
+                            next_reg_src_stride = this_cmd[15:0];
+                        end
+                        consume_cmd = 1'b1;
+                     end
+
+                CMD_SET_TRANSPARENCY: begin
+                        next_transparent_color = this_cmd[8:0];
+                        consume_cmd = 1'b1;
+                    end 
+                
+                CMD_SET_AFFINE: begin
+                    next_state = STATE_SET_AFFINE;
+                    consume_cmd = 1'b1;
+                end
 
                 default: begin
                         $display("BLIT_CMD: Warning: Unknown command %x", cmd_code);
@@ -313,6 +364,35 @@ always_comb begin
                 next_state = STATE_IDLE;
         end
 
+        STATE_SET_SRC: begin
+            if (cmd_valid) begin
+                if (arg_count == 3'd0) begin
+                    next_reg_src = this_cmd[25:0];
+                end 
+                next_arg_count = arg_count + 3'd1;
+                consume_cmd = 1'b1;
+                next_state = STATE_IDLE;
+            end
+        end
+
+        STATE_SET_AFFINE: begin
+            if (cmd_valid) begin
+                if (arg_count == 3'd0) begin
+                    next_reg_src_dx_x = this_cmd;
+                end else if (arg_count == 3'd1) begin
+                    next_reg_src_dy_y = this_cmd;
+                end else if (arg_count == 3'd2) begin
+                    next_reg_src_dy_x = this_cmd;
+                end else if (arg_count == 3'd3) begin
+                    next_reg_src_dx_y = this_cmd;
+                    next_state = STATE_IDLE;
+                end 
+                next_arg_count = arg_count + 3'd1;
+                consume_cmd = 1'b1;
+            end
+        end
+
+
     endcase
 
     // Handle command consumption
@@ -323,6 +403,10 @@ always_comb begin
     if (reset) begin
         next_fifo_rd_ptr = 10'd0;
         next_fifo_wr_ptr = 10'd0;
+        next_reg_src_dx_x    = 32'h00010000;  // 1.0 in 16.16 fixed point
+        next_reg_src_dy_y    = 32'h00010000;
+        next_reg_src_dy_x    = 32'h00000000;
+        next_reg_src_dx_y    = 32'h00000000;
         next_state = STATE_IDLE;
     end
 end
@@ -361,6 +445,11 @@ always_ff @(posedge clock) begin
     state           <= next_state;
     start           <= next_start;
     arg_count       <= next_arg_count;
+    transparent_color <= next_transparent_color;
+    reg_src_dx_x    <= next_reg_src_dx_x;
+    reg_src_dy_y    <= next_reg_src_dy_y;
+    reg_src_dy_x    <= next_reg_src_dy_x;
+    reg_src_dx_y    <= next_reg_src_dx_y;
 
     if (hwregs_blit_valid) begin
         cmd_fifo[fifo_wr_ptr] <= {hwregs_blit_privaledge,hwregs_blit_command};

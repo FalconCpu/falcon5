@@ -120,8 +120,8 @@ string fpu_names[] = {
     "fdiv",
     "fsqrt",
     "fcmp",
-    "",
-    "",
+    "itof",
+    "ftoi",
 };
 
 

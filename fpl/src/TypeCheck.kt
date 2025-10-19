@@ -199,6 +199,10 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
             TctConstant(location, IntValue(value, TypeInt))
         }
 
+        is AstRealLiteral -> {
+            TctConstant(location, IntValue(value.toBits(), TypeReal))
+        }
+
         is AstCharLiteral -> {
             TctConstant(location, IntValue(value, TypeChar))
         }
@@ -242,6 +246,8 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
             val tctRhs = rhs.typeCheckRvalue(scope)
             if (tctLhs.type==TypeError || tctRhs.type==TypeError)
                 return TctErrorExpr(location, "")
+            if (tctLhs.type is TypeReal || tctRhs.type is TypeReal)
+                return binopRealTypeCheck(location, op, tctLhs, tctRhs)
             val match = operatorTable.find{it.tokenKind==op && it.lhsType==tctLhs.type && it.rhsType==tctRhs.type}
             if (match==null)
                 return TctErrorExpr(location, "Invalid operator '${op}' for types '${tctLhs.type}' and '${tctRhs.type}'")
@@ -456,11 +462,25 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
             val tcExpr = expr.typeCheckRvalue(scope)
             if (tcExpr.type is TypeError)
                 return TctErrorExpr(location, "")
-            if (tcExpr.type != TypeInt)
-                return TctErrorExpr(location, "Cannot negate type '${tcExpr.type}'")
-            if (tcExpr is TctConstant && tcExpr.value is IntValue)
-                return TctConstant(location, IntValue(-tcExpr.value.value, TypeInt))
-            return TctNegateExpr(location, tcExpr)
+            return when (tcExpr.type) {
+                is TypeReal -> {
+                    if (tcExpr is TctConstant && tcExpr.value is IntValue) {
+                        val v = - (Float.fromBits(tcExpr.value.value))
+                        TctConstant(location, IntValue(v.toBits(), TypeReal))
+                    } else
+                        TctFpuExpr(location, FpuOp.SUB_F, TctConstant(location, IntValue(0, TypeReal)), tcExpr, TypeReal)
+                }
+
+                is TypeInt -> {
+                    if (tcExpr is TctConstant && tcExpr.value is IntValue)
+                        TctConstant(location, IntValue(-tcExpr.value.value, TypeInt))
+                    else
+                        TctBinaryExpr(location, BinOp.SUB_I, TctConstant(location, IntValue(0, TypeInt)), tcExpr, TypeInt)
+                }
+
+                else
+                    -> TctErrorExpr(location, "Cannot negate type '${tcExpr.type}'")
+            }
         }
 
         is AstRangeExpr -> {
@@ -544,6 +564,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
             when(tcLhs.type) {
                 TypeInt, TypeChar, TypeBool -> TctIntCompareExpr(location, aluOp, tcLhs, tcRhs)
                 TypeString -> TctStringCompareExpr(location, aluOp, tcLhs, tcRhs)
+                TypeReal -> TctRealCompareExpr(location, aluOp, tcLhs, tcRhs)
                 else -> TctErrorExpr(location, "Cannot compare type '${tcLhs.type}' with operator '${op}'")
             }
         }
@@ -606,7 +627,11 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
                 (tctExpr.type is TypeInt && typeR is TypeChar) ||
                 (tctExpr.type is TypeAny) )
                 TctAsExpr(location, tctExpr, typeR)
-            else if (insideUnsafe) {
+            else if (tctExpr.type is TypeInt && typeR is TypeReal) {
+                TctIntToRealExpr(location, tctExpr)
+            } else if (tctExpr.type is TypeReal && typeR is TypeInt) {
+                TctRealToIntExpr(location, tctExpr)
+            } else if (insideUnsafe) {
                 if (tctExpr is TctConstant && tctExpr.value is IntValue)
                     TctConstant(location, IntValue(tctExpr.value.value, typeR))
                 else if (tctExpr.type is TypeErrable)
@@ -672,6 +697,24 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
             TctIfExpr(location, tcCondition.expr, tcThen, tcElse, type)
         }
     }
+}
+
+private fun binopRealTypeCheck(location: Location, op: TokenKind, lhs: TctExpr, rhs: TctExpr): TctExpr {
+    val tctLhs = if (lhs.type == TypeInt) TctIntToRealExpr(lhs.location, lhs) else lhs
+    val tctRhs = if (rhs.type == TypeInt) TctIntToRealExpr(rhs.location, rhs) else rhs
+
+    if (tctLhs.type != TypeReal || tctRhs.type != TypeReal)
+        return TctErrorExpr(location, "Invalid operator '${op}' for types '${lhs.type}' and '${rhs.type}'")
+
+    val fpuOp = when(op) {
+        TokenKind.PLUS -> FpuOp.ADD_F
+        TokenKind.MINUS -> FpuOp.SUB_F
+        TokenKind.STAR -> FpuOp.MUL_F
+        TokenKind.SLASH -> FpuOp.DIV_F
+        else -> return TctErrorExpr(location, "Invalid operator '${op}' for types '${lhs.type}' and '${rhs.type}'")
+    }
+
+    return TctFpuExpr(location, fpuOp, tctLhs, tctRhs, TypeReal)
 }
 
 private fun AstMemberExpr.typecheckStaticMember(tctExpr: TctExpr): TctExpr {
@@ -1042,7 +1085,7 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
         is AstFreeStmt -> {
             val tctExpr = expr.typeCheckRvalue(scope)
             val tt = if (tctExpr.type is TypeNullable) tctExpr.type.elementType else tctExpr.type
-            if (tt !is TypeClassInstance && tt !is TypeArray && tt !is TypeInlineArray) {
+            if (tt !is TypeClassInstance && tt !is TypeArray && tt !is TypeInlineArray && tt !is TypePointer && tt !is TypeString) {
                 Log.error(location, "Cannot free type '${tctExpr.type}'")
                 return TctEmptyStmt(location)
             }

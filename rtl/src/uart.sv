@@ -20,7 +20,7 @@ module uart (
 
 //parameter UI_COUNTER = 16'd10416;    // 9600 Baud
 // parameter UI_COUNTER = 16'd868;      // 115200 Baud
-parameter UI_COUNTER = 16'd62;       // 2000000 Baud
+parameter UI_COUNTER = 16'd50;       // 2000000 Baud
 //parameter UI_COUNTER = 16'd4;          // 25 Mbaud
 
 // receiver state machine

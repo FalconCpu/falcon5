@@ -36,7 +36,7 @@ fmul $12, $10, $10       # 1 * 1 = 1.0
 #fmul $22, $13, $7        # inf * 0 = NaN (special case)
 
 # --- Large magnitude (overflow) ---
-ld   $23, 1e38
+ld   $23, 1e26
 fmul $24, $23, $23       # overflow -> +inf
 
 # --- Tiny magnitude (underflow / subnormal) ---
@@ -50,6 +50,8 @@ ld   $29, 4.0
 fmul $1, $28, $29        # -10.0
 fmul $2, $29, $28        # -10.0
 fmul $3, $28, $28        # +6.25
+
+ld $4,$3           # access the result of the previous multiplication
 
 # ==============================================================
 # Terminate

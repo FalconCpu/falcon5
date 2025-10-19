@@ -26,6 +26,17 @@ fun TctExpr.codeGenRvalue() : Reg {
             currentFunc.addAlu(op, regLhs, regRhs)
         }
 
+        is TctFpuExpr -> {
+            val regLhs = lhs.codeGenRvalue()
+            val regRhs = rhs.codeGenRvalue()
+            currentFunc.addFpu(op, regLhs, regRhs)
+        }
+
+        is TctIntToRealExpr -> {
+            val reg = expr.codeGenRvalue()
+            currentFunc.addFpu(FpuOp.ITOF_F, zeroReg, reg)
+        }
+
         is TctCallExpr -> {
             val argRegs = args.map { it.codeGenRvalue() }
             val thisArgReg = thisArg?.codeGenRvalue()
@@ -62,11 +73,12 @@ fun TctExpr.codeGenRvalue() : Reg {
                 Log.error(location, "Cannot index into type '${array.type}'")
             val bounds = if (array.type is TypeInlineArray)
                 currentFunc.addLdImm(array.type.size)
-            else if (array.type is TypePointer)
-                currentFunc.addLdImm(Int.MAX_VALUE)   // No bounds checking on pointers
             else
                 currentFunc.addLoad(arrayReg, lengthSymbol)
-            val scaled = currentFunc.addIndex(size, indexReg, bounds)
+            val scaled = if (array.type is TypePointer)
+                currentFunc.addAlu(BinOp.MUL_I, indexReg, size)
+            else
+                currentFunc.addIndex(size, indexReg, bounds)
             val addr = currentFunc.addAlu(BinOp.ADD_I, arrayReg, scaled)
             currentFunc.addLoad(size, addr, 0)
         }
@@ -318,6 +330,15 @@ fun TctExpr.codeGenRvalue() : Reg {
             currentFunc.addLabel(endLabel)
             resultReg
         }
+
+        is TctRealToIntExpr -> {
+            val reg = expr.codeGenRvalue()
+            currentFunc.addFpu(FpuOp.FTOI_F, zeroReg, reg)
+        }
+
+        is TctRealCompareExpr -> {
+            TODO()
+        }
     }
 }
 
@@ -452,6 +473,22 @@ fun TctExpr.codeGenBool(trueLabel: Label, falseLabel: Label) {
             }
         }
 
+        is TctRealCompareExpr -> {
+            val lhsReg = lhs.codeGenRvalue()
+            val rhsReg = rhs.codeGenRvalue()
+            val cmp = currentFunc.addFpu(FpuOp.CMP_F, lhsReg, rhsReg)
+            when(op) {
+                BinOp.EQ_I -> currentFunc.addBranch(BinOp.EQ_I, cmp, zeroReg, trueLabel)
+                BinOp.NE_I -> currentFunc.addBranch(BinOp.NE_I, cmp, zeroReg, trueLabel)
+                BinOp.LT_I -> currentFunc.addBranch(BinOp.LT_I, cmp, zeroReg, trueLabel)
+                BinOp.GT_I -> currentFunc.addBranch(BinOp.GT_I, cmp, zeroReg, trueLabel)
+                BinOp.LE_I -> currentFunc.addBranch(BinOp.LE_I, cmp, zeroReg, trueLabel)
+                BinOp.GE_I -> currentFunc.addBranch(BinOp.GE_I, cmp, zeroReg, trueLabel)
+                else -> Log.error(location, "Invalid real comparison operator '$op'")
+            }
+            currentFunc.addJump(falseLabel)
+        }
+
         is TctNotExpr -> {
             expr.codeGenBool(falseLabel, trueLabel)
         }
@@ -541,7 +578,7 @@ fun TctExpr.codeGenLvalue(value:Reg, op:TokenKind) {
             val bounds = if (array.type is TypeInlineArray)
                 currentFunc.addLdImm(array.type.size)
             else if (array.type is TypePointer)
-                currentFunc.addLdImm(-1) // Arbitrary large value - we can't do bounds checking on pointers
+                currentFunc.addLdImm(0x7FFFFFFF) // Arbitrary large value - we can't do bounds checking on pointers
             else
                 currentFunc.addLoad(arrayReg, lengthSymbol)
             val scaled = currentFunc.addIndex(size, indexReg, bounds)

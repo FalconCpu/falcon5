@@ -294,7 +294,10 @@ always_comb begin
         `OP_FSUB,
         `OP_FMUL,
         `OP_FDIV,
-        `OP_FSQRT:  begin
+        `OP_FSQRT,
+        `OP_FCMP,
+        `OP_ITOF,
+        `OP_FTOI:  begin
                         p3_fpu_op   = {1'b1,p3_op[2:0]}; // Map to 4-bit FPU op
                         p3_fpu_a    = alu_a;
                         p3_fpu_b    = alu_b;

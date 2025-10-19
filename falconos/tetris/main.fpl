@@ -5,6 +5,7 @@ class Point(val x:Int, val y:Int, var color:Int)
 class Shape(val blocks:Array<Point>)
 
 fun playSound(audio:Array<Char>)
+    kprintf("playSound: Playing sound at addr %x\n", unsafe(audio as Int))
     hwregsAudio[7].addr = unsafe(audio as Int)
     hwregsAudio[7].length = audio.length
     hwregsAudio[7].volume = 255
@@ -200,11 +201,11 @@ class TetrisPlayer(val gc:GraphicsContext, val playerNo:Int)
 
     fun initialize()
         gc.drawRect(0, 0, gc.screenWidth, gc.screenHeight, 0)
-        shapes[0][0] = createShape(1, 0,1, 1,1, 2,1, 3,1)  # I
-        shapes[1][0] = createShape(2, 1,1, 2,1, 1,2, 2,2)  # O
+        shapes[0][0] = createShape(0x2e, 0,1, 1,1, 2,1, 3,1)  # I
+        shapes[1][0] = createShape(0x21, 1,1, 2,1, 1,2, 2,2)  # O
         shapes[2][0] = createShape(3, 1,1, 0,2, 1,2, 2,2)  # T
         shapes[3][0] = createShape(4, 0,1, 0,2, 1,2, 2,2)  # J
-        shapes[4][0] = createShape(5, 2,1, 0,2, 1,2, 2,2)  # L
+        shapes[4][0] = createShape(0x06, 2,1, 0,2, 1,2, 2,2)  # L
         shapes[5][0] = createShape(6, 1,1, 2,1, 0,2, 1,2)  # S
         shapes[6][0] = createShape(7, 0,1, 1,1, 1,2, 2,2)  # Z
         for i in 1..3
@@ -469,15 +470,23 @@ class TetrisGame(val gc:GraphicsContext, val kb:Keyboard, val modfiles:Array<Mod
             # Handle key presses
             val key = kb.getKey()
             when key
-                'z' -> player1.keyLeft()
-                'x' -> player1.keyRight()
-                'q' -> player1.keyUp()
+                # 'z' -> player1.keyLeft()
+                # 'x' -> player1.keyRight()
+                # 'q' -> player1.keyUp()
+                # 'a' -> player1.keyDown()
+                # KEY_LEFT -> player2.keyLeft()
+                # KEY_RIGHT -> player2.keyRight()
+                # KEY_UP -> player2.keyUp()
+                # KEY_DOWN -> player2.keyDown()
+                # 'n' -> newGame()
+                'k' -> player1.keyLeft()
+                'l' -> player1.keyRight()
+                ' ' -> player1.keyUp()
                 'a' -> player1.keyDown()
                 KEY_LEFT -> player2.keyLeft()
                 KEY_RIGHT -> player2.keyRight()
                 KEY_UP -> player2.keyUp()
                 KEY_DOWN -> player2.keyDown()
-                'n' -> newGame()
 
             player1.timeStep()
             player2.timeStep()

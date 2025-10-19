@@ -78,7 +78,7 @@ always_ff @(posedge clock) begin
 
     // Pixel counters
     clk_div <= clk_div + 1'b1;
-    if (clk_div == 4) begin
+    if (clk_div == 3) begin
         clk_div <= 0;
         pos_x <= pos_x + 1'b1;
         if (pos_x == H_TOTAL-1) begin

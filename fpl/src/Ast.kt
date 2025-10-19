@@ -7,6 +7,7 @@ sealed class Ast (val location: Location)
 // Expression nodes
 sealed class AstExpr(location: Location) : Ast(location)
 class AstIntLiteral(location: Location, val value: Int) : AstExpr(location)
+class AstRealLiteral(location: Location, val value: Float) : AstExpr(location)
 class AstCharLiteral(location: Location, val value: Int) : AstExpr(location)
 class AstStringLiteral(location: Location, val value: String) : AstExpr(location)
 class AstIdentifier(location: Location, val name: String) : AstExpr(location)

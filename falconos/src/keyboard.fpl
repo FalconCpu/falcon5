@@ -26,6 +26,11 @@ const KEY_NUMLOCK = -23
 const KEY_SCROLLOCK = -24
 const KEY_PRTSCREEN = -25
 
+const KEY_SCANCODE_LEFT = 0xEB
+const KEY_SCANCODE_RIGHT = 0xF4
+const KEY_SCANCODE_UP = 0xF5
+const KEY_SCANCODE_DOWN = 0xF2
+
 # lookup table of Scan codes to ASCII
 # One row per scan code
 # First entry is for the key pressed on its own
@@ -303,6 +308,7 @@ class Keyboard
     var caps   = false
     var menu   = false
     var windows = false
+    val keyDown = new Array<Bool>(256)
 
     fun getKey() -> Char
         var keycode = hwregs.keyboard
@@ -324,6 +330,7 @@ class Keyboard
         seenE0 = false
         seenF0 = false
 
+        keyDown[key] = pressed
         when key
             0x12 -> lshift = pressed
             0x14 -> lctrl = pressed

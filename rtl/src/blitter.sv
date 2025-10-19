@@ -45,6 +45,7 @@ logic [25:0]   src_base_addr;
 logic [15:0]   src_stride;
 logic [7:0]    reg_color;  // Color to write
 logic [7:0]    reg_bgcolor;
+logic [8:0]    transparent_color;
 
 logic         start;
 logic         ack;
@@ -55,6 +56,11 @@ logic [15:0]  p1_src_x;
 logic [15:0]  p1_src_y;
 logic [2:0]   p1_bit_index;
 logic         p1_valid;
+
+logic [31:0]  src_dx_x;
+logic [31:0]  src_dy_y;
+logic [31:0]  src_dy_x;
+logic [31:0]  src_dx_y;
 
 logic         p2_valid;
 logic         p2_ready;
@@ -102,12 +108,17 @@ blit_command_parser  blit_command_parser_inst (
     .reg_clip_y1(reg_clip_y1),
     .reg_clip_x2(reg_clip_x2),
     .reg_clip_y2(reg_clip_y2),
+    .reg_src_dx_x(src_dx_x),
+    .reg_src_dy_y(src_dy_y),
+    .reg_src_dy_x(src_dy_x),
+    .reg_src_dx_y(src_dx_y),
     .dest_base_addr(dest_base_addr),
     .dest_stride(dest_stride),
     .src_base_addr(src_base_addr),
     .src_stride(src_stride),
     .reg_color(reg_color),
     .reg_bgcolor(reg_bgcolor),
+    .transparent_color(transparent_color),
     .busy(busy),
     .ack(ack)
   );
@@ -124,6 +135,10 @@ blit_coordinate_gen  blit_coordinate_gen_inst (
     .reg_y2(reg_y2),
     .reg_src_x(reg_src_x),
     .reg_src_y(reg_src_y),
+    .reg_src_dx_x(src_dx_x),
+    .reg_src_dy_y(src_dy_y),
+    .reg_src_dy_x(src_dy_x),
+    .reg_src_dx_y(src_dx_y),
     .busy(busy),
     .p2_ready(p2_ready),
     .p1_x(p1_x),
@@ -200,6 +215,7 @@ blit_color  blit_color_inst (
     .p3_is_text(p3_is_text),
     .reg_color(reg_color),
     .reg_bgcolor(reg_bgcolor),
+    .transparent_color(transparent_color),
     .p4_write(p4_write),
     .p4_address(p4_address),
     .p4_wdata(p4_wdata)

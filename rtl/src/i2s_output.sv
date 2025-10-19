@@ -51,7 +51,7 @@ module i2s_output (
                 sample_strobe <= 1;
                 data_left <= sample_left;
                 data_right <= sample_right;
-                $display("I2S: New samples L=%d R=%d", sample_left, sample_right);
+                //$display("I2S: New samples L=%d R=%d", sample_left, sample_right);
             end
         end
     end

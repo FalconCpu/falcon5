@@ -14,6 +14,7 @@ module blit_color(
     input logic         p3_is_text,      // Bit index for text rendering
     input logic [7:0]   reg_color, 
     input logic [7:0]   reg_bgcolor,
+    input logic [8:0]   transparent_color,// Set transparent color. Set msb to disable transparency
 
     // Signals to next stage in the pipeline
     output logic        p4_write,    // 1 = write
@@ -55,6 +56,9 @@ always_ff @(posedge clock) begin
             p4_wdata   <= reg_bgcolor; 
     end else
         p4_wdata   <= read_byte; // Fill with color for RECT, copy pixel for COPY
+
+    if ({1'b0, p4_wdata} == {transparent_color})
+         p4_write <= 1'b0; // Do not write transparent pixels
 
     if (reset) 
         p4_write   <= 1'b0;

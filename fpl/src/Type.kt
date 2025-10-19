@@ -203,7 +203,7 @@ fun Type.isAssignableTo(other: Type): Boolean {
     if (other == TypeAny) return true
 
     // Char can be promoted to Int
-    if (this==TypeChar && other==TypeInt) return true
+    // if (this==TypeChar && other==TypeInt) return true
 
     // Arrays can be converted to Pointer
     if (this is TypeArray && other is TypePointer && this.elementType.isAssignableTo(other.elementType)) return true

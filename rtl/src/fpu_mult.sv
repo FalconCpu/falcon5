@@ -6,7 +6,7 @@ module fpu_mult (
     input  logic [4:0]  fpu_dest,        // destination register
 
     output logic        mult_valid,        
-    output logic [26:0] mult_mantissa,       
+    output logic [31:0] mult_mantissa,       
     output logic [7:0]  mult_exponent,       
     output logic        mult_sign,       
     output logic [4:0]  mult_dest
@@ -28,6 +28,9 @@ logic [8:0] eff_exp_a;
 logic [8:0] eff_exp_b;
 logic [8:0] exp_sum;
 
+logic [4:0] dly_dest;
+logic      dly_valid;
+
 // verilator lint_off BLKSEQ
 always_ff @(posedge clock) begin
     // Extract sign, exponent, mantissa
@@ -38,8 +41,6 @@ always_ff @(posedge clock) begin
     exp_b  = fpu_b[30:23];
     mant_b = fpu_b[22:0];
 
-    // Calculate result sign
-    result_sign = sign_a ^ sign_b;
 
     // Handle special cases (zero, infinity, NaN)
     // if ((exp_a == 8'hff && mant_a != 23'd0) || (exp_b == 8'hff && mant_b != 23'd0)) begin
@@ -58,11 +59,12 @@ always_ff @(posedge clock) begin
     norm_mant_b = (exp_b == 8'd0) ? {1'b0, mant_b} : {1'b1, mant_b};
 
     // Multiply mantissas
-    mant_product = norm_mant_a * norm_mant_b;
+    mant_product <= norm_mant_a * norm_mant_b;
 
     // Calculate exponent
-    eff_exp_a = (exp_a == 8'd0) ? 9'd1 : {1'b0, exp_a};
-    eff_exp_b = (exp_b == 8'd0) ? 9'd1 : {1'b0, exp_b};
+    eff_exp_a <= (exp_a == 8'd0) ? 9'd1 : {1'b0, exp_a};
+    eff_exp_b <= (exp_b == 8'd0) ? 9'd1 : {1'b0, exp_b};
+    result_sign <= sign_a ^ sign_b;
     exp_sum = eff_exp_a + eff_exp_b - 9'd127;
     if (exp_sum[8:7]==2'b11)
         exp_sum = 9'd0; // Underflow
@@ -70,11 +72,13 @@ always_ff @(posedge clock) begin
         exp_sum = 9'h0ff; // Overflow
 
     // Prepare outputs for normalization stage
-    mult_mantissa <= mant_product[47:21]; // Take the top 27 bits (with guard/round bits)
+    mult_mantissa <= mant_product[47:16]; // Take the top 27 bits (with guard/round bits)
     mult_exponent <= exp_sum[7:0];
-    mult_dest  <= fpu_dest;
-    mult_valid <= fpu_mult_start;
     mult_sign  <= result_sign;
+    dly_dest   <= fpu_dest;
+    dly_valid  <= fpu_mult_start;
+    mult_dest  <= dly_dest;
+    mult_valid <= dly_valid;
 end
 
 endmodule

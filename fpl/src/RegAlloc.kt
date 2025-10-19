@@ -123,6 +123,7 @@ class RegisterAllocator(private val func: Function, private val livemap: LiveMap
             is InstrIndex -> InstrIndex(size, replace(dest), replace(src), replace(bounds))
             is InstrNullCheck -> InstrNullCheck(replace(src))
             is InstrSyscall -> this
+            is InstrFpu -> InstrFpu(op, replace(dest), replace(src1), replace(src2))
         }
         new.index = index
         return new

@@ -24,6 +24,10 @@ module blit_coordinate_gen(
     output logic         busy,
     output logic         ack,            // Pulsed when operation is started
     input logic          fifo_full,
+    input logic [31:0]   reg_src_dx_x,   // Affine source increments
+    input logic [31:0]   reg_src_dy_y,
+    input logic [31:0]   reg_src_dy_x,
+    input logic [31:0]   reg_src_dx_y,
 
     // Outputs to the next stage in the pipeline
     input  logic         p2_ready,          // Stall the pipeline
@@ -37,6 +41,12 @@ module blit_coordinate_gen(
 
 wire [15:0] p1_x_inc = p1_x + 1'b1;
 wire [15:0] p1_y_inc = p1_y + 1'b1;
+
+logic [31:0] src_x, src_y;      // Current source coordinates in 16.16 fixed point
+logic [31:0] src_x0, src_y0;    // Base source coordinates in 16.16 fixed point
+
+assign p1_src_x = src_x[31:16];
+assign p1_src_y = src_y[31:16];
 
 always_ff @(posedge clock) begin
     ack <= 1'b0;
@@ -54,17 +64,21 @@ always_ff @(posedge clock) begin
         if (reg_command==`BLIT_TEXT) begin
             p1_bit_index <= p1_bit_index + 1'b1;
             if (p1_bit_index == 3'h7)
-                p1_src_x <= p1_src_x + 1'b1;
+                src_x <= src_x + 32'h00010000; // Advance source X by 1.0
         end else
             p1_bit_index <= 3'h0;
-        if (reg_command==`BLIT_COPY)
-            p1_src_x <= p1_src_x + 1'b1;
+        if (reg_command==`BLIT_COPY) begin
+            src_x <= src_x + reg_src_dx_x;
+            src_y <= src_y + reg_src_dy_x;
+        end
 
         if (p1_x_inc == reg_x2) begin
             p1_x <= reg_x1;
             p1_y <= p1_y_inc;
-            p1_src_x <= reg_src_x;
-            p1_src_y <= p1_src_y + 1'b1;
+            src_x <= src_x0 + reg_src_dx_y;
+            src_y <= src_y0 + reg_src_dy_y;
+            src_x0 <= src_x0 + reg_src_dx_y;
+            src_y0 <= src_y0 + reg_src_dy_y;
             if (p1_y_inc == reg_y2) begin
                 busy <= 1'b0;
                 p1_valid <= 1'b0;
@@ -81,8 +95,10 @@ always_ff @(posedge clock) begin
             if (reg_x1 < reg_x2 && reg_y1 < reg_y2) begin
                 p1_x <= reg_x1;
                 p1_y <= reg_y1;
-                p1_src_x <= reg_src_x;
-                p1_src_y <= reg_src_y;
+                src_x <= {reg_src_x,16'b0}; // Convert to 16.16 fixed point
+                src_y <= {reg_src_y,16'b0};
+                src_x0 <= {reg_src_x,16'b0};
+                src_y0 <= {reg_src_y,16'b0};
                 p1_bit_index <= 3'h0;
                 p1_valid <= 1'b1;
                 busy <= 1'b1;

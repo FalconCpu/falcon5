@@ -1,9 +1,14 @@
 const CMD_SETUP     = 0xFF000000
+const CMD_SET_SRC   = 0xFE000000
 const CMD_DRAW_RECT = 0x01000000
 const CMD_COPY_RECT = 0x02000000
 const CMD_DRAW_TEXT = 0x03000000
+const CMD_SET_TRANSPARENCY_COLOR = 0x04000000
+const CMD_SET_AFFINE = 0x05000000
 
 var fontAddress : Array<Int>
+
+class Image(val width:Int, val height:Int, val data:Pointer<Char>)
 
 class GraphicsContext
     var screenAddress = 0x03f80000
@@ -12,6 +17,7 @@ class GraphicsContext
     var screenHeight = 480
     var fontWidth = 8
     var fontHeight = 16
+    var affineSet = false
 
 
     fun setup()
@@ -27,10 +33,12 @@ class GraphicsContext
         hwregs.blit_cmd = screenStride      # SRC stride
         hwregs.blit_cmd = unsafe(fontAddress as Int)      # FONT Address
         hwregs.blit_cmd = fontHeight lsl 8 | fontWidth  # FONT size
+        hwregs.blit_cmd = CMD_SET_TRANSPARENCY_COLOR | 0x1ff  # CMD SET TRANSPARENCY COLOR, default to no transparency
+        
 
     fun drawRect(x1:Int, y1:Int, x2:Int, y2:Int, color:Int)
         while (hwregs.blit_cmd < 3)         # Wait for blitter to have at least 3 free slots in command queue
-            hwregs.ledr = 1
+            hwregs.ledr = 16
         hwregs.ledr = 0
         
         hwregs.blit_cmd = CMD_DRAW_RECT | color  # CMD RECT COLOR = color
@@ -50,6 +58,20 @@ class GraphicsContext
                 hwregs.blit_cmd = c1
         hwregs.blit_cmd = 0                 # null terminate to end string
 
+    fun drawText(x:Int, y:Int, color:Int, bgColor:Int, text:String)
+        while (hwregs.blit_cmd < 3)         # Wait for blitter to have at least 3 free slots in command queue
+            val dummy = 1
+        hwregs.blit_cmd = CMD_DRAW_TEXT | color | (bgColor lsl 8)
+        hwregs.blit_cmd = y lsl 16 | x
+        for c in text
+            val c1 = c as Int
+            if c1 != 0
+                while (hwregs.blit_cmd < 2)
+                    val dummy2 = 1
+                hwregs.blit_cmd = c1
+        hwregs.blit_cmd = 0                 # null terminate to end string
+
+
     fun drawChar(x:Int, y:Int, color:Int, char:Char)
         while (hwregs.blit_cmd < 512)         # Wait for blitter to have at least 3 free slots in command queue
             hwregs.seven_seg = hwregs.blit_cmd
@@ -67,6 +89,57 @@ class GraphicsContext
         hwregs.blit_cmd = y2 lsl 16 | x2          # dest x2,y2
         hwregs.blit_cmd = (srcY lsl 16 | srcX)    # src x,y
 
+    fun drawImage(x:Int, y:Int, image:Image)
+        while (hwregs.blit_cmd < 12)         # Wait for blitter to have at least 4 free slots in command queue
+            val dummy = 1
+
+        if affineSet
+            hwregs.blit_cmd = CMD_SET_AFFINE    # CMD SET AFFINE
+            hwregs.blit_cmd = 65536             # scaleX = 1.0
+            hwregs.blit_cmd = 65536             # scaleY = 1.0
+            hwregs.blit_cmd = 0                 # shearX
+            hwregs.blit_cmd = 0                 # shearY
+            affineSet = false
+
+        hwregs.blit_cmd = CMD_SET_SRC | image.width  # CMD SET SRC, width
+        hwregs.blit_cmd = unsafe(image.data as Int)  # SRC address
+
+        hwregs.blit_cmd = CMD_COPY_RECT     # CMD COPY
+        hwregs.blit_cmd = y lsl 16 | x      # dest x1,y1
+        hwregs.blit_cmd = (y + image.height) lsl 16 | (x + image.width)  # dest x2,y2
+        hwregs.blit_cmd = 0                 # src x,y = 0,0
+
+    fun drawImage(x:Int, y:Int, image:Image, scaleX:Float, scaleY:Float)
+        val dx = (scaleX * 65536.0) as Int
+        val dy = (scaleY * 65536.0) as Int
+
+
+        while (hwregs.blit_cmd < 12)         # Wait for blitter to have free slots
+            val dummy = 1
+
+        hwregs.blit_cmd = CMD_SET_AFFINE    # CMD SET AFFINE
+        hwregs.blit_cmd = dx                # scaleX
+        hwregs.blit_cmd = dy                # scaleY
+        hwregs.blit_cmd = 0                 # shearX
+        hwregs.blit_cmd = 0                 # shearY
+        affineSet = true
+    
+
+        hwregs.blit_cmd = CMD_SET_SRC | image.width  # CMD SET SRC, width
+        hwregs.blit_cmd = unsafe(image.data as Int)  # SRC address
+
+        hwregs.blit_cmd = CMD_COPY_RECT     # CMD COPY
+        hwregs.blit_cmd = y lsl 16 | x      # dest x1,y1
+        hwregs.blit_cmd = (y + image.height) lsl 16 | (x + image.width)  # dest x2,y2
+        hwregs.blit_cmd = (if scaleX<0.0 then image.width else 0) + 
+                          (if scaleY<0.0 then image.height else 0) lsl 16
+
+
+
+    fun setTransparentColor(color:Int)
+        while (hwregs.blit_cmd < 1)         # Wait for blitter to have at least 1 free slots in command queue
+            val dummy = 1
+        hwregs.blit_cmd = CMD_SET_TRANSPARENCY_COLOR | (color & 0x1ff)  # CMD SET TRANSPARENCY COLOR
 
 const fontData = const [
     0x00000000,

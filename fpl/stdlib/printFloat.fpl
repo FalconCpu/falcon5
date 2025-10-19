@@ -1,0 +1,58 @@
+extern fun print(value: Char)
+
+fun print(value: Float)
+    val buffer = local InlineArray<Char>(16)
+    var v = value
+
+    # Handle sign
+    if v < 0.0
+        print('-')
+        v = -v
+    end if
+
+    # Integer part
+    val intPart = (v as Int)
+    var n = intPart
+    var index = 0
+
+    # Convert integer to reversed digits
+    repeat
+        val digit = n % 10
+        buffer[index] = (digit + 48) as Char
+        index += 1
+        n = n / 10
+    until n = 0
+
+    # Print integer digits in correct order
+    while index > 0
+        index -= 1
+        print(buffer[index])
+    end while
+
+    # Fractional part
+    var fracPart = v - (intPart as Float)
+    if fracPart != 0.0
+        print('.')
+
+        # Generate up to 6 fractional digits
+        val fracBuf = local InlineArray<Char>(6)
+        var fracIndex = 0
+        for i in 0..5
+            fracPart = fracPart * 10.0
+            val digit = (fracPart as Int)
+            fracBuf[fracIndex] = (digit + 48) as Char
+            fracIndex += 1
+            fracPart = fracPart - (digit as Float)
+        end for
+
+        # Trim trailing zeros
+        while fracIndex > 0 and fracBuf[fracIndex - 1] = '0'
+            fracIndex -= 1
+        end while
+
+        # Print remaining digits
+        for i in 0..(fracIndex - 1)
+            print(fracBuf[i])
+        end for
+    end if
+end fun

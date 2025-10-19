@@ -89,3 +89,16 @@ fun BinOp.evaluate(lhs: Int, rhs: Int) : Int = when(this) {
     BinOp.ASR_I -> lhs shr rhs
     BinOp.LTU_I -> if (lhs.toUInt() < rhs.toUInt()) 1 else 0
 }
+
+
+enum class FpuOp {
+    // Integer Operations
+    ADD_F,
+    SUB_F,
+    MUL_F,
+    DIV_F,
+    SQRT_F,
+    CMP_F,
+    FTOI_F,
+    ITOF_F
+}

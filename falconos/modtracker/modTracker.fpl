@@ -79,7 +79,6 @@ class ModPlayer(val data:Array<Char>, val gc:GraphicsContext)
         if songPos = songLength
             kprintf("End of song\n")
             return true
-
         val pattern_index = (data[952 + songPos] as Int) & 0xFF
 
         # Amiga PAL master clock / FPGA sample rate * 65536

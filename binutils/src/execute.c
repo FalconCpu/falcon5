@@ -182,18 +182,18 @@ static int fpu_op(int op, int a, int b) {
         case 0: fr = fa + fb; break;
         case 1: fr = fa - fb; break;
         case 2: fr = fa * fb; break;
-        case 3: fr = (fb==0.0) ? 0.0 : fa / fb; break;
+        case 3: fr = fa / fb; break;
         case 4: fr = sqrt(fa); break;
         case 5: if      (fa < fb) return -1;        // Returns integer value
                 else if (fa > fb) return 1; 
                 else              return 0;
-        case 6: { // ftoi
-            int ia = (int)fa;
-            return ia;
-        }
-        case 7: { // itof
-            float fx = (float)a;
+        case 6: { // itof
+            float fx = (float)b;
             return *((int*)&fx);
+        }
+        case 7: { // ftoi
+            int ia = (int)fb;
+            return ia;
         }
         default: return 0;
     }

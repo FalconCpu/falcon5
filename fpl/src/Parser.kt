@@ -71,6 +71,18 @@ class Parser(val lexer: Lexer) {
         }
     }
 
+    private fun parseRealLit() : AstRealLiteral {
+        val tok = expect(REALLITERAL)
+        try {
+            val value = tok.value.toFloat()
+            return AstRealLiteral(tok.location, value)
+        } catch(_: NumberFormatException) {
+            Log.error(tok.location, "Malformed integer literal: '$tok'")
+            return AstRealLiteral(tok.location, 0.0F) // Return 0 as default value
+        }
+    }
+
+
     private fun parseStringLit() : AstStringLiteral {
         val tok = expect(STRINGLITERAL)
         return AstStringLiteral(tok.location, tok.value)
@@ -158,6 +170,7 @@ class Parser(val lexer: Lexer) {
     private fun parsePrimaryExpr() : AstExpr {
         return when (currentToken.kind) {
             INTLITERAL -> parseIntLit()
+            REALLITERAL -> parseRealLit()
             IDENTIFIER -> parseIdentifier()
             STRINGLITERAL -> parseStringLit()
             CHARLITERAL -> parseCharLit()
@@ -492,9 +505,9 @@ class Parser(val lexer: Lexer) {
     private fun optionalEnd(kind:TokenKind) {
         val loc = currentToken.location
         if (canTake(END)) {
-            canTake(kind)
             if (currentToken.kind != kind && currentToken.kind!= EOL)
                 Log.error(loc, "Got 'end $currentToken' when expecting 'end $kind'")
+            canTake(kind)
             expectEol()
         }
     }

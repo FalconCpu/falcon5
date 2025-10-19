@@ -32,6 +32,7 @@ module cpu_decoder(
     input  logic [4:0]   p5_dest,             // Destination register from COM stage
     input  logic         p5_is_mem_read,      // True if the instruction in the COM stage is a load
     input  logic         p4_divider_busy,     // Divider is busy
+    input  logic         fpu_div_busy,        // FPU divider is busy
     input  logic         p4_mem_busy,         // Memory queue is full
     input  logic         p4_jump,             // Jump taken in ALU stage
     output logic [2:0]   perf_count           // 
@@ -218,6 +219,7 @@ always_comb begin
             p2_use_a   = 1'b1;
             p2_use_b   = 1'b1;
             p2_latent_dest = instr_d;
+            p2_is_divide   = (instr_opcode==3'b011 || instr_opcode==3'b100); // FPU divide or sqrt
         end
 
         `KIND_IDX: begin
@@ -255,7 +257,7 @@ always_comb begin
     hazard_a2           = p2_use_a && instr_a==p3_dest && p3_latent2;
     hazard_b2           = p2_use_b && instr_b==p3_dest && p3_latent2;
     hazard_mem          = p2_is_memory && p4_mem_busy;
-    hazard_div          = p2_is_divide && p4_divider_busy;
+    hazard_div          = p2_is_divide && (p4_divider_busy || fpu_div_busy);
 
     if (hazard_a1 || hazard_b1 || hazard_a2 || hazard_b2 || hazard_mem || hazard_div) begin
         p2_op    = `OP_NOP;
