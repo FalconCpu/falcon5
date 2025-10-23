@@ -82,7 +82,7 @@ palette_img.putpalette(palette_bytes)
 
 def convert_sprite(input_path, output_path):
     img = Image.open(input_path)
-    print("Sprite size:", img.size)
+    print(output_path + " Sprite size:", img.size)
 
     # Get the transparent pixels mask
     rgba = np.array(img)
@@ -101,7 +101,18 @@ def convert_sprite(input_path, output_path):
 
 
 convert_sprite("../../../Downloads/outrun_amiga_edition_v092/mikey/sprites256bit/Sprite_0001_2.png", "sprites/car_straight.bin")
-convert_sprite("../../../Downloads/outrun_amiga_edition_v092/mikey/sprites256bit/Sprite_0002_2.png", "sprites/car_down1.bin")
-convert_sprite("../../../Downloads/outrun_amiga_edition_v092/mikey/sprites256bit/Sprite_0003_2.png", "sprites/car_up1.bin")
-convert_sprite("../../../Downloads/outrun_amiga_edition_v092/mikey/sprites256bit/Sprite_0004_2.png", "sprites/car_turn1.bin")
+convert_sprite("../../../Downloads/outrun_amiga_edition_v092/mikey/sprites256bit/Sprite_0002_2.png", "sprites/car_down.bin")
+convert_sprite("../../../Downloads/outrun_amiga_edition_v092/mikey/sprites256bit/Sprite_0003_2.png", "sprites/car_up.bin")
+convert_sprite("../../../Downloads/outrun_amiga_edition_v092/mikey/sprites256bit/Sprite_0004_2.png", "sprites/car_turn.bin")
+convert_sprite("../../../Downloads/outrun_amiga_edition_v092/mikey/sprites256bit/Sprite_0005_2.png", "sprites/car_downturn.bin")
+convert_sprite("../../../Downloads/outrun_amiga_edition_v092/mikey/sprites256bit/Sprite_0006_2.png", "sprites/car_upturn.bin")
 convert_sprite("../../../Downloads/outrun_amiga_edition_v092/mikey/sprites256bit/Sprite_0007_2.png", "sprites/car_turn2.bin")
+convert_sprite("../../../Downloads/outrun_amiga_edition_v092/mikey/sprites256bit/Sprite_1189_226.png", "sprites/smoke1.bin")
+convert_sprite("../../../Downloads/outrun_amiga_edition_v092/mikey/sprites256bit/Sprite_1190_226.png", "sprites/smoke2.bin")
+convert_sprite("../../../Downloads/outrun_amiga_edition_v092/mikey/sprites256bit/Sprite_1191_226.png", "sprites/smoke3.bin")
+convert_sprite("../../../Downloads/outrun_amiga_edition_v092/mikey/sprites256bit/Sprite_1192_226.png", "sprites/smoke4.bin")
+convert_sprite("../../../Downloads/outrun_amiga_edition_v092/mikey/sprites256bit/Sprite_0641_80.png", "sprites/danke.bin")
+convert_sprite("../../../Downloads/outrun_amiga_edition_v092/mikey/sprites256bit/Sprite_0420_54.png", "sprites/palm_tree.bin")
+convert_sprite("../../../Downloads/outrun_amiga_edition_v092/mikey/sprites256bit/Sprite_0706_69.png", "sprites/start_left.bin")
+convert_sprite("../../../Downloads/outrun_amiga_edition_v092/mikey/sprites256bit/Sprite_0711_69.png", "sprites/start_right.bin")
+convert_sprite("../../../Downloads/outrun_amiga_edition_v092/mikey/sprites256bit/Sprite_0666_33.png", "sprites/slow_down.bin")

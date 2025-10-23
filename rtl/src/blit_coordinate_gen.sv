@@ -15,12 +15,12 @@ module blit_coordinate_gen(
     // Signals from register interface
     input logic          start,          // Pulsed to start operation. Registers below must then be stable until busy deasserts.
     input logic [4:0]    reg_command,    // 
-    input logic [15:0]   reg_x1,         // Rectangle coordinates
-    input logic [15:0]   reg_y1,
-    input logic [15:0]   reg_x2,         // Exclusive upper bounds
-    input logic [15:0]   reg_y2,
-    input logic [15:0]   reg_src_x,      // Source X for copy operations
-    input logic [15:0]   reg_src_y,      // Source Y for copy
+    input logic signed [15:0]   reg_x1,         // Rectangle coordinates
+    input logic signed [15:0]   reg_y1,
+    input logic signed [15:0]   reg_x2,         // Exclusive upper bounds
+    input logic signed [15:0]   reg_y2,
+    input logic signed [15:0]   reg_src_x,      // Source X for copy operations
+    input logic signed [15:0]   reg_src_y,      // Source Y for copy
     output logic         busy,
     output logic         ack,            // Pulsed when operation is started
     input logic          fifo_full,
@@ -39,8 +39,8 @@ module blit_coordinate_gen(
     output logic         p1_valid
 );
 
-wire [15:0] p1_x_inc = p1_x + 1'b1;
-wire [15:0] p1_y_inc = p1_y + 1'b1;
+wire signed [15:0] p1_x_inc = p1_x + 1'b1;
+wire signed [15:0] p1_y_inc = p1_y + 1'b1;
 
 logic [31:0] src_x, src_y;      // Current source coordinates in 16.16 fixed point
 logic [31:0] src_x0, src_y0;    // Base source coordinates in 16.16 fixed point
@@ -67,6 +67,7 @@ always_ff @(posedge clock) begin
                 src_x <= src_x + 32'h00010000; // Advance source X by 1.0
         end else
             p1_bit_index <= 3'h0;
+            
         if (reg_command==`BLIT_COPY) begin
             src_x <= src_x + reg_src_dx_x;
             src_y <= src_y + reg_src_dy_x;

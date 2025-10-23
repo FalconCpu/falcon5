@@ -57,3 +57,13 @@ const hwregsAudio = const Array<HwRegsAudio>[
     unsafe(0xE00002A0 as HwRegsAudio),
     unsafe(0xE00002C0 as HwRegsAudio),
     unsafe(0xE00002E0 as HwRegsAudio) ]
+
+class HwRegsVideo
+    var addr        : Int  # Framebuffer address
+    var x1          : Int  # Visible area x1
+    var y1          : Int  # Visible area y1
+    var x2          : Int  # Visible area x2
+    var y2          : Int  # Visible area y2
+    var pitch       : Int  # Number of bytes per row
+
+const hwregsVideo = unsafe(0xE0000100 as HwRegsVideo)

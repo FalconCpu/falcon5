@@ -38,6 +38,8 @@ wire [7:0] read_byte = (px_is_mem==1'b0)            ? px_data[7:0] : // Solid co
                        (px_src_address[1:0]==2'b10) ? px_data[23:16] :
                                                       px_data[31:24] ;
 
+logic [7:0] data_byte;
+
 always_ff @(posedge clock) begin
     px_valid      <= p3_valid;
     px_dst_address<= p3_dst_address;
@@ -51,13 +53,14 @@ always_ff @(posedge clock) begin
     p4_write   <= px_valid;
     if (px_is_text) begin
         if (read_byte[7-px_bit_index] == 1'b1)
-            p4_wdata   <= reg_color; 
+            data_byte = reg_color; 
         else
-            p4_wdata   <= reg_bgcolor; 
+            data_byte = reg_bgcolor; 
     end else
-        p4_wdata   <= read_byte; // Fill with color for RECT, copy pixel for COPY
+        data_byte = read_byte; // Fill with color for RECT, copy pixel for COPY
 
-    if ({1'b0, p4_wdata} == {transparent_color})
+    p4_wdata <= data_byte;
+    if ({1'b0, data_byte} == {transparent_color})
          p4_write <= 1'b0; // Do not write transparent pixels
 
     if (reset) 

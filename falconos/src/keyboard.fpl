@@ -329,7 +329,10 @@ class Keyboard
         val pressed = not seenF0
         seenE0 = false
         seenF0 = false
+        if key > 255
+            return 0
 
+        kprintf("Keycode: %x %x\n", key, pressed)
         keyDown[key] = pressed
         when key
             0x12 -> lshift = pressed

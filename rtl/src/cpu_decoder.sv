@@ -75,6 +75,7 @@ logic [5:0] p2_op;
 logic [31:0] scoreboard, prev_scoreboard; // One bit per register to indicate if it is busy
 logic        p2_latent2, p3_latent2;      // True if this instruction will take 2 cycles
 logic        hazard_a1, hazard_b1;        // Scoreboard hazard on A or B
+logic        hazard_c1;                   // Scoreboard hazard on destination register
 logic        hazard_a2, hazard_b2;        // Latency hazard on A or B
 logic        hazard_mem, hazard_div;      // Resource hazards
 logic [2:0]  next_perf_count, next2_perf_count;
@@ -254,12 +255,13 @@ always_comb begin
     // Handle hazards
     hazard_a1           = p2_use_a && scoreboard[instr_a];
     hazard_b1           = p2_use_b && scoreboard[instr_b];
+    hazard_c1           = scoreboard[p2_dest] || scoreboard[p2_latent_dest];
     hazard_a2           = p2_use_a && instr_a==p3_dest && p3_latent2;
     hazard_b2           = p2_use_b && instr_b==p3_dest && p3_latent2;
     hazard_mem          = p2_is_memory && p4_mem_busy;
     hazard_div          = p2_is_divide && (p4_divider_busy || fpu_div_busy);
 
-    if (hazard_a1 || hazard_b1 || hazard_a2 || hazard_b2 || hazard_mem || hazard_div) begin
+    if (hazard_a1 || hazard_b1 || hazard_c1 || hazard_a2 || hazard_b2 || hazard_mem || hazard_div) begin
         p2_op    = `OP_NOP;
         p2_dest  = 5'b0;
         p2_latent_dest = 5'b0;
@@ -279,7 +281,7 @@ always_comb begin
     // Update performance counter
     if (p4_jump || prev_jump)
         next_perf_count = `PERF_JUMP;
-    else if (hazard_a1 || hazard_b1 || hazard_a2 || hazard_b2)
+    else if (hazard_a1 || hazard_b1 || hazard_a2 || hazard_b2 || hazard_c1)
         next_perf_count = `PERF_SCOREBOARD;
     else if (hazard_mem || hazard_div)
         next_perf_count = `PERF_RESOURCE;        

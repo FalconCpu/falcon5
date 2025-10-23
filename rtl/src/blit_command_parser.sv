@@ -231,11 +231,6 @@ always_comb begin
                         consume_cmd = 1'b1;
                     end 
                 
-                CMD_SET_AFFINE: begin
-                    next_state = STATE_SET_AFFINE;
-                    consume_cmd = 1'b1;
-                end
-
                 default: begin
                         $display("BLIT_CMD: Warning: Unknown command %x", cmd_code);
                         consume_cmd = 1'b1;
@@ -378,13 +373,13 @@ always_comb begin
         STATE_SET_AFFINE: begin
             if (cmd_valid) begin
                 if (arg_count == 3'd0) begin
-                    next_reg_src_dx_x = this_cmd;
+                    next_reg_src_dx_x = this_cmd[31:0];
                 end else if (arg_count == 3'd1) begin
-                    next_reg_src_dy_y = this_cmd;
+                    next_reg_src_dy_y = this_cmd[31:0];
                 end else if (arg_count == 3'd2) begin
-                    next_reg_src_dy_x = this_cmd;
+                    next_reg_src_dy_x = this_cmd[31:0];
                 end else if (arg_count == 3'd3) begin
-                    next_reg_src_dx_y = this_cmd;
+                    next_reg_src_dx_y = this_cmd[31:0];
                     next_state = STATE_IDLE;
                 end 
                 next_arg_count = arg_count + 3'd1;

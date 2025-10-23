@@ -5,6 +5,7 @@
 ../src/kprintf.fpl
 ../src/graphicsContext.fpl
 ../src/keyboard.fpl
+../src/list.fpl
 ../modtracker/exceptions.fpl
 ../modtracker/filehandler.fpl
 ../modtracker/modTracker.fpl

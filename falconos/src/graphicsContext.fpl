@@ -19,6 +19,9 @@ class GraphicsContext
     var fontHeight = 16
     var affineSet = false
 
+    fun setGraphicsBuffer(address:Int)
+        screenAddress = address
+        setup()
 
     fun setup()
         hwregs.blit_ctrl = 1                # Enable blitter
@@ -42,8 +45,8 @@ class GraphicsContext
         hwregs.ledr = 0
         
         hwregs.blit_cmd = CMD_DRAW_RECT | color  # CMD RECT COLOR = color
-        hwregs.blit_cmd = y1 lsl 16 | x1          # x,y
-        hwregs.blit_cmd = y2 lsl 16 | x2          # w,h
+        hwregs.blit_cmd = y1 lsl 16 | (x1 & 0xFFFF)          # x,y
+        hwregs.blit_cmd = y2 lsl 16 | (x2 & 0xFFFF)          # w,h
 
     fun drawText(x:Int, y:Int, color:Int, text:String)
         while (hwregs.blit_cmd < 3)         # Wait for blitter to have at least 3 free slots in command queue
@@ -110,8 +113,8 @@ class GraphicsContext
         hwregs.blit_cmd = 0                 # src x,y = 0,0
 
     fun drawImage(x:Int, y:Int, image:Image, scaleX:Float, scaleY:Float)
-        val dx = (scaleX * 65536.0) as Int
-        val dy = (scaleY * 65536.0) as Int
+        val dx = (65536.0/scaleX) as Int
+        val dy = (65536.0/scaleY) as Int
 
 
         while (hwregs.blit_cmd < 12)         # Wait for blitter to have free slots
@@ -124,14 +127,18 @@ class GraphicsContext
         hwregs.blit_cmd = 0                 # shearY
         affineSet = true
     
+        val absScaleX = if scaleX<0.0 then -scaleX else scaleX
+        val absScaleY = if scaleY<0.0 then -scaleY else scaleY
+        val scaledWidth = (image.width * absScaleX) as Int & 0xFFFF
+        val scaledHeight = (image.height * absScaleY) as Int & 0xFFFF
 
         hwregs.blit_cmd = CMD_SET_SRC | image.width  # CMD SET SRC, width
         hwregs.blit_cmd = unsafe(image.data as Int)  # SRC address
 
         hwregs.blit_cmd = CMD_COPY_RECT     # CMD COPY
-        hwregs.blit_cmd = y lsl 16 | x      # dest x1,y1
-        hwregs.blit_cmd = (y + image.height) lsl 16 | (x + image.width)  # dest x2,y2
-        hwregs.blit_cmd = (if scaleX<0.0 then image.width else 0) + 
+        hwregs.blit_cmd = (y lsl 16) | (x & 0xFFFF)      # dest x1,y1
+        hwregs.blit_cmd = (y + scaledHeight) lsl 16 | ((x + scaledWidth) & 0xFFFF)  # dest x2,y2
+        hwregs.blit_cmd = (if scaleX<0.0 then image.width & 0xFFFF else 0) + 
                           (if scaleY<0.0 then image.height else 0) lsl 16
 
 
