@@ -45,6 +45,7 @@ logic [31:0] div_mantissa;
 logic [7:0]  div_exponent;
 logic        div_sign;
 logic [4:0]  div_dest;
+logic        div_ack;
 
 
 fpu_add  fpu_add_inst (
@@ -97,7 +98,8 @@ fpu_div  fpu_div_inst (
     .div_exponent(div_exponent),
     .div_sign(div_sign),
     .div_dest(div_dest),
-    .fpu_div_busy(fpu_div_busy)
+    .fpu_div_busy(fpu_div_busy),
+    .div_ack(div_ack)
   );
 
 fpu_ftoi  fpu_ftoi_inst (
@@ -151,7 +153,8 @@ fpu_normalize  fpu_normalize_inst (
     .div_dest(div_dest),
     .fpu_result(fpu_result),
     .fpu_valid(fpu_valid),
-    .fpu_dest(fpu_dest)
+    .fpu_dest(fpu_dest),
+    .div_ack(div_ack)
   );
 
 

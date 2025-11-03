@@ -178,12 +178,16 @@ logic         hwregs_blit_valid;
 logic [31:0]  hwregs_blit_command;
 logic         hwregs_blit_privaledge;
 logic [9:0]   blit_fifo_slots_free;
+logic         cpu_read_overflow;
+logic         cpu_stuck;
 
 
 logic [9:0]  mouse_x;
 logic [9:0]  mouse_y;
 logic [9:0]  vga_row;
 logic [2:0]  perf_count;
+logic [9:0]  ledr;
+logic [31:0] vga_frame_num;
 
 
 assign GPIO_1 = {blitw_sdram_wstrb,sdram_write, sdram_request, 2'b0,sdram_address};
@@ -233,7 +237,9 @@ cpu  cpu_inst (
     .cpu_icache_raddr(cpu_icache_raddr),
     .cpu_icache_rtag(cpu_icache_rtag),
     .perf_count(perf_count),
-    .cpu_pc(cpu_pc)
+    .cpu_pc(cpu_pc),
+    .cpu_read_overflow(cpu_read_overflow),
+    .cpu_stuck(cpu_stuck)
   );
 
 assign hwregs_rdata = hwregs_rdata_regs | hwregs_rdata_audio;
@@ -289,7 +295,7 @@ aux_decoder  aux_decoder_inst (
     .HEX4(HEX4),
     .HEX5(HEX5),
     .KEY(KEY),
-    .LEDR(LEDR),
+    .LEDR(ledr),
     .SW(SW),
     .UART_TX(GPIO_0[0]),
     .UART_RX(GPIO_0[1]),
@@ -305,8 +311,12 @@ aux_decoder  aux_decoder_inst (
     .mouse_y(mouse_y),
     .perf_count(perf_count),
     .vga_row(vga_row),
-    .cpu_pc(cpu_pc[23:0])
+    .cpu_pc(cpu_pc[23:0]),
+    .vga_frame_num(vga_frame_num)
   );
+
+assign LEDR[9:0] = ledr[9:0] | {cpu_read_overflow,cpu_stuck,8'b0};
+
 
 // verilator lint_off PINCONNECTEMPTY
 sdram_arbiter  sdram_arbiter_inst (
@@ -449,7 +459,8 @@ vga  vga_inst (
     .vga_sdram_complete(vga_sdram_complete),
     .mouse_x(mouse_x),
     .mouse_y(mouse_y),
-    .vga_row(vga_row)
+    .vga_row(vga_row),
+    .vga_frame_num(vga_frame_num)
   );
 
 blitter  blitter_inst (

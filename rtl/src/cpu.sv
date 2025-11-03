@@ -38,8 +38,10 @@ module cpu(
     input  logic [31:0]  cpu_icache_raddr,     // The address of the read data.
     input  logic [8:0]   cpu_icache_rtag,      // The returned tag of the read data.
 
-    output logic [2:0]   perf_count,       // Performance counter output
-    output logic [31:0]  cpu_pc           // Current CPU PC (for debug)
+    output logic [2:0]   perf_count,        // Performance counter output
+    output logic [31:0]  cpu_pc,            // Current CPU PC (for debug)
+    output logic         cpu_read_overflow, // Read path overflow indicator
+    output logic         cpu_stuck          // CPU is stuck
 );
 
 // Outputs from IFetch
@@ -184,7 +186,8 @@ always @(posedge clock)
     .p4_mem_busy(p4_mem_busy),
     .fpu_div_busy(fpu_div_busy),
     .p4_jump(p4_jump),
-    .perf_count(perf_count)
+    .perf_count(perf_count),
+    .cpu_stuck(cpu_stuck)
   );
 
 cpu_regfile  cpu_regfile_inst (
@@ -357,7 +360,8 @@ data_cache  data_cache_inst (
     .div_dest_reg(div_dest_reg),
     .fpu_valid(fpu_valid),
     .fpu_result(fpu_result),
-    .fpu_dest_reg(fpu_dest_reg)
+    .fpu_dest_reg(fpu_dest_reg),
+    .cpu_read_overflow(cpu_read_overflow)
   );
 
 fpu  fpu_inst (

@@ -32,6 +32,7 @@
 // E000005C  PERF_COUNT_RS  R    Performance counter: Number of nulls due to resource stalls (divider/memory)
 // E0000060  COUNT_RX       RW   Count the number of bytes received from the UART
 // E0000064  OVERFLOW       R    Overflow status of the FIFOs
+// E0000068  VGA_FRAME_NUM  R    Current VGA frame number (for fps timing)
 // E00001XX  VGA layers registers       
 // E00002XX  AUDIO registers
 // E0001XXX  VGA Palette registers
@@ -82,6 +83,7 @@ module hwregs (
     output              SCL,
     output logic [9:0]  mouse_x,
     output logic [9:0]  mouse_y,
+    input  logic [31:0] vga_frame_num,   // Current VGA frame number (for fps timing)
 
     input  logic [9:0]  vga_row,        // Current VGA row (for vsync timing)
     input  logic [23:0] cpu_pc,         // Current CPU PC (for capture on seven seg)
@@ -249,6 +251,7 @@ always_ff @(posedge clock) begin
             16'h005C: hwregs_rdata <= perf_div_1024 ? perf_count_rs[41:10] : perf_count_rs[31:0];
             16'h0060: hwregs_rdata <= count_rx_bytes;
             16'h0064: hwregs_rdata <= {29'b0, fifo_overflow};
+            16'h0068: hwregs_rdata <= vga_frame_num;
             default:  hwregs_rdata <= 32'b0;
         endcase
     end

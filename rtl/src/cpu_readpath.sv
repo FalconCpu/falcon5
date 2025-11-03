@@ -27,7 +27,8 @@ module cpu_readpath(
     // Inputs from FPU
     input  logic        fpu_valid,           // result is complete
     input  logic [31:0] fpu_result,
-    input  logic [4:0]  fpu_dest_reg
+    input  logic [4:0]  fpu_dest_reg,
+    output logic        cpu_read_overflow        // read path skid buffer overflow
 );
 
 logic        mem_valid, next_mem_valid;
@@ -39,6 +40,9 @@ logic [31:0] skid1_result, next_skid1_result;
 logic        skid2_valid, next_skid2_valid;
 logic [4:0]  skid2_dest, next_skid2_dest;
 logic [31:0] skid2_result, next_skid2_result;
+logic        skid3_valid, next_skid3_valid;
+logic [4:0]  skid3_dest, next_skid3_dest;
+logic [31:0] skid3_result, next_skid3_result;
 
 logic       error_skid_overflow;
 
@@ -59,6 +63,9 @@ always_comb begin
     next_skid2_valid    = skid2_valid;
     next_skid2_dest     = skid2_dest;
     next_skid2_result   = skid2_result;
+    next_skid3_valid    = skid3_valid;
+    next_skid3_dest     = skid3_dest;
+    next_skid3_result   = skid3_result;
     error_skid_overflow = 1'b0;
 
     // If the combine stage is ready shift data along
@@ -69,9 +76,12 @@ always_comb begin
         next_skid1_valid  = skid2_valid;
         next_skid1_dest   = skid2_dest;
         next_skid1_result = skid2_result;
-        next_skid2_valid  = 1'b0;
-        next_skid2_dest   = 5'b0;
-        next_skid2_result = 32'bx;
+        next_skid2_valid  = skid3_valid;
+        next_skid2_dest   = skid3_dest;
+        next_skid2_result = skid3_result;
+        next_skid3_valid  = 1'b0;
+        next_skid3_dest   = 5'b0;
+        next_skid3_result = 32'bx;
     end
 
     // If there is new data from the memif extract it
@@ -126,6 +136,10 @@ always_comb begin
             next_skid2_valid  = 1'b1;
             next_skid2_dest   = dest;
             next_skid2_result = data;
+        end else if (!next_skid3_valid) begin
+            next_skid3_valid  = 1'b1;
+            next_skid3_dest   = dest;
+            next_skid3_result = data;
         end else if (dest!=5'b0) begin        
             // No space in the pipeline for the new data
             error_skid_overflow = 1'b1;
@@ -146,6 +160,10 @@ always_comb begin
             next_skid2_valid  = 1'b1;
             next_skid2_dest   = aux_dest;
             next_skid2_result = aux_data;
+        end else if (next_skid3_valid) begin
+            next_skid3_valid  = 1'b1;
+            next_skid3_dest   = aux_dest;
+            next_skid3_result = aux_data;
         end else if (aux_dest!=5'b0) begin        
             // No space in the pipeline for the new data
             error_skid_overflow = 1'b1;
@@ -166,6 +184,10 @@ always_comb begin
             next_skid2_valid  = 1'b1;
             next_skid2_dest   = fpu_dest_reg;
             next_skid2_result = fpu_result;
+        end else if (!next_skid3_valid) begin
+            next_skid3_valid  = 1'b1;
+            next_skid3_dest   = fpu_dest_reg;
+            next_skid3_result = fpu_result;
         end else if (fpu_dest_reg!=5'b0) begin        
             // No space in the pipeline for the new data
             error_skid_overflow = 1'b1;
@@ -186,6 +208,10 @@ always_comb begin
             next_skid2_valid  = 1'b1;
             next_skid2_dest   = div_dest_reg;
             next_skid2_result = div_result;
+        end else if (!next_skid3_valid) begin
+            next_skid3_valid  = 1'b1;
+            next_skid3_dest   = div_dest_reg;
+            next_skid3_result = div_result;
         end else if (div_dest_reg!=5'b0) begin        
             // No space in the pipeline for the new data
             error_skid_overflow = 1'b1;
@@ -201,6 +227,8 @@ always_comb begin
         next_skid2_dest     = 5'b0;
         next_skid2_result   = 32'bx;
         error_skid_overflow = 1'b0;
+        next_skid3_dest     = 5'b0;
+        next_skid3_result   = 32'bx;
     end
 
 end
@@ -213,9 +241,13 @@ always_ff @(posedge clock) begin
     skid2_valid  <= next_skid2_valid;
     skid2_dest   <= next_skid2_dest;
     skid2_result <= next_skid2_result;
+    skid3_valid  <= next_skid3_valid;
+    skid3_dest   <= next_skid3_dest;
+    skid3_result <= next_skid3_result;
     mem_valid    <= next_mem_valid;
     mem_dest     <= next_mem_dest_reg;
     mem_result   <= next_mem_result;
+    cpu_read_overflow <= reset ? 1'b0 : cpu_read_overflow | error_skid_overflow;
 end
 
 // synopsys translate_off

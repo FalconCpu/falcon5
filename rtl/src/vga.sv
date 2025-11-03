@@ -31,7 +31,8 @@ module vga(
     // Mouse coordinates
     input  logic [9:0]  mouse_x,
     input  logic [9:0]  mouse_y,
-    output logic [9:0]  vga_row
+    output logic [9:0]  vga_row,
+    output logic [31:0] vga_frame_num
 );
 
 logic new_pixel;   // New pixel available
@@ -188,6 +189,13 @@ vga_output  vga_output_inst (
     .mouse_y(mouse_y),
     .vga_row(vga_row)
   );
+
+always_ff @(posedge clock) begin
+    if (reset)
+        vga_frame_num <= 32'd0;
+    else if (new_frame)
+        vga_frame_num <= vga_frame_num + 32'd1;
+end
 
 wire unused_ok = &{1'b0, cache_raddress[25:2]};
 endmodule

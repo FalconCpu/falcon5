@@ -12,7 +12,8 @@ module fpu_div (
     output logic [7:0]  div_exponent,       
     output logic        div_sign,       
     output logic [4:0]  div_dest,
-    output logic        fpu_div_busy
+    output logic        fpu_div_busy,
+    input logic         div_ack
 );
 
 logic        sign_a;
@@ -26,12 +27,21 @@ logic [23:0] denominator;
 logic [24:0] remainder;
 logic [4:0]  count;
 logic [24:0] s;
+logic        div_valid_internal;
+
 
 assign fpu_div_busy = fpu_div_start || (count != 0);
 
+initial begin
+    div_valid_internal = 1'b0;
+    count = 5'd0;
+end
+
+assign div_valid = div_valid_internal && !div_ack;
+
 // verilator lint_off BLKSEQ
 always_ff @(posedge clock) begin
-    div_valid <= 1'b0;
+    div_valid_internal <= div_valid_internal && !div_ack;
 
     if (fpu_div_start) begin
         sign_a = fpu_a[31];
@@ -58,7 +68,7 @@ always_ff @(posedge clock) begin
         end
         count <= count - 5'd1;
         if (count == 5'd1) begin
-            div_valid <= 1'b1;
+            div_valid_internal <= 1'b1;
         end
     end
 

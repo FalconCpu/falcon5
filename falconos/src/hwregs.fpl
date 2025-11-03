@@ -26,6 +26,7 @@ class HwRegs
     var perf_count_rs  : Int  # Performance counter: Number of nulls due to resource stalls (divider/memory)
     var count_rx_bytes : Int  # Number of bytes received on the UART
     var fifo_overflow  : Int  # Flag to indicate which fifos have overflowed
+    var frame_number   : Int  # Frame number (increments each frame)
 
 const hwregs = unsafe(0xE0000000 as HwRegs)
 

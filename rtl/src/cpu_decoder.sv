@@ -35,7 +35,8 @@ module cpu_decoder(
     input  logic         fpu_div_busy,        // FPU divider is busy
     input  logic         p4_mem_busy,         // Memory queue is full
     input  logic         p4_jump,             // Jump taken in ALU stage
-    output logic [2:0]   perf_count           // 
+    output logic [2:0]   perf_count,          // 
+    output logic         cpu_stuck           // CPU is stuck
 );
 
 // Instruction format
@@ -81,6 +82,8 @@ logic        hazard_mem, hazard_div;      // Resource hazards
 logic [2:0]  next_perf_count, next2_perf_count;
 logic        prev_jump;
 logic [4:0]  p4_latent_dest;
+logic [6:0]  stuck_count, next_stuck_count;
+
 // Combinatorial logic
 
 always_comb begin
@@ -97,6 +100,7 @@ always_comb begin
     p2_latent_dest  = 5'b0;
     p2_latent2      = 1'b0;
     scoreboard      = prev_scoreboard;
+    next_stuck_count= stuck_count;
 
     // Decode the instruction
     if (p2_valid==1'b0 || p4_jump) begin
@@ -288,8 +292,18 @@ always_comb begin
     else
         next_perf_count = `PERF_OK;
 
+
+    // CPU stuck detection
+    if (p2_ready==1'b0) begin
+        next_stuck_count = stuck_count + {6'b0,stuck_count!=127};
+    end else begin
+        next_stuck_count = 7'd0;
+    end
+    cpu_stuck = (next_stuck_count==127);
+
     // reset
     if (reset) begin
+        next_stuck_count  = 7'd0;
         scoreboard      = 32'b0;
         p2_op           = `OP_NOP;
         p2_dest         = 5'b0;
@@ -318,5 +332,6 @@ always_ff @(posedge clock) begin
     next2_perf_count<= next_perf_count;
     prev_jump       <= p4_jump;
     p3_instr        <= p2_instr;
+    stuck_count     <= next_stuck_count;
 end
 endmodule

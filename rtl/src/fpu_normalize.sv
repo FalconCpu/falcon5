@@ -34,6 +34,7 @@ module fpu_normalize (
     input logic [7:0]  div_exponent,   // input exponent (with bias)
     input logic        div_sign,       // input sign
     input logic [4:0]  div_dest,       // destination register
+    output logic       div_ack,        // division result acknowledged
 
     output logic [31:0] fpu_result,      // normalized floating-point result
     output logic        fpu_valid,       // result is valid
@@ -55,6 +56,7 @@ logic        is_integer;
 // verilator lint_off BLKSEQ
 always_ff @(posedge clock) begin
     is_integer = 1'b0;
+    div_ack = 1'b0;
 
     // Select between add and multiply inputs
     if (add_valid) begin
@@ -91,6 +93,7 @@ always_ff @(posedge clock) begin
         in_exponent = div_exponent;
         in_sign     = div_sign;
         in_dest     = div_dest;
+        div_ack     = div_valid;
     end
 
     // Count leading zeros for normalization
