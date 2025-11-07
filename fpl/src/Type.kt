@@ -1,3 +1,5 @@
+import kotlin.math.min
+
 // Type system
 
 var errorEnum : TypeEnum? = null
@@ -189,6 +191,9 @@ class TypeFunction private constructor(val parameterType:List<Type>, val returnT
     }
 }
 
+class TypeStruct(name:String, val fields:List<FieldSymbol>, val instanceSize:Int) : Type(name)
+
+
 // Type checking
 fun Type.isAssignableTo(other: Type): Boolean {
     if (this == other) return true
@@ -296,6 +301,12 @@ fun Type.getSize(): Int = when (this) {
     is TypeInlineArray -> elementType.getSize() * size
     is TypeFunction -> 4
     is TypePointer -> 4
+    is TypeStruct -> instanceSize
+}
+
+fun Type.isAggregate() : Boolean = when(this) {
+    is TypeStruct -> true
+    else -> false
 }
 
 // ========================================================================
@@ -330,6 +341,7 @@ fun Type.mapType(typeMap: Map<TypeGenericParameter, Type>): Type {
         TypeNull,
         TypeReal,
         TypeString,
+        is TypeStruct,
         TypeUnit -> this
         is TypeInlineArray -> TypeInlineArray.create(elementType.mapType(typeMap), size)
         is TypeFunction -> this // TODO

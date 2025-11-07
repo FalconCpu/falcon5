@@ -74,7 +74,7 @@ fun loadOp(size:Int) = when(size) {
     1 -> "ldb"
     2 -> "ldh"
     4 -> "ldw"
-    else -> error("Invalid size")
+    else -> error("Invalid size $size")
 }
 
 fun storeOp(size:Int) = when(size) {

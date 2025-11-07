@@ -27,6 +27,7 @@ class FunctionSymbol(location: Location, name: String) : Symbol(location, name, 
 }
 class TypeNameSymbol(location: Location, name: String, type:Type) : Symbol(location, name, type, false)
 class FieldSymbol(location: Location, name: String, type: Type, mutable:Boolean, var offset:Int=-1) : Symbol(location, name, type, mutable)
+class StackVarSymbol(location: Location, name: String, type: Type, mutable:Boolean, var offset:Int=-1) : Symbol(location, name, type, mutable)
 
 // Represents accessing a field or property of an object, e.g., obj.field
 // Only used during type checking, not in the final IR
@@ -163,6 +164,7 @@ fun Symbol.getDescription() : String = when (this) {
     is VarSymbol -> "variable"
     is FieldSymbol -> "field"
     is AccessSymbol -> "fieldAccess"
+    is StackVarSymbol -> "stack variable"
 }
 
 
@@ -200,6 +202,7 @@ fun Symbol.mapType(typeMap: Map<TypeGenericParameter, Type>) : Symbol {
         }
         is GlobalVarSymbol -> this
         is TypeNameSymbol -> TypeNameSymbol(location, name, type.mapType(typeMap))
+        is StackVarSymbol -> StackVarSymbol(location, name, type.mapType(typeMap), mutable, offset)
         is VarSymbol -> VarSymbol(location, name, type.mapType(typeMap), mutable)
         is AccessSymbol -> error("AccessSymbol should not be mapped")
     }
@@ -225,6 +228,7 @@ private fun Symbol.toJson():String {
         }
         is VarSymbol -> "var"
         is AccessSymbol -> "fieldAccess"
+        is StackVarSymbol -> "stackVar"
     }
 
     val type = if (this is FunctionSymbol) this.overloads[0].returnType else this.type

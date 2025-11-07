@@ -47,8 +47,6 @@ private fun AstExpr.typeCheckRvalue(scope: AstBlock, allowTypes:Boolean=false) :
         is TctMemberExpr -> {
             val sym = ret.getSymbol()
             val refinedType = pathContext.refinedTypes[sym]
-//            Throwable().printStackTrace()
-//            println("$location Refined type for $this $sym is $refinedType")
 
             if (ret.type is TypeErrable && refinedType!=null && refinedType !is TypeErrable)
                 return TctExtractCompoundExpr(location, ret, 1,refinedType)
@@ -92,6 +90,12 @@ private fun TctExpr.checkIsLvalue() {
 
         is TctMakeTupleExpr -> {
             elements.forEach { it.checkIsLvalue() }
+        }
+
+        is TctStackVariable -> {
+            if(!sym.mutable && sym !in pathContext.uninitializedVariables)
+                Log.error(location, "'$sym' is not mutable")
+            pathContext = pathContext.initialize(sym)
         }
 
         else -> Log.error(location,"expression  is not an Lvalue")
@@ -238,6 +242,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
                     else
                         TctErrorExpr(location, "Field '${sym.name}' cannot be accessed outside of a class context")
                 }
+                is StackVarSymbol -> TctStackVariable(location, sym, sym.type)
                 is AccessSymbol -> error("Access symbols should not appear in AST")
             }
 
@@ -276,7 +281,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
         }
 
         is AstCallExpr -> {
-            val tctFunc = func.typeCheckRvalue(scope)
+            val tctFunc = func.typeCheckExpr(scope)
             val tctArgs = args.map{ it.typeCheckRvalue(scope) }
             if (tctArgs.any { it.type is TypeError })
                 return TctErrorExpr(location, "")
@@ -305,6 +310,18 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
                         ?: return TctErrorExpr(location, "")  // Error message is reported by resolveOverload()
                     TctCallExpr(location, tctFunc.objectExpr, resolvedFunc.function, tctArgs, resolvedFunc.returnType)
                 }
+                is TctTypeName -> {
+                    if (tctFunc.type is TypeStruct) {
+                        val structType = tctFunc.type
+                        if (tctArgs.size!=structType.fields.size)
+                            return TctErrorExpr(location,"Got ${tctArgs.size} arguments when expecting ${structType.fields.size}")
+                        for(i in tctArgs.indices)
+                            tctArgs[i].checkType(structType.fields[i].type)
+                        TctMakeStructExpr(location, structType, tctArgs)
+                    } else
+                        TctErrorExpr(location, "Type '${tctFunc.type}' cannot be called like a function")
+                }
+
                 else -> if (tctFunc.type is TypeFunction) {
                     if (tctArgs.size!=tctFunc.type.parameterType.size)
                         return TctErrorExpr(location,"Got ${tctArgs.size} arguments when expecting ${tctFunc.type.parameterType.size}")
@@ -392,6 +409,14 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
                         TctExtractCompoundExpr(location, tctExpr, index, tctExpr.type.elementTypes[index])
                 }
 
+                is TypeStruct -> {
+                    val field = tctExpr.type.fields.find {it.name==memberName}
+                    if (field==null)
+                        TctErrorExpr(location, "Struct '${tctExpr.type.name}' has no member '${memberName}'")
+                    else
+                        TctMemberExpr(location, tctExpr, field, field.type)
+                }
+
                 else -> TctErrorExpr(location, "Cannot access member '${memberName}' of type '${tctExpr.type}'")
             }
         }
@@ -413,7 +438,8 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
                         return TctErrorExpr(location, "Cannot create array of negative size")
                     tcLambda?.checkType(type.elementType)
                     val arrayType = TypeArray.create(type.elementType)
-                    return TctNewArrayExpr(location, type, size, arena, tcLambda, arrayType)
+                    val clearMem = (tcLambda==null) && !insideUnsafe        // Don't clear memory if a lambda is provided or inside an unsafe block
+                    return TctNewArrayExpr(location, type.elementType, size, arena, tcLambda, clearMem, arrayType)
                 }
 
                 is TypeClassInstance -> {
@@ -831,15 +857,25 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
             )
             if (type is TypeUnit)
                 Log.error(location, "Variable '${name}' cannot be of type Unit")
-            val sym = if (scope is AstFile)
+            if (type is TypeStruct && scope is AstFile)
+                Log.error(location, "Global struct variables not yet supported")
+
+            val sym = if (type is TypeStruct)
+                StackVarSymbol(location, name, type, mutable)
+            else if (scope is AstFile)
                 newGlobalVar(location, name, type, mutable)
             else
                 VarSymbol(location, name, type, mutable)
+
             scope.addSymbol(sym)
             val tcr = tctInitializer?.checkType(type)
             if (tcr == null)
                 pathContext = pathContext.addUninitialized(sym)
-            TctVarDeclStmt(location, sym, tcr)
+
+            if (sym is StackVarSymbol)
+                TctStructVarDeclStmt(location, sym, tcr)
+            else
+                TctVarDeclStmt(location, sym, tcr)
         }
 
         is AstFunctionDefStmt -> {
@@ -1008,7 +1044,12 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
                 if (lhs.type != TypeInt)
                     Log.error(location, "Operator '$op' not defined for type '${lhs.type}'")
             }
-            TctAssignStmt(location, op, lhs, rhs)
+            if (rhs.type.isAggregate()) {
+                if (op != TokenKind.EQ)
+                    Log.error(location, "Can only assign to aggregate types with '=' operator")
+                TctAssignAggregateStmt(location, lhs, rhs)
+            } else
+                TctAssignStmt(location, op, lhs, rhs)
         }
 
         is AstIfClause -> error("Should not be type checking AstIfClause directly, it should be part of AstIfStmt")
@@ -1114,6 +1155,8 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
             pathContext = pathConextOut.merge()
             TctWhenStmt(location, tctExpr, clauses)
         }
+
+        is AstStructDefStmt -> TctEmptyStmt(location)   // Do nothing here as all processing is done in IdentifyFunctions()
     }
 }
 
@@ -1355,6 +1398,21 @@ private fun AstBlock.findFunctionDefinitions(scope:AstBlock) {
         is AstEnumDefStmt -> {
             val paramsSymbols = params.map{ it.createFieldSymbol(this)}
             enum.parameters = paramsSymbols
+        }
+
+        is AstStructDefStmt -> {
+            val fieldSyms = fields.map { it.createFieldSymbol(this) }
+            var offset = 0
+            for (field in fieldSyms) {
+                field.offset = offset
+                if (field.type is TypeStruct)
+                    Log.error(field.location, "Nested structs are not supported")
+                offset += (field.type.getSize() + 3) and -4  // align to 4 bytes
+            }
+
+            val structType = TypeStruct(name, fieldSyms, offset)
+            val sym = TypeNameSymbol(location, name, structType)
+            scope.addSymbol(sym)
         }
 
         else -> {}

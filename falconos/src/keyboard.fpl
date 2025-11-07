@@ -30,6 +30,8 @@ const KEY_SCANCODE_LEFT = 0xEB
 const KEY_SCANCODE_RIGHT = 0xF4
 const KEY_SCANCODE_UP = 0xF5
 const KEY_SCANCODE_DOWN = 0xF2
+const KEY_SCANCODE_SPACE = 0x29
+const KEY_SCANCODE_B = 0x32
 
 # lookup table of Scan codes to ASCII
 # One row per scan code
@@ -332,7 +334,6 @@ class Keyboard
         if key > 255
             return 0
 
-        kprintf("Keycode: %x %x\n", key, pressed)
         keyDown[key] = pressed
         when key
             0x12 -> lshift = pressed

@@ -10,6 +10,7 @@ sealed class Tct (val location: Location)
 sealed class TctExpr(location: Location, val type:Type) : Tct(location)
 class TctConstant(location: Location, val value: Value) : TctExpr(location, value.type)
 class TctVariable(location: Location, val sym:VarSymbol, type:Type) : TctExpr(location, type)
+class TctStackVariable(location: Location, val sym:StackVarSymbol, type:Type) : TctExpr(location, type)
 class TctFunctionName(location: Location, val sym: FunctionSymbol, type:Type) : TctExpr(location, type)
 class TctTypeName(location: Location, val sym: TypeNameSymbol) : TctExpr(location, sym.type)
 class TctBinaryExpr(location: Location, val op: BinOp, val lhs: TctExpr, val rhs: TctExpr, type:Type) : TctExpr(location, type)
@@ -23,7 +24,7 @@ class TctBreakExpr(location: Location) : TctExpr(location, TypeNothing)
 class TctCallExpr(location: Location, val thisArg:TctExpr?, val func:Function, val args: List<TctExpr>, type:Type) : TctExpr(location, type)
 class TctIndexExpr(location: Location, val array: TctExpr, val index: TctExpr, type:Type) : TctExpr(location, type)
 class TctMemberExpr(location: Location, val objectExpr: TctExpr, val member:FieldSymbol, type:Type) : TctExpr(location, type)
-class TctNewArrayExpr(location: Location, val elementType: Type, val size:TctExpr, val arena: Arena, val lambda:TctLambdaExpr?, type:Type) : TctExpr(location, type)
+class TctNewArrayExpr(location: Location, val elementType: Type, val size:TctExpr, val arena: Arena, val lambda:TctLambdaExpr?, val clearMem:Boolean, type:Type) : TctExpr(location, type)
 class TctNewInlineArrayExpr(location: Location, val arena: Arena, val lambda:TctLambdaExpr?, type:Type) : TctExpr(location, type)
 class TctNewArrayLiteralExpr(location: Location,val elements: List<TctExpr>,val arena: Arena,type:Type) : TctExpr(location, type)
 class TctNegateExpr(location: Location, val expr: TctExpr) : TctExpr(location, expr.type)
@@ -50,6 +51,7 @@ class TctIntToRealExpr(location: Location, val expr:TctExpr) : TctExpr(location,
 class TctRealToIntExpr(location: Location, val expr:TctExpr) : TctExpr(location, TypeInt)
 class TctFpuExpr(location: Location, val op:FpuOp, val lhs:TctExpr, val rhs:TctExpr, type:Type) : TctExpr(location, type)
 class TctRealCompareExpr(location: Location, val op: BinOp, val lhs: TctExpr, val rhs: TctExpr) : TctExpr(location, TypeBool)
+class TctMakeStructExpr(location: Location, type:TypeStruct, val fieldValues:List<TctExpr>) : TctExpr(location, type)
 
 class TctErrorExpr(location: Location, val message: String = "") : TctExpr(location, TypeError) {
     init {
@@ -61,10 +63,12 @@ class TctErrorExpr(location: Location, val message: String = "") : TctExpr(locat
 // Statement nodes
 sealed class TctStmt(location: Location) : Tct(location)
 class TctVarDeclStmt(location: Location, val sym:Symbol, val initializer: TctExpr?) : TctStmt(location)
+class TctStructVarDeclStmt(location: Location, val sym:StackVarSymbol, val initializer:TctExpr?) : TctStmt(location)
 class TctDestructuringDeclStmt(location: Location, val syms: List<VarSymbol>, val initializer: TctExpr) : TctStmt(location)
 class TctEmptyStmt(location: Location) : TctStmt(location)
 class TctExpressionStmt(location: Location, val expr: TctExpr) : TctStmt(location)
 class TctAssignStmt(location: Location, val op:TokenKind, val lhs: TctExpr, val rhs: TctExpr) : TctStmt(location)
+class TctAssignAggregateStmt(location: Location, val lhs: TctExpr, val rhs:TctExpr) : TctStmt(location)
 class TctClassDefStmt(location: Location, val klass: TypeClass, val initializers: List<TctFieldInitializer>, val methods:List<TctFunctionDefStmt>) : TctStmt(location)
 class TctFreeStmt(location: Location, val expr: TctExpr) : TctStmt(location)
 

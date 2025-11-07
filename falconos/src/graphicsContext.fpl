@@ -60,8 +60,18 @@ class GraphicsContext
         hwregs.blit_cmd = 0                 # null terminate to end string
 
     fun drawText(x:Int, y:Int, color:Int, bgColor:Int, text:String)
-        while (hwregs.blit_cmd < 3)         # Wait for blitter to have at least 3 free slots in command queue
+        while (hwregs.blit_cmd < 8)         # Wait for blitter to have at least 3 free slots in command queue
             val dummy = 1
+
+        if affineSet
+            hwregs.blit_cmd = CMD_SET_AFFINE    # CMD SET AFFINE
+            hwregs.blit_cmd = 65536             # scaleX = 1.0
+            hwregs.blit_cmd = 65536             # scaleY = 1.0
+            hwregs.blit_cmd = 0                 # shearX
+            hwregs.blit_cmd = 0                 # shearY
+            affineSet = false
+
+
         hwregs.blit_cmd = CMD_DRAW_TEXT | color | (bgColor lsl 8)
         hwregs.blit_cmd = y lsl 16 | x
         for c in text

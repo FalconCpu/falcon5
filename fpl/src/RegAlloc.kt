@@ -95,7 +95,7 @@ class RegisterAllocator(private val func: Function, private val livemap: LiveMap
             if (v !in interfere[r])
                 return r
         }
-        error("Unable to find a register for ${func.regs[v]}")
+        error("Unable to find a register for ${func.regs[v]} in function ${func.name}")
     }
 
     private fun replace(a: Reg) = cpuRegs[alloc[a.index]]

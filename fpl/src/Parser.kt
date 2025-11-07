@@ -577,6 +577,14 @@ class Parser(val lexer: Lexer) {
         return AstClassDefStmt(name.location, name.value, typeParams, parentClass, constructorArgs, parentArgs, body)
     }
 
+    private fun parseStructDef() : AstStructDefStmt {
+        expect(STRUCT)
+        val name = expect(IDENTIFIER)
+        val fields = parseParameterList(false)
+        expectEol()
+        return AstStructDefStmt(name.location, name.value, fields)
+    }
+
     private fun parseExpressionStmt() : AstStmt {
         val loc = currentToken.location
         val expr = parsePrefixExpr()
@@ -721,6 +729,7 @@ class Parser(val lexer: Lexer) {
                 ENUM -> parseEnum()
                 FREE -> parseFreeStmt()
                 WHEN -> parseWhenStmt()
+                STRUCT -> parseStructDef()
                 ELSIF -> throw ParseError(currentToken.location, "ELSIF without IF")
                 ELSE -> throw ParseError(currentToken.location, "ELSE without IF")
                 END -> throw ParseError(currentToken.location, "END without IF, WHILE, REPEAT or FUN")

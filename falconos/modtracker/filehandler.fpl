@@ -126,7 +126,7 @@ fun uartReceiveFrame() -> UartFrame!
     hwregs.count_rx_bytes = 0
     if length < 0 or length > 2000000
         return Error.INVALID_ARGUMENT
-    val data = new Array<Char>(length)
+    val data = unsafe(new Array<Char>(length))  # Unsafe alloc to avoid zeroing large buffers
     # kprintf("uartReceiveFrame: receiving %d bytes\n", length)
     for i in 0..<length
         val overflow = hwregs.fifo_overflow

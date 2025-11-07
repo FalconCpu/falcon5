@@ -60,6 +60,23 @@ fun Reg.isConstant() : Int? {
 private fun Int.isPowerOfTwo() = this > 0 && (this and (this - 1)) == 0
 private fun Int.log2() = Integer.numberOfTrailingZeros(this)
 
+private val nullOffset = Pair(null,0)
+
+// Check if a register is defined as another register plus an offset constant
+// If so, return the base register and the offset
+private fun isOffsetFromReg(reg:Reg) : Pair<Reg?,Int> {
+    if (reg !is TempReg) return nullOffset
+    val def = reg.def ?: return nullOffset
+    if (def is InstrAluLit && def.op==BinOp.ADD_I) {
+        val (recReg,recOffset) = isOffsetFromReg(def.src)
+        if (recReg!=null)
+            return Pair(recReg, recOffset + def.lit)
+        return Pair(def.src, def.lit)
+    }
+    return nullOffset
+}
+
+
 var unreachable = false
 
 fun Instr.peephole() {
@@ -138,6 +155,7 @@ fun Instr.peephole() {
             }
         }
 
+
         is InstrMovLit -> {
             // Remove an instruction that is never read
             if (dest.useCount == 0 && dest !is CpuReg)
@@ -149,22 +167,46 @@ fun Instr.peephole() {
             if (dest.useCount == 0 && dest !is CpuReg)
                 return changeToNop()
 
-            // Look for a sequence 'add t1, x, imm; ld t2, [t1+offset]' and replace it with 'ld t2, [x+offset+imm]'
-            val prevInstr = currentFunction.prog[index-1]
-            if (prevInstr is InstrAluLit && prevInstr.op==BinOp.ADD_I && prevInstr.dest==addr) {
-                val newOffset = prevInstr.lit + offset
+            // Look for a sequence 'add t1, x, imm; ld t2, [t1+offset]' and replace it with 'ld t2, [x+offset+imm]' val srcInstr = addr.def
+            val (addrReg,addrOffset) = isOffsetFromReg(addr)
+            if (addrReg!=null) {
+                val newOffset = addrOffset + offset
                 if (newOffset in -0x800..0x7FF)
-                    return replace(InstrLoad(size, dest, prevInstr.src, newOffset))
+                    return replace(InstrLoad(size, dest, addrReg, newOffset))
+            }
+        }
+
+        is InstrLoadField -> {
+            // Remove an instruction that is never read
+            if (dest.useCount == 0 && dest !is CpuReg)
+                return changeToNop()
+
+            // Look for a sequence 'add t1, x, imm; ld t2, [t1+offset]' and replace it with 'ld t2, [x+offset+imm]' val srcInstr = addr.def
+            val (addrReg,addrOffset) = isOffsetFromReg(addr)
+            if (addrReg!=null) {
+                val newOffset = addrOffset + offset.offset
+                if (newOffset in -0x800..0x7FF)
+                    return replace(InstrLoad(size, dest, addrReg, newOffset))
             }
         }
 
         is InstrStore -> {
             // Look for a sequence 'add t1, x, imm; st t2, [t1+offset]' and replace it with 'st t2, [x+offset+imm]'
-            val prevInstr = currentFunction.prog[index-1]
-            if (prevInstr is InstrAluLit && prevInstr.op==BinOp.ADD_I && prevInstr.dest==addr) {
-                val newOffset = prevInstr.lit + offset
+            val (addrReg,addrOffset) = isOffsetFromReg(addr)
+            if (addrReg!=null) {
+                val newOffset = addrOffset + offset
                 if (newOffset in -0x800..0x7FF)
-                    return replace(InstrStore(size, src, prevInstr.src, newOffset))
+                    return replace(InstrStore(size, src, addrReg, newOffset))
+            }
+        }
+
+        is InstrStoreField -> {
+            // Look for a sequence 'add t1, x, imm; st t2, [t1+offset]' and replace it with 'st t2, [x+offset+imm]'
+            val (addrReg,addrOffset) = isOffsetFromReg(addr)
+            if (addrReg!=null) {
+                val newOffset = addrOffset + offset.offset
+                if (newOffset in -0x800..0x7FF)
+                    return replace(InstrStore(size, src, addrReg, newOffset))
             }
         }
 
@@ -229,10 +271,11 @@ private fun runPeephole() {
 
 
 fun Function.runBackend() {
+    if (debug)
+        println("\n\nRunning backend on function $name")
     currentFunction = this
-
     runPeephole()
-    // CommonSubexpr(this).run()
+    CommonSubexpr(this).run()
     this.rebuildIndex()
     val liveMap = LiveMap(this)
     RegisterAllocator(this, liveMap).run()

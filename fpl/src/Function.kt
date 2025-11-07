@@ -20,6 +20,9 @@ class Function (
     var maxRegister = 0
     var stackVarSize = 0
 
+    // For an aggregate return type, the caller allocates memory return value
+    val returnDestAddr = if (returnType.isAggregate()) newTemp() else null
+
 
     val endLabel = newLabel()
 
@@ -84,6 +87,15 @@ class Function (
         val addr = stackVarSize
         stackVarSize += sizeRounded
         return addAlu(BinOp.ADD_I, cpuRegs[31], addr+offset)
+    }
+
+    fun stackAlloc(size: Int): Int {
+        // Allocate space on the stack for a variable.
+        // Return the offset of the variable from the stack base pointer
+        val ret = stackVarSize
+        val sizeRounded = (size+3) and -4
+        stackVarSize += sizeRounded
+        return ret
     }
 
     fun addInstr(instr: Instr) {
@@ -152,9 +164,14 @@ class Function (
     }
 
     fun addIndex(size: Int, src: Reg, bounds: Reg): TempReg {
-        assert(size in listOf(1, 2, 4))
         val dest = newTemp()
-        prog += InstrIndex(size, dest, src, bounds)
+        if (size in listOf(1, 2, 4))
+            prog += InstrIndex(size, dest, src, bounds)
+        else {
+            val dummy = newTemp()
+            prog += InstrIndex(1, dummy, src, bounds)
+            prog += InstrAluLit(BinOp.MUL_I, dest, dummy, size)
+        }
         return dest
     }
 

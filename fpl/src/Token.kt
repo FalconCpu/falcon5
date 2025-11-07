@@ -79,6 +79,7 @@ enum class TokenKind(val value: String, val lineContinues: Boolean) {
     ENUM          ("enum", false),
     WHEN          ("when", false),
     CLASS         ("class", false),
+    STRUCT        ("struct", false),
     EXTERN        ("extern", true),
     OVERRIDE      ("override", true),
     VIRTUAL       ("virtual", true),

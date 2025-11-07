@@ -1,7 +1,7 @@
 import java.io.FileReader
 import java.io.FileWriter
 
-val debug = false
+var debug = false
 
 
 //TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or
@@ -27,6 +27,8 @@ fun main(args: Array<String>) {
                     return
                 }
             }
+
+            arg=="-d" -> debug = true
 
             arg.endsWith(".fplprj") -> {
                 try {

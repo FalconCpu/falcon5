@@ -138,7 +138,12 @@ class CommonSubexpr(val func:Function) {
                 if (def1.lit != d2.lit) return false
             }
 
-            else -> {}
+            is InstrFpu -> {
+                val d2 = def2 as InstrFpu
+                if (def1.op != d2.op) return false
+            }
+
+            else -> return false
         }
 
         // Now compare the source registers of each instruction
@@ -183,6 +188,14 @@ class CommonSubexpr(val func:Function) {
             for (j in avail[i.index].stream()) {
                 val other = func.regs[j]
                 if (isEquivalent(dest, other) && other != dest) {
+                    val otherDef = if (other is TempReg) other.def else null  // Get the defining instruction for the other register
+
+                    // Don't do the elimination for load immediate if the other definition is too far away (to avoid register pressure)
+                    if (i is InstrMovLit && otherDef!=null && otherDef.index<i.index-10) {
+                        if (debug)
+                            println("Skipping elimination of ${dest.name} in favour of ${other.name} at instruction ${i.index} due to distance")
+                        continue
+                    }
                     if (debug)
                         println("Eliminating ${dest.name} in favour of ${other.name} at instruction ${i.index}")
                     func.prog[i.index].replace(InstrMov(dest,other))

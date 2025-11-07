@@ -40,7 +40,7 @@ fun TctExpr.codeGenRvalue() : Reg {
         is TctCallExpr -> {
             val argRegs = args.map { it.codeGenRvalue() }
             val thisArgReg = thisArg?.codeGenRvalue()
-            genCall(func, thisArgReg, argRegs)
+            genCall(func, thisArgReg, argRegs,null)
         }
 
         is TctErrorExpr -> { zeroReg }  // Dummy return value
@@ -51,6 +51,12 @@ fun TctExpr.codeGenRvalue() : Reg {
         }
 
         is TctReturnExpr -> {
+            if (currentFunc.returnDestAddr!=null && expr!=null) {
+                // Aggregate return value - store into caller-allocated memory
+                expr.codeGenAggregateRvalue(currentFunc.returnDestAddr!!)
+                return zeroReg  // Dummy return value
+            }
+
             val retReg = expr?.codeGenRvalue()
             var index = 8
 
@@ -80,14 +86,19 @@ fun TctExpr.codeGenRvalue() : Reg {
             else
                 currentFunc.addIndex(size, indexReg, bounds)
             val addr = currentFunc.addAlu(BinOp.ADD_I, arrayReg, scaled)
-            currentFunc.addLoad(size, addr, 0)
+
+            // Return address for aggregates, or the value for scalars
+            if (type.isAggregate())
+                addr
+            else
+                currentFunc.addLoad(size, addr, 0)
         }
 
         is TctMemberExpr -> {
             val objectReg = objectExpr.codeGenRvalue()
 
             // If it's an inline array, just do pointer arithmetic to get the address of the first element
-            if (member.type is TypeInlineArray)
+            if (member.type is TypeInlineArray || member.type is TypeStruct)
                 return currentFunc.addAlu(BinOp.ADD_I, objectReg, member.offset)
 
             val size = member.type.getSize()
@@ -97,7 +108,7 @@ fun TctExpr.codeGenRvalue() : Reg {
         }
 
         is TctNewArrayExpr -> {
-            allocateArray(size, elementType, arena, lambda==null, lambda)
+            allocateArray(size, elementType, arena, clearMem, lambda)
         }
 
         is TctNewArrayLiteralExpr -> {
@@ -339,13 +350,20 @@ fun TctExpr.codeGenRvalue() : Reg {
         is TctRealCompareExpr -> {
             TODO()
         }
+
+        is TctMakeStructExpr -> {
+            val addr = currentFunc.stackAlloc(type.getSize(),0)
+            codeGenAggregateRvalue(addr)
+            addr
+        }
+
+        is TctStackVariable -> currentFunc.addAlu(BinOp.ADD_I, cpuRegs[31], sym.offset)
     }
 }
 
 private fun allocateArray(sizeExpr:TctExpr, elementType:Type, arena:Arena, initialize:Boolean, lambda:TctLambdaExpr?) : Reg {
     val elementSize = elementType.getSize()
     val sizeReg = sizeExpr.codeGenRvalue()
-
     val ret = when(arena) {
         Arena.HEAP -> {
             currentFunc.addMov(cpuRegs[1], sizeReg)
@@ -627,7 +645,7 @@ fun applyCompoundOp(op:TokenKind, reg1:Reg, reg2:Reg) : Reg {
     }
 }
 
-fun genCall(func:Function, thisArg:Reg?, args: List<Reg>) : Reg {
+fun genCall(func:Function, thisArg:Reg?, args: List<Reg>, destReg:Reg?) : Reg {
     assert(args.size == func.parameters.size)
     if (thisArg==null && func.thisSymbol!=null)
         error("Function '${func.name}' requires 'this' argument but none was provided")
@@ -642,6 +660,8 @@ fun genCall(func:Function, thisArg:Reg?, args: List<Reg>) : Reg {
                 currentFunc.addMov(cpuRegs[index++], reg)
         else
             currentFunc.addMov(cpuRegs[index++], arg)
+    if (destReg!=null)
+        currentFunc.addMov(cpuRegs[8], destReg)
 
     if (func.syscallNumber!=-1)
         currentFunc.addInstr( InstrSyscall(func.syscallNumber) )
@@ -685,20 +705,33 @@ fun TctStmt.codeGenStmt() {
             val oldFunc = currentFunc
             currentFunc = function
             currentFunc.addInstr(InstrStart())
+
             // copy parameters from cpu regs into UserRegs
             var index = 1
             if (function.thisSymbol!=null)
                 currentFunc.addMov(currentFunc.getReg(function.thisSymbol), cpuRegs[index++]) // 'this' pointer
             for(param in function.parameters)
-                if (param.type is TypeTuple) {
-                    val regs = param.type.elementTypes.map { currentFunc.addCopy(cpuRegs[index++]) }
-                    currentFunc.symToReg[param] = currentFunc.newCompoundReg(regs)
-                } else if (param.type is TypeErrable) {
-                    val typeReg = currentFunc.addCopy(cpuRegs[index++])
-                    val valueReg = currentFunc.addCopy(cpuRegs[index++])
-                    currentFunc.symToReg[param] = currentFunc.newCompoundReg(listOf(typeReg, valueReg))
-                } else
-                    currentFunc.addMov( currentFunc.getReg(param), cpuRegs[index++])
+                when (param.type) {
+                    is TypeTuple -> {
+                        val regs = param.type.elementTypes.map { currentFunc.addCopy(cpuRegs[index++]) }
+                        currentFunc.symToReg[param] = currentFunc.newCompoundReg(regs)
+                    }
+
+                    is TypeErrable -> {
+                        val typeReg = currentFunc.addCopy(cpuRegs[index++])
+                        val valueReg = currentFunc.addCopy(cpuRegs[index++])
+                        currentFunc.symToReg[param] = currentFunc.newCompoundReg(listOf(typeReg, valueReg))
+                    }
+
+                    else
+                        -> currentFunc.addMov(currentFunc.getReg(param), cpuRegs[index++])
+                }
+
+            if (currentFunc.returnDestAddr!=null) {
+                // For an aggregate return type, copy the return address from cpu reg 8
+                currentFunc.addMov(currentFunc.returnDestAddr!!, cpuRegs[8])
+            }
+
             // Generate code for the function body
             for(stmt in body)
                 stmt.codeGenStmt()
@@ -800,6 +833,11 @@ fun TctStmt.codeGenStmt() {
                 lhs.codeGenLvalue(rhsReg, op)
         }
 
+        is TctAssignAggregateStmt -> {
+            val lhsAddr = lhs.codeGenAggregateLvalue()
+            rhs.codeGenAggregateRvalue(lhsAddr)
+        }
+
         is TctIfClause -> TODO()
         is TctIfStmt -> {
             val clauseLabels = body.associateWith{currentFunc.newLabel()}  // Labels for each clause
@@ -881,7 +919,7 @@ fun TctStmt.codeGenStmt() {
             breakStack.add(labelEnd)
             currentFunc.addJump(labelCond)
             currentFunc.addLabel(labelStart)
-            val v = currentFunc.addLoad(elementSize, ptrReg, 0)
+            val v = if (index.type.isAggregate()) ptrReg else currentFunc.addLoad(elementSize, ptrReg, 0)
             currentFunc.addMov(symReg, v)
             for (stmt in body)
                 stmt.codeGenStmt()
@@ -944,7 +982,10 @@ fun TctStmt.codeGenStmt() {
                 val reg = init.value.codeGenRvalue()
                 val fieldReg = init.field
                 if (fieldReg!=null)
-                    currentFunc.addStore(reg, thisReg, fieldReg)
+                    if (fieldReg.type.isAggregate())
+                        genMemCopy(currentFunc.addAlu(BinOp.ADD_I, thisReg, fieldReg.offset), reg, fieldReg.type.getSize())
+                    else
+                        currentFunc.addStore(reg, thisReg, fieldReg)
             }
             // Finish the function and restore the old one
             currentFunc.addLabel(currentFunc.endLabel)
@@ -1010,8 +1051,83 @@ fun TctStmt.codeGenStmt() {
             }
             currentFunc.addLabel(endLabel)
         }
+
+        is TctStructVarDeclStmt -> {
+            sym.offset = currentFunc.stackAlloc(sym.type.getSize())
+            if (initializer!=null) {
+                val addrReg = currentFunc.addAlu(BinOp.ADD_I, cpuRegs[31], sym.offset)
+                initializer.codeGenAggregateRvalue(addrReg)
+            }
+        }
     }
 }
+
+// ======================================================================
+//                          Struct Expressions
+// ======================================================================
+
+fun TctExpr.codeGenAggregateRvalue(dest:Reg) {
+    // Evaluate an aggregate expression placing the result at address 'dest'
+    when(this) {
+        is TctMakeStructExpr -> {
+            val structType = this.type as TypeStruct
+            for(index in fieldValues.indices) {
+                val field = structType.fields[index]
+                val value = fieldValues[index].codeGenRvalue()
+                currentFunc.addStore(value, dest, field)
+            }
+        }
+
+        is TctStackVariable -> {
+            val srcAddr = currentFunc.addAlu(BinOp.ADD_I, cpuRegs[31], sym.offset)
+            genMemCopy(dest, srcAddr, type.getSize())
+        }
+
+        is TctCallExpr -> {
+            val argRegs = args.map { it.codeGenRvalue() }
+            val thisArgReg = thisArg?.codeGenRvalue()
+            genCall(func, thisArgReg, argRegs,dest)
+        }
+
+        else -> Log.error(location, "Cannot use expression of type '${this.type}' as an aggregate")
+    }
+}
+
+fun TctExpr.codeGenAggregateLvalue() : Reg {
+    when(this) {
+        is TctStackVariable -> {
+            return currentFunc.addAlu(BinOp.ADD_I, cpuRegs[31], sym.offset)
+        }
+
+        is TctIndexExpr -> {
+            require(type is TypeStruct)
+            val arrayReg = array.codeGenRvalue()
+            val indexReg = index.codeGenRvalue()
+            val size = type.getSize()
+            val bounds = if (array.type is TypeInlineArray)
+                currentFunc.addLdImm(array.type.size)
+            else if (array.type is TypePointer)
+                currentFunc.addLdImm(0x7FFFFFFF) // Arbitrary large value - we can't do bounds checking on pointers
+            else
+                currentFunc.addLoad(arrayReg, lengthSymbol)
+            val dummy = currentFunc.addIndex(1, indexReg, bounds)   // Check bounds
+            val scaled = currentFunc.addAlu(BinOp.MUL_I, dummy, size)
+            return currentFunc.addAlu(BinOp.ADD_I, arrayReg, scaled)
+        }
+
+        else -> error("Cannot use expression of type '${this.type}' as an aggregate at $location" )
+    }
+}
+
+fun genMemCopy(dest:Reg, src:Reg, size:Int) {
+    require(size and 3 == 0) { "memcpy size must be a multiple of 4" }
+    for(i in 0 until size step 4) {
+        val v = currentFunc.addLoad(4, src, i)
+        currentFunc.addStore(4, v, dest, i)
+    }
+}
+
+
 
 // ======================================================================
 //                          Top Level

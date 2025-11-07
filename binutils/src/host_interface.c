@@ -89,6 +89,8 @@ static void open_com_port() {
 /// Reads a byte from the com port, waits until data is availible
 /// Returns the byte read, or -1 for an error
 
+static int count_errors = 0;
+
 static int read_from_com_port() {
 
     char readBuffer[1];
@@ -98,6 +100,10 @@ static int read_from_com_port() {
         DWORD error = GetLastError();
         if (error != ERROR_TIMEOUT) {
             printf("%sRead error: %lu%s\n", RED, error, RESET);
+            count_errors++;
+            if (count_errors>10) {
+                fatal("Too many com port read errors, exiting");
+            }
         }
         return -1;
     }
