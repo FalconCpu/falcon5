@@ -1,0 +1,47 @@
+# Test the copper writing to hardware registers
+
+HWREGS_BASE         = 0xE0000000
+HWREGS_SEVEN_SEG    = 0x00
+HWREGS_COPPER_START = 0x6C
+
+COPPER_PROG = 0x10000   # An Address in RAM to write copper program to
+
+# Write a copper program to memory
+ld $1, COPPER_PROG       # An address in RAM
+ld $2, copper_start  # Load address of copper program
+ld $3, copper_end
+loop_write_copper:
+    ldw $4, $2[0]
+    stw $4, $1[0]
+    add $1, $1, 4
+    add $2, $2, 4
+    bne $2, $3, loop_write_copper
+
+# Write copper start address to hardware register
+ld  $5, HWREGS_BASE
+ld  $1, COPPER_PROG
+stw $1, $5[HWREGS_COPPER_START]
+
+# Wait some time (several frames)
+ld  $6, 100
+wait_loop:
+    sub $6, $6, 1
+    bne $6, 0, wait_loop
+
+# End of program (Jump to address 0 to halt)
+ld $30, 0
+ret
+
+
+# Copper program starts here
+copper_start:
+dcw 0x01083080      # WAIT YPOS=524 XPOS=128
+dcw 0x02001000      # WRITE  PALETTE0
+dcw 0x00FF00FF      # DATA   ARGB=0x00FF00FF (magenta)
+dcw 0x02001004      # WRITE  PALETTE1
+dcw 0x0000FFFF      # DATA   ARGB=0x0000FFFF (yellow)
+dcw 0x010830C0      # WAIT YPOS=524 XPOS=192
+dcw 0x02001008      # WRITE  PALETTE2
+dcw 0x0000FF00      # DATA   ARGB=0x0000FF00 (cyan)
+dcw 0xFFFF0000      # JUMP   to
+copper_end:
