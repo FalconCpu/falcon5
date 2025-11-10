@@ -15,9 +15,9 @@ In summary, the FalconAmiga has:
 
 # Outrun
 
-After seeing ReAssembler's YouTube video of the challenges of porting OutRun to the Amiga (https://www.youtube.com/watch?v=5PpR-Dm3-nU&t=1220s), it got me wondering how much easier it would be to do a port targetting my FalconAmiga.
+After seeing ReAssembler's YouTube video of the challenges of porting OutRun to the Amiga (https://www.youtube.com/watch?v=5PpR-Dm3-nU&t=1220s), it got me wondering how much easier it would be to target the FalconAmiga.
 
-So this is my attempt at porting OutRun to the FalconAmiga - gratefully using a lot of the work done by ReAssembler as a basis.  I'm not trying to be faithful to the original arcade game - I'm more interested in seeing how well my hardware can handle a game like this.
+So this is my attempt at porting OutRun - gratefully using a lot of the work done by ReAssembler as a basis.  I'm not trying to be faithful to the original arcade game - I'm more interested in seeing how well my hardware can handle a game like this.
 
 The combination of chunky graphics mode and blitter support for sprite scaling should make a game like this far easier to implement than on a standard Amiga.
 
