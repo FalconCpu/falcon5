@@ -175,6 +175,9 @@ class Function (
         return dest
     }
 
+    fun addLineInfo(filename:String, lineNo:Int) {
+        prog += InstrLineNo(filename, lineNo)
+    }
 
     fun addCopy(src: Reg) : Reg{
         val dest = newTemp()

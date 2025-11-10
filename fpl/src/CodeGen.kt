@@ -694,6 +694,7 @@ fun genCall(func:Function, thisArg:Reg?, args: List<Reg>, destReg:Reg?) : Reg {
 // ======================================================================
 
 fun TctStmt.codeGenStmt() {
+    currentFunc.addLineInfo(location.filename, location.firstLine)
     when (this) {
         is TctFile -> {
             for(stmt in body)

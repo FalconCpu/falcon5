@@ -9,3 +9,4 @@ out/
 /sim_reg.log
 /sim_traace.log
 /sim_uart.log
+/asm.debug

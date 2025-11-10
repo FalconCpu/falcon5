@@ -54,6 +54,7 @@ sealed class Instr() {
         is InstrIndex -> "IDX$size $dest, $src, $bounds"
         is InstrNullCheck -> "TIZ $src"
         is InstrSyscall -> "SYSCALL $num"
+        is InstrLineNo -> "LINE $fileName:$lineNo"
     }
 
     fun getDestReg(): Reg? = when (this) {
@@ -79,6 +80,7 @@ sealed class Instr() {
         is InstrIndex -> dest
         is InstrNullCheck -> null
         is InstrSyscall -> null
+        is InstrLineNo -> null
     }
 
     fun getSrcReg(): List<Reg> = when (this) {
@@ -104,6 +106,7 @@ sealed class Instr() {
         is InstrIndex -> listOf(src, bounds)
         is InstrNullCheck -> listOf(src)
         is InstrSyscall -> emptyList()
+        is InstrLineNo -> emptyList()
     }
 }
 
@@ -129,3 +132,4 @@ class InstrNullCheck(val src: Reg) : Instr()
 class InstrStart() : Instr()
 class InstrEnd() : Instr()
 class InstrSyscall (val num: Int) : Instr()
+class InstrLineNo(val fileName:String, val lineNo: Int) : Instr()

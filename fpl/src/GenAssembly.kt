@@ -107,6 +107,7 @@ private fun Instr.genAssembly() = when(this) {
     is InstrNullCheck -> "tiz $src\n"
     is InstrSyscall -> "sys $num"
     is InstrFpu -> genAssembly()
+    is InstrLineNo -> "line \"$fileName\" $lineNo"
 }
 
 fun Function.genAssembly(sb:StringBuilder) {
