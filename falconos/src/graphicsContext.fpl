@@ -150,6 +150,38 @@ class GraphicsContext
                           (if scaleY<0.0 then image.height else 0) lsl 16
 
 
+    fun drawImage(x:Int, y:Int, maxHeight:Int, image:Image, scaleX:Float, scaleY:Float)
+        val dx = (65536.0/scaleX) as Int
+        val dy = (65536.0/scaleY) as Int
+
+
+        while (hwregs.blit_cmd < 12)         # Wait for blitter to have free slots
+            val dummy = 1
+
+        hwregs.blit_cmd = CMD_SET_AFFINE    # CMD SET AFFINE
+        hwregs.blit_cmd = dx                # scaleX
+        hwregs.blit_cmd = dy                # scaleY
+        hwregs.blit_cmd = 0                 # shearX
+        hwregs.blit_cmd = 0                 # shearY
+        affineSet = true
+    
+        val absScaleX = if scaleX<0.0 then -scaleX else scaleX
+        val absScaleY = if scaleY<0.0 then -scaleY else scaleY
+        val scaledWidth = (image.width * absScaleX) as Int & 0xFFFF
+        val scaledHeight = (image.height * absScaleY) as Int & 0xFFFF
+        val finalHeight = if scaledHeight>maxHeight then maxHeight else scaledHeight
+
+        hwregs.blit_cmd = CMD_SET_SRC | image.width  # CMD SET SRC, width
+        hwregs.blit_cmd = unsafe(image.data as Int)  # SRC address
+
+        hwregs.blit_cmd = CMD_COPY_RECT     # CMD COPY
+        hwregs.blit_cmd = (y lsl 16) | (x & 0xFFFF)      # dest x1,y1
+        hwregs.blit_cmd = (y + finalHeight) lsl 16 | ((x + scaledWidth) & 0xFFFF)  # dest x2,y2
+        hwregs.blit_cmd = (if scaleX<0.0 then image.width & 0xFFFF else 0) + 
+                          (if scaleY<0.0 then image.height else 0) lsl 16
+
+
+
 
     fun setTransparentColor(color:Int)
         while (hwregs.blit_cmd < 1)         # Wait for blitter to have at least 1 free slots in command queue

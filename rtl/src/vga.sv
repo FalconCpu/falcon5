@@ -32,6 +32,7 @@ module vga(
     input  logic [9:0]  mouse_x,
     input  logic [9:0]  mouse_y,
     output logic [9:0]  vga_row,
+    output logic [9:0]  vga_col,
     output logic [31:0] vga_frame_num
 );
 
@@ -187,7 +188,8 @@ vga_output  vga_output_inst (
     .VGA_BLANK_N(VGA_BLANK_N),
     .mouse_x(mouse_x),
     .mouse_y(mouse_y),
-    .vga_row(vga_row)
+    .vga_row(vga_row),
+    .vga_col(vga_col)
   );
 
 always_ff @(posedge clock) begin

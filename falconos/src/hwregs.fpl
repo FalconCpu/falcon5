@@ -27,6 +27,7 @@ class HwRegs
     var count_rx_bytes : Int  # Number of bytes received on the UART
     var fifo_overflow  : Int  # Flag to indicate which fifos have overflowed
     var frame_number   : Int  # Frame number (increments each frame)
+    var copper_pc      : Int  # Current copper program counter (write to start copper)
 
 const hwregs = unsafe(0xE0000000 as HwRegs)
 

@@ -13,7 +13,7 @@ const VGA_BLANK_START = 403
 
 
 fun main()
-    val data = readFile("tocatta.mod")
+    # val data = readFile("tocatta.mod")
     # val data = readFile("eyeoftgr.mod")
     # val data = readFile("odyssey1.mod")
     # val data = readFile("xmas_pud.mod")
@@ -24,6 +24,7 @@ fun main()
     # val data = readFile("enigma.mod")
     # val data = readFile("liveAndLetDie.mod")
     # val data = readFile("reassembler_last_wave.mod")
+    val data = readFile("../../../Downloads/outrun_amiga_edition_v092/audio/reassembler_mss.mod")
     if data is Error
         kprintf("main: readFile failed: %s\n", data.message)
         return

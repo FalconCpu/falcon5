@@ -8,5 +8,5 @@
 ../src/list.fpl
 ../modtracker/exceptions.fpl
 ../modtracker/filehandler.fpl
-../modtracker/modTracker.fpl
+sprites.fpl
 main.fpl

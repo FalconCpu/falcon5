@@ -33,6 +33,7 @@
 // E0000060  COUNT_RX       RW   Count the number of bytes received from the UART
 // E0000064  OVERFLOW       R    Overflow status of the FIFOs
 // E0000068  VGA_FRAME_NUM  R    Current VGA frame number (for fps timing)
+// E000006C  COPPER_ADDR   RW    Address of the copper program in SDRAM
 // E00001XX  VGA layers registers       
 // E00002XX  AUDIO registers
 // E0001XXX  VGA Palette registers
@@ -60,6 +61,9 @@ module hwregs (
     output logic         hwregs_blit_privaledge, // 1 = allow privileged commands
     input  logic [9:0]   blit_fifo_slots_free,
 
+    // Connections to the copper
+    output logic         hwregs_copper_start,        // Signal to start the copper
+    output logic [25:0]  hwregs_copper_address,      // Address of the copper program in SDRAM
 
     // Connections to the chip pins
     output logic [6:0]	HEX0,
@@ -140,6 +144,7 @@ always_ff @(posedge clock) begin
     hwregs_blit_command <= 32'bx;
     perf_reset <= 1'b0;
     i2c_start <= 1'b0;
+    hwregs_copper_start <= 1'b0;
 
     // Increment the millisecond timer
     if (milli_counter == 124999) begin
@@ -210,9 +215,13 @@ always_ff @(posedge clock) begin
                     perf_div_1024 <= hwregs_wdata[2];
                 end
             end
-
             16'h0060: begin
                 count_rx_bytes <= hwregs_wdata;
+            end
+            16'h006C: begin
+                // Copper address register
+                hwregs_copper_address <= hwregs_wdata[25:0];
+                hwregs_copper_start <= 1'b1;
             end
             default: begin end
         endcase

@@ -173,6 +173,22 @@ logic [31:0]  audio_sdram_rdata;
 logic [25:0]  audio_sdram_raddress;
 logic         audio_sdram_complete;
 
+logic         copper_sdram_ready;
+logic         copper_sdram_request;
+logic [25:0]  copper_sdram_address;
+logic         copper_sdram_data_valid;
+logic [31:0]  copper_sdram_rdata;
+logic [25:0]  copper_sdram_raddress;
+logic         copper_sdram_complete;
+
+logic         copper_aux_request;
+logic         copper_aux_ack;
+logic [23:0]  copper_aux_address;
+logic [31:0]  copper_aux_wdata;
+logic [25:0]  hwregs_copper_address;
+logic         hwregs_copper_start;
+
+
 
 logic         hwregs_blit_valid;
 logic [31:0]  hwregs_blit_command;
@@ -185,6 +201,7 @@ logic         cpu_stuck;
 logic [9:0]  mouse_x;
 logic [9:0]  mouse_y;
 logic [9:0]  vga_row;
+logic [9:0]  vga_col;
 logic [2:0]  perf_count;
 logic [9:0]  ledr;
 logic [31:0] vga_frame_num;
@@ -246,6 +263,7 @@ assign hwregs_rdata = hwregs_rdata_regs | hwregs_rdata_audio;
 
 aux_decoder  aux_decoder_inst (
     .clock(clock),
+    .reset(reset),
     .cpu_aux_request(cpu_aux_request),
     .cpu_aux_write(cpu_aux_write),
     .cpu_aux_addr(cpu_aux_addr),
@@ -255,6 +273,10 @@ aux_decoder  aux_decoder_inst (
     .cpu_aux_rvalid(cpu_aux_rvalid),
     .cpu_aux_rdata(cpu_aux_rdata),
     .cpu_aux_rtag(cpu_aux_rtag),
+    .copper_aux_request(copper_aux_request),
+    .copper_aux_ack(copper_aux_ack),
+    .copper_aux_address(copper_aux_address),
+    .copper_aux_wdata(copper_aux_wdata),
     .hwregs_request(hwregs_request),
     .hwregs_write(hwregs_write),
     .hwregs_addr(hwregs_addr),
@@ -312,7 +334,9 @@ aux_decoder  aux_decoder_inst (
     .perf_count(perf_count),
     .vga_row(vga_row),
     .cpu_pc(cpu_pc[23:0]),
-    .vga_frame_num(vga_frame_num)
+    .vga_frame_num(vga_frame_num),
+    .hwregs_copper_address(hwregs_copper_address),
+    .hwregs_copper_start(hwregs_copper_start)
   );
 
 assign LEDR[9:0] = ledr[9:0] | {cpu_read_overflow,cpu_stuck,8'b0};
@@ -366,17 +390,28 @@ sdram_arbiter  sdram_arbiter_inst (
     .m4_raddress(blitr_sdram_raddress),
     .m4_rdata(blitr_sdram_rdata),
     .m4_complete(blitr_sdram_complete),
-    .m5_request(blitw_sdram_request),
-    .m5_ready(blitw_sdram_ready),
-    .m5_write(1'b1),
-    .m5_burst(1'b0),
-    .m5_address(blitw_sdram_address),
-    .m5_wdata(blitw_sdram_wdata),
-    .m5_wstrb(blitw_sdram_wstrb),
-    .m5_rvalid(),
-    .m5_raddress(),
-    .m5_rdata(),
-    .m5_complete(),
+    .m5_request(copper_sdram_request),
+    .m5_ready(copper_sdram_ready),
+    .m5_write(1'b0),
+    .m5_burst(1'b1),
+    .m5_address(copper_sdram_address),
+    .m5_wdata(32'bx),
+    .m5_wstrb(4'b0),
+    .m5_rvalid(copper_sdram_data_valid),
+    .m5_raddress(copper_sdram_raddress),
+    .m5_rdata(copper_sdram_rdata),
+    .m5_complete(copper_sdram_complete),
+    .m6_request(blitw_sdram_request),
+    .m6_ready(blitw_sdram_ready),
+    .m6_write(1'b1),
+    .m6_burst(1'b0),
+    .m6_address(blitw_sdram_address),
+    .m6_wdata(blitw_sdram_wdata),
+    .m6_wstrb(blitw_sdram_wstrb),
+    .m6_rvalid(),
+    .m6_raddress(),
+    .m6_rdata(),
+    .m6_complete(),
     .sdram_request(sdram_request),
     .sdram_ready(sdram_ready),
     .sdram_address(sdram_address),
@@ -460,6 +495,7 @@ vga  vga_inst (
     .mouse_x(mouse_x),
     .mouse_y(mouse_y),
     .vga_row(vga_row),
+    .vga_col(vga_col),
     .vga_frame_num(vga_frame_num)
   );
 
@@ -505,6 +541,27 @@ audio  audio_inst (
     .sdram_raddress(audio_sdram_raddress),
     .sdram_rdata(audio_sdram_rdata),
     .sdram_complete(audio_sdram_complete)
+  );
+
+copper  copper_inst (
+    .clock(clock),
+    .reset(reset),
+    .hwregs_copper_start(hwregs_copper_start),
+    .hwregs_copper_address(hwregs_copper_address),
+    .hwregs_copper_busy(hwregs_copper_busy),
+    .copper_sdram_ready(copper_sdram_ready),
+    .copper_sdram_request(copper_sdram_request),
+    .copper_sdram_address(copper_sdram_address),
+    .copper_sdram_data_valid(copper_sdram_data_valid),
+    .copper_sdram_rdata(copper_sdram_rdata),
+    .copper_sdram_raddress(copper_sdram_raddress),
+    .copper_sdram_complete(copper_sdram_complete),
+    .copper_aux_request(copper_aux_request),
+    .copper_aux_ack(copper_aux_ack),
+    .copper_aux_address(copper_aux_address),
+    .copper_aux_wdata(copper_aux_wdata),
+    .vga_xpos(vga_col),
+    .vga_ypos(vga_row)
   );
 
 endmodule

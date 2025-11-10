@@ -1332,8 +1332,8 @@ private fun AstBlock.findFunctionDefinitions(scope:AstBlock) {
     when (this) {
         is AstFunctionDefStmt -> {
             val paramsSymbols = params.map { it.createSymbol(this) }
-            for(errPearam in paramsSymbols.filter { it.type is TypeErrable })
-                Log.error(errPearam.location, "Function parameter '${errPearam.name}' cannot be of errable type")
+            for(errParam in paramsSymbols.filter { it.type is TypeErrable })
+                Log.error(errParam.location, "Function parameter '${errParam.name}' cannot be of errable type")
             val returnType = retType?.resolveType(this) ?: TypeUnit
             val longName = (if (scope is AstClassDefStmt) scope.klass.name + "/" else "") +
                 name + paramsSymbols.joinToString(separator = ",", prefix = "(", postfix = ")") { it.type.name }
@@ -1379,6 +1379,7 @@ private fun AstBlock.findFunctionDefinitions(scope:AstBlock) {
             val longName = "$name/constructor"
             val thisSym = VarSymbol(location, "this", klass, false)
             val constructor = Function(location, longName, thisSym, paramsSymbols, TypeUnit, TokenKind.EOL)
+            this.constructorScope.function = constructor
             klass.constructor = constructor.toFunctionInstance()
             for (sym in paramsSymbols)
                 constructorScope.addSymbol(sym)
