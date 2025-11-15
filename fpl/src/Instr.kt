@@ -37,10 +37,10 @@ sealed class Instr() {
         is InstrAluLit -> "$op $dest, $src, $lit"
         is InstrFpu -> "$op $dest, $src1, $src2"
         is InstrBranch -> "${op.branchName()} $src1, $src2, $label"
-        is InstrCall -> "CALL $func"
-        is InstrVCall -> "VCALL $func"
-        is InstrIndCall -> "INDCALL $func"
-        is InstrEnd -> "END"
+        is InstrCall -> "CALL $func, $dest, $args"
+        is InstrVCall -> "VCALL $func, $dest, $args"
+        is InstrIndCall -> "INDCALL $func, $dest, $args"
+        is InstrEnd -> "END $src"
         is InstrJump -> "JMP $label"
         is InstrLabel -> "$label:"
         is InstrMov -> "MOV $dest, $src"
@@ -65,9 +65,9 @@ sealed class Instr() {
         is InstrMov -> dest
         is InstrMovLit -> dest
         is InstrLoad -> dest
-        is InstrCall -> if (func.returnType!=TypeUnit) resultReg else null
-        is InstrVCall -> if (func.returnType!=TypeUnit) resultReg else null
-        is InstrIndCall -> if (retType!=TypeUnit) resultReg else null
+        is InstrCall -> dest
+        is InstrVCall -> dest
+        is InstrIndCall -> dest
         is InstrBranch,
         is InstrEnd,
         is InstrJump,
@@ -79,7 +79,7 @@ sealed class Instr() {
         is InstrStoreField -> null
         is InstrIndex -> dest
         is InstrNullCheck -> null
-        is InstrSyscall -> null
+        is InstrSyscall -> dest
         is InstrLineNo -> null
     }
 
@@ -89,10 +89,10 @@ sealed class Instr() {
         is InstrFpu -> listOf(src1, src2)
         is InstrBranch -> listOf(src1, src2)
         is InstrMov -> listOf(src)
-        is InstrCall -> emptyList()
-        is InstrVCall -> emptyList()
-        is InstrIndCall -> listOf(func)
-        is InstrEnd -> emptyList()
+        is InstrCall -> args
+        is InstrVCall -> args
+        is InstrIndCall -> listOf(func)+ args
+        is InstrEnd -> listOf(src)
         is InstrJump -> emptyList()
         is InstrLabel -> emptyList()
         is InstrLea -> emptyList()
@@ -105,7 +105,7 @@ sealed class Instr() {
         is InstrStoreField -> listOf(src, addr)
         is InstrIndex -> listOf(src, bounds)
         is InstrNullCheck -> listOf(src)
-        is InstrSyscall -> emptyList()
+        is InstrSyscall -> args
         is InstrLineNo -> emptyList()
     }
 }
@@ -119,9 +119,9 @@ class InstrMovLit(val dest: Reg, val lit: Int) : Instr()
 class InstrLabel(val label: Label) : Instr()
 class InstrJump(val label: Label) : Instr()
 class InstrBranch(val op:BinOp, val src1: Reg, val src2: Reg, val label: Label) : Instr()
-class InstrCall(val func: Function) : Instr()
-class InstrVCall(val func: Function) : Instr()
-class InstrIndCall(val func: Reg, val retType:Type) : Instr()
+class InstrCall(val func: Function, val dest:Reg, val args:List<Reg>) : Instr()
+class InstrVCall(val func: Function, val dest:Reg, val args:List<Reg>) : Instr()
+class InstrIndCall(val func: Reg, val dest:Reg, val args:List<Reg>, val retType:Type) : Instr()
 class InstrLea(val dest: Reg, val src: Value) : Instr()
 class InstrLoad(val size:Int, val dest: Reg, val addr: Reg, val offset:Int) : Instr()
 class InstrStore(val size:Int, val src: Reg, val addr: Reg, val offset:Int) : Instr()
@@ -130,6 +130,6 @@ class InstrStoreField(val size:Int, val src: Reg, val addr: Reg, val offset:Fiel
 class InstrIndex(val size:Int, val dest:Reg, val src:Reg, val bounds:Reg) : Instr()
 class InstrNullCheck(val src: Reg) : Instr()
 class InstrStart() : Instr()
-class InstrEnd() : Instr()
-class InstrSyscall (val num: Int) : Instr()
+class InstrEnd(val src:Reg) : Instr()
+class InstrSyscall (val num: Int, val dest:Reg, val args:List<Reg>) : Instr()
 class InstrLineNo(val fileName:String, val lineNo: Int) : Instr()

@@ -2,8 +2,11 @@
   <dictionary name="project">
     <words>
       <w>addr</w>
+      <w>defs</w>
       <w>errable</w>
       <w>inlinearray</w>
+      <w>pred</w>
+      <w>succ</w>
       <w>vcall</w>
     </words>
   </dictionary>

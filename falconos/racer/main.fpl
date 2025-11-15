@@ -706,9 +706,9 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
         # Wait for vertical blank
         # hwregs.seven_seg = hwregs.vga_pos
         while hwregs.vga_pos > 480
-            kprintf("")
+            delay()
         while hwregs.vga_pos < 480
-            kprintf("")
+            delay()
 
         if doubleBufferPhase=0
             gc.setGraphicsBuffer(screenBuffer1)
@@ -778,6 +778,13 @@ class AudioSamples(data: Array<Char>)
     val ping = makeAudioSample(data, 0x0002A786, 0x0000164C)
     val bong = makeAudioSample(data, 0x0002BDD2, 0x000042E4)
     val beepBeepBeep = makeAudioSample(data, 0x000300B6, 0x00003608)
+
+fun delay()
+    val leds = hwregs.ledr 
+    hwregs.ledr = leds | 4
+    for i in 0..<=10000
+        val dummy=1
+    hwregs.ledr = leds
 
 fun main()
     copyFontData()

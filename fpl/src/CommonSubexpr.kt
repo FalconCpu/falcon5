@@ -82,7 +82,11 @@ class CommonSubexpr(val func:Function) {
             for (i in func.prog) {
                 val dest = i.getDestReg()
                 if (dest != null)
-                    avail[i.index].set(dest.index)
+                    if (dest is CompoundReg)
+                        for (destPart in dest.regs)
+                            avail[i.index].set(destPart.index)
+                    else
+                        avail[i.index].set(dest.index)
                 if (i is InstrJump || i is InstrBranch) {
                     val labelIndex = if (i is InstrJump) i.label.index else if (i is InstrBranch) i.label.index else error("Impossible")
                     val count = avail[labelIndex].cardinality()
@@ -134,6 +138,8 @@ class CommonSubexpr(val func:Function) {
             }
 
             is InstrMovLit -> {
+                if (def1.lit in -0xfff..0xfff)
+                    return false   // Don't consider small literals for common subexpr elimination
                 val d2 = def2 as InstrMovLit
                 if (def1.lit != d2.lit) return false
             }

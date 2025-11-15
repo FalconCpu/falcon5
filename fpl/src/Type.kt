@@ -305,8 +305,16 @@ fun Type.getSize(): Int = when (this) {
 }
 
 fun Type.isAggregate() : Boolean = when(this) {
-    is TypeStruct -> true
+    is TypeTuple -> true
+    is TypeErrable -> true
     else -> false
+}
+
+fun Type.getNumElements() : Int = when(this) {
+    is TypeStruct -> fields.size
+    is TypeTuple -> elementTypes.size
+    is TypeErrable -> 2
+    else -> 1
 }
 
 // ========================================================================

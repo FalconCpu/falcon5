@@ -88,9 +88,21 @@ private fun Instr.genAssembly() = when(this) {
     is InstrAlu -> genAssembly()
     is InstrAluLit -> genAssembly()
     is InstrBranch -> genAssembly()
-    is InstrCall -> "jsr /${func.name}"
-    is InstrVCall -> "ldw R30, R1[-4]\nldw R30,R30[${func.virtualFunctionNumber*4+12}]\njsr R30[0]"
-    is InstrIndCall -> "jsr $func[0]"
+    is InstrCall -> {
+        assert(args.isEmpty())
+        "jsr /${func.name}"
+    }
+    is InstrVCall -> {
+        assert(args.isEmpty())
+        // load vtable pointer
+        // load function pointer from vtable
+        // jsr to function pointer
+        "ldw R30, R1[-4]\nldw R30, R30[${func.virtualFunctionNumber*4 + 12}]\njsr R30[0]"
+    }
+    is InstrIndCall -> {
+        assert(args.isEmpty())
+        "jsr $func[0]"
+    }
     is InstrEnd -> ""
     is InstrJump -> "jmp .$label"
     is InstrLabel -> ".$label:"
@@ -148,12 +160,38 @@ fun Function.genAssembly(sb:StringBuilder) {
     sb.append("ret\n\n")
 }
 
+private fun Function.markUsed() {
+    if (!used) {
+        used = true
+        for(instr in prog) {
+            when(instr) {
+                is InstrCall -> instr.func.markUsed()
+                is InstrVCall -> instr.func.markUsed()
+                is InstrLea -> if (instr.src is FunctionValue)
+                        instr.src.func.function.markUsed()
+                is InstrIndCall -> {}
+                else -> {}
+            }
+        }
+    }
+}
+
 fun genAssembly() : String {
+    // Trace functions which are reachable from top level
+    allFunctions[0].markUsed()
+    allFunctions.find{ it.name=="main()" }?.markUsed()
+    ClassValue.allClasses.forEach { cls ->
+        cls.klass.virtualFunctions.forEach { func ->
+                func.markUsed()
+        }
+    }
+
     val sb = StringBuilder()
     genAssemblyHeader(sb)
 
     for(func in allFunctions)
-        func.genAssembly(sb)
+        if (func.used)
+            func.genAssembly(sb)
     emitAllValues(sb)
     return sb.toString()
 }

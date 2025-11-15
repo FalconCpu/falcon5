@@ -208,7 +208,7 @@ logic [31:0] vga_frame_num;
 
 
 assign GPIO_1 = {blitw_sdram_wstrb,sdram_write, sdram_request, 2'b0,sdram_address};
-assign GPIO_0[4:2] = perf_count;
+assign GPIO_0[35:2] = {cpu_pc,perf_count};
 
 
 pll  pll_inst (

@@ -51,22 +51,18 @@ fun TctExpr.codeGenRvalue() : Reg {
         }
 
         is TctReturnExpr -> {
-            if (currentFunc.returnDestAddr!=null && expr!=null) {
+            if (expr==null) {
+                // Do nothing
+            } else if (currentFunc.returnDestAddr!=null) {
                 // Aggregate return value - store into caller-allocated memory
                 expr.codeGenAggregateRvalue(currentFunc.returnDestAddr!!)
-                return zeroReg  // Dummy return value
+            } else {
+                val retReg = expr.codeGenRvalue()
+                currentFunc.prog.addMov(currentFunc.returnRegister, retReg)
             }
 
-            val retReg = expr?.codeGenRvalue()
-            var index = 8
-
-            if (retReg is CompoundReg)
-                for(reg in retReg.regs)
-                    currentFunc.addMov(cpuRegs[index--], reg)
-            else if (retReg!=null)
-                currentFunc.addMov(cpuRegs[8], retReg)
             currentFunc.addJump(currentFunc.endLabel)
-            zeroReg  // Dummy return value
+            return zeroReg  // Dummy return value
         }
 
         is TctTypeName -> error("Type name found when expecting rvalue")
@@ -88,7 +84,7 @@ fun TctExpr.codeGenRvalue() : Reg {
             val addr = currentFunc.addAlu(BinOp.ADD_I, arrayReg, scaled)
 
             // Return address for aggregates, or the value for scalars
-            if (type.isAggregate())
+            if (type is TypeStruct)
                 addr
             else
                 currentFunc.addLoad(size, addr, 0)
@@ -180,20 +176,18 @@ fun TctExpr.codeGenRvalue() : Reg {
         is TctStringCompareExpr -> {
             val lhsReg = lhs.codeGenRvalue()
             val rhsReg = rhs.codeGenRvalue()
-            currentFunc.addMov(cpuRegs[1], lhsReg)
-            currentFunc.addMov(cpuRegs[2], rhsReg)
+            val args = listOf(lhsReg, rhsReg)
             when(op) {
                 BinOp.EQ_I -> {
-                    currentFunc.addCall(Stdlib.strequal)
-                    currentFunc.addCopy(cpuRegs[8])
+                    currentFunc.addCall(Stdlib.strequal, args)
                 }
                 BinOp.NE_I -> {
-                    currentFunc.addCall(Stdlib.strequal)
-                    currentFunc.addAlu(BinOp.LTU_I, cpuRegs[8], 1) // Not equal if result is 0
+                    val tmp = currentFunc.addCall(Stdlib.strequal, args)
+                    currentFunc.addAlu(BinOp.LTU_I, tmp, 1) // Not equal if result is 0
                 }
                 BinOp.LT_I, BinOp.LE_I, BinOp.GT_I, BinOp.GE_I -> {
-                    currentFunc.addCall(Stdlib.strcmp)
-                    currentFunc.addAlu(op, cpuRegs[8], zeroReg) // Compare result with 0
+                    val tmp = currentFunc.addCall(Stdlib.strcmp, args)
+                    currentFunc.addAlu(op, tmp, zeroReg) // Compare result with 0
                 }
                 else -> error("Invalid string comparison operator '$op'")
             }
@@ -204,20 +198,14 @@ fun TctExpr.codeGenRvalue() : Reg {
             val ret = when(arena) {
                 Arena.HEAP -> {
                     val desc = currentFunc.addLea(klass.descriptor)
-                    currentFunc.addMov(cpuRegs[1], desc)
-                    currentFunc.addCall(Stdlib.mallocObject)
-                    currentFunc.addCopy(resultReg)
+                    currentFunc.addCall(Stdlib.mallocObject, listOf(desc))
                 }
                 else -> TODO()
             }
 
             // Initialize the object with the constructor
             val argRegs = args.map { it.codeGenRvalue() }
-            var index = 1
-            currentFunc.addMov(cpuRegs[index++], ret) // 'this' pointer
-            for (arg in argRegs)
-                currentFunc.addMov(cpuRegs[index++], arg)
-            currentFunc.addCall(klass.constructor.function)
+            currentFunc.addCall(klass.constructor.function, listOf(ret)+argRegs)
             ret
         }
 
@@ -275,7 +263,7 @@ fun TctExpr.codeGenRvalue() : Reg {
             require (expr.type is TypeErrable)
             val reg = expr.codeGenRvalue()
             require(reg is CompoundReg)
-            currentFunc.addBranch(BinOp.NE_I, reg.regs[0], zeroReg, currentFunc.endLabel)
+            currentFunc.addBranch(BinOp.NE_I, reg.regs[0], zeroReg, currentFunc.exitLabel)
             reg.regs[1]
         }
 
@@ -300,8 +288,7 @@ fun TctExpr.codeGenRvalue() : Reg {
 
         is TctAbortExpr -> {
             val codeReg = abortCode.codeGenRvalue()
-            currentFunc.addMov(cpuRegs[1], codeReg)
-            currentFunc.addCall(Stdlib.abort)
+            currentFunc.addCall(Stdlib.abort, listOf(codeReg))
             zeroReg
         }
 
@@ -316,13 +303,9 @@ fun TctExpr.codeGenRvalue() : Reg {
         is TctIndirectCallExpr -> {
             val argRegs = args.map{it.codeGenRvalue()}
             val func = func.codeGenRvalue()
-            for(i in argRegs.indices)
-                currentFunc.addMov(cpuRegs[i+1], argRegs[i])
-            currentFunc.addInstr( InstrIndCall(func, type))
-            if (type!=TypeUnit)
-                currentFunc.addCopy(cpuRegs[8])
-            else
-                cpuRegs[0]
+            val dest = currentFunc.newTemp()
+            currentFunc.addInstr( InstrIndCall(func, dest, argRegs, type))
+            dest
         }
 
         is TctIfExpr -> {
@@ -366,10 +349,8 @@ private fun allocateArray(sizeExpr:TctExpr, elementType:Type, arena:Arena, initi
     val sizeReg = sizeExpr.codeGenRvalue()
     val ret = when(arena) {
         Arena.HEAP -> {
-            currentFunc.addMov(cpuRegs[1], sizeReg)
-            currentFunc.addLdImm(cpuRegs[2], elementSize)
-            currentFunc.addCall(Stdlib.mallocArray)
-            currentFunc.addCopy(resultReg)
+            val tmp = currentFunc.addLdImm(elementSize)
+            currentFunc.addCall(Stdlib.mallocArray, listOf(sizeReg, tmp))
         }
         Arena.STACK -> {
             require(sizeExpr is TctConstant && sizeExpr.value is IntValue) {
@@ -385,9 +366,7 @@ private fun allocateArray(sizeExpr:TctExpr, elementType:Type, arena:Arena, initi
 
     if (initialize) {
         val sizeInBytes = currentFunc.addAlu(BinOp.MUL_I, sizeReg, elementSize)
-        currentFunc.addMov(cpuRegs[1], ret)
-        currentFunc.addMov(cpuRegs[2], sizeInBytes)
-        currentFunc.addCall(Stdlib.bzero)
+        currentFunc.addCall(Stdlib.bzero, listOf(ret, sizeInBytes))
     }
 
     if (lambda != null) {
@@ -415,9 +394,8 @@ private fun allocateInlineArray(arena:Arena, initialize:Boolean, lambda:TctLambd
     val size = type.getSize()
     val ret = when(arena) {
         Arena.HEAP -> {
-            currentFunc.addLdImm(cpuRegs[1], size)
-            currentFunc.addCall(Stdlib.malloc)
-            currentFunc.addCopy(resultReg)
+            val sizeReg = currentFunc.addLdImm(size)
+            currentFunc.addCall(Stdlib.malloc, listOf(sizeReg))
         }
         Arena.STACK -> {
             val ret = currentFunc.stackAlloc(size, 0)
@@ -427,9 +405,8 @@ private fun allocateInlineArray(arena:Arena, initialize:Boolean, lambda:TctLambd
     }
 
     if (initialize) {
-        currentFunc.addMov(cpuRegs[1], ret)
-        currentFunc.addLdImm(cpuRegs[2], size)
-        currentFunc.addCall(Stdlib.bzero)
+        val sizeReg = currentFunc.addLdImm(size)
+        currentFunc.addCall(Stdlib.bzero, listOf(ret,sizeReg))
     }
 
     if (lambda != null) {
@@ -469,22 +446,21 @@ fun TctExpr.codeGenBool(trueLabel: Label, falseLabel: Label) {
         is TctStringCompareExpr -> {
             val lhsReg = lhs.codeGenRvalue()
             val rhsReg = rhs.codeGenRvalue()
-            currentFunc.addMov(cpuRegs[1], lhsReg)
-            currentFunc.addMov(cpuRegs[2], rhsReg)
+            val args = listOf(lhsReg, rhsReg)
             when(op) {
                 BinOp.EQ_I -> {
-                    currentFunc.addCall(Stdlib.strequal)
-                    currentFunc.addBranch(BinOp.NE_I, cpuRegs[8], zeroReg, trueLabel)
+                    val tmp = currentFunc.addCall(Stdlib.strequal, args)
+                    currentFunc.addBranch(BinOp.NE_I, tmp, zeroReg, trueLabel)
                     currentFunc.addJump(falseLabel)
                 }
                 BinOp.NE_I -> {
-                    currentFunc.addCall(Stdlib.strequal)
-                    currentFunc.addBranch(BinOp.EQ_I, cpuRegs[8], zeroReg, trueLabel)
+                    val tmp = currentFunc.addCall(Stdlib.strequal, args)
+                    currentFunc.addBranch(BinOp.EQ_I, tmp, zeroReg, trueLabel)
                     currentFunc.addJump(falseLabel)
                 }
                 BinOp.LT_I, BinOp.LE_I, BinOp.GT_I, BinOp.GE_I -> {
-                    currentFunc.addCall(Stdlib.strcmp)
-                    currentFunc.addBranch(op, cpuRegs[8], zeroReg, trueLabel)
+                    val tmp = currentFunc.addCall(Stdlib.strcmp, args)
+                    currentFunc.addBranch(op, tmp, zeroReg, trueLabel)
                     currentFunc.addJump(falseLabel)
                 }
                 else -> Log.error(location, "Invalid string comparison operator '$op'")
@@ -651,41 +627,24 @@ fun genCall(func:Function, thisArg:Reg?, args: List<Reg>, destReg:Reg?) : Reg {
         error("Function '${func.name}' requires 'this' argument but none was provided")
 
     // Copy arguments into CPU registers and call the function
-    var index = 1
+    val argRegs = mutableListOf<Reg>()
     if (func.thisSymbol!=null)
-        currentFunc.addMov(cpuRegs[index++], thisArg!!)
+        argRegs += thisArg!!
     for (arg in args)
-        if (arg is CompoundReg)
-            for(reg in arg.regs)
-                currentFunc.addMov(cpuRegs[index++], reg)
-        else
-            currentFunc.addMov(cpuRegs[index++], arg)
+        argRegs += arg
     if (destReg!=null)
-        currentFunc.addMov(cpuRegs[8], destReg)
+        argRegs += destReg
 
-    if (func.syscallNumber!=-1)
-        currentFunc.addInstr( InstrSyscall(func.syscallNumber) )
-    else if (func.virtualFunctionNumber==-1)
-        currentFunc.addCall(func)
+    val ret = if (func.syscallNumber!=-1) {
+        val tmp = currentFunc.newTemp()
+        currentFunc.addInstr(InstrSyscall(func.syscallNumber, tmp, argRegs))
+        tmp
+    } else if (func.virtualFunctionNumber==-1)
+        currentFunc.addCall(func, argRegs)
     else
-        currentFunc.addVCall(func)
+        currentFunc.addVCall(func, argRegs)
 
-    // Get the return value from the CPU register
-    return if (func.returnType is TypeErrable) {
-        val typeReg = currentFunc.addCopy(cpuRegs[8])
-        val valueReg = currentFunc.addCopy(cpuRegs[7])
-        currentFunc.newCompoundReg(listOf(typeReg, valueReg))
-    } else if (func.returnType is TypeTuple) {
-        val regs = mutableListOf<Reg>()
-        for(i in func.returnType.elementTypes.indices) {
-            val r = currentFunc.addCopy(cpuRegs[8-i])
-            regs.add(r)
-        }
-        currentFunc.newCompoundReg(regs)
-    } else if (func.returnType!= TypeUnit)
-        currentFunc.addCopy(resultReg)
-    else
-        zeroReg  // Dummy return value
+    return ret
 }
 
 
@@ -694,7 +653,6 @@ fun genCall(func:Function, thisArg:Reg?, args: List<Reg>, destReg:Reg?) : Reg {
 // ======================================================================
 
 fun TctStmt.codeGenStmt() {
-    currentFunc.addLineInfo(location.filename, location.firstLine)
     when (this) {
         is TctFile -> {
             for(stmt in body)
@@ -707,38 +665,16 @@ fun TctStmt.codeGenStmt() {
             currentFunc = function
             currentFunc.addInstr(InstrStart())
 
-            // copy parameters from cpu regs into UserRegs
-            var index = 1
-            if (function.thisSymbol!=null)
-                currentFunc.addMov(currentFunc.getReg(function.thisSymbol), cpuRegs[index++]) // 'this' pointer
-            for(param in function.parameters)
-                when (param.type) {
-                    is TypeTuple -> {
-                        val regs = param.type.elementTypes.map { currentFunc.addCopy(cpuRegs[index++]) }
-                        currentFunc.symToReg[param] = currentFunc.newCompoundReg(regs)
-                    }
-
-                    is TypeErrable -> {
-                        val typeReg = currentFunc.addCopy(cpuRegs[index++])
-                        val valueReg = currentFunc.addCopy(cpuRegs[index++])
-                        currentFunc.symToReg[param] = currentFunc.newCompoundReg(listOf(typeReg, valueReg))
-                    }
-
-                    else
-                        -> currentFunc.addMov(currentFunc.getReg(param), cpuRegs[index++])
-                }
-
-            if (currentFunc.returnDestAddr!=null) {
-                // For an aggregate return type, copy the return address from cpu reg 8
-                currentFunc.addMov(currentFunc.returnDestAddr!!, cpuRegs[8])
-            }
+            // Create registers for parameters
+            for(param in currentFunc.parameters)
+                currentFunc.getReg(param)
 
             // Generate code for the function body
             for(stmt in body)
                 stmt.codeGenStmt()
             // Finish the function and restore the old one
             currentFunc.addLabel(currentFunc.endLabel)
-            currentFunc.addInstr(InstrEnd())
+            currentFunc.addInstr(InstrEnd(currentFunc.returnRegister))
             currentFunc = oldFunc
         }
 
@@ -747,7 +683,7 @@ fun TctStmt.codeGenStmt() {
 
             for (stmt in body)
                 stmt.codeGenStmt()
-            currentFunc.addInstr(InstrEnd())
+            currentFunc.addInstr(InstrEnd(zeroReg))
         }
 
         is TctEmptyStmt -> {}
@@ -951,10 +887,8 @@ fun TctStmt.codeGenStmt() {
             currentFunc.addJump(labelCond)
             currentFunc.addLabel(labelStart)
             // call get method
-            currentFunc.addMov(cpuRegs[1], instance)
-            currentFunc.addMov(cpuRegs[2], index)
-            val v = currentFunc.addCall(getMethod.function)
-            currentFunc.addMov(symReg, cpuRegs[8])
+            val v = currentFunc.addCall(getMethod.function, listOf(instance, index))
+            currentFunc.addMov(symReg, v)
             for (stmt in body)
                 stmt.codeGenStmt()
             currentFunc.addLabel(labelCont)
@@ -972,25 +906,21 @@ fun TctStmt.codeGenStmt() {
             val oldFunc = currentFunc
             currentFunc = klass.constructor.function
             currentFunc.addInstr(InstrStart())
-            // copy parameters from cpu regs into UserRegs
             val thisReg = currentFunc.getReg(currentFunc.thisSymbol!!)
-            var index = 1
-            currentFunc.addMov(thisReg, cpuRegs[index++]) // 'this' pointer
-            for(param in currentFunc.parameters)
-                currentFunc.addMov( currentFunc.getReg(param), cpuRegs[index++])
+
             // Generate code for the function body
             for(init in this.initializers) {
                 val reg = init.value.codeGenRvalue()
                 val fieldReg = init.field
                 if (fieldReg!=null)
-                    if (fieldReg.type.isAggregate())
+                    if (fieldReg.type is TypeStruct)
                         genMemCopy(currentFunc.addAlu(BinOp.ADD_I, thisReg, fieldReg.offset), reg, fieldReg.type.getSize())
                     else
                         currentFunc.addStore(reg, thisReg, fieldReg)
             }
             // Finish the function and restore the old one
             currentFunc.addLabel(currentFunc.endLabel)
-            currentFunc.addInstr(InstrEnd())
+            currentFunc.addInstr(InstrEnd(zeroReg))
             currentFunc = oldFunc
 
             // Look for any methods
@@ -1010,14 +940,11 @@ fun TctStmt.codeGenStmt() {
             val tt = if (expr.type is TypeNullable) expr.type.elementType else expr.type
             if (tt is TypeClassInstance) {
                 val destructor = tt.genericType.destructor
-                if (destructor!=null) {
-                    currentFunc.addMov(cpuRegs[1], reg)
-                    currentFunc.addCall(destructor.function)
-                }
+                if (destructor!=null)
+                    currentFunc.addCall(destructor.function, listOf(reg) )
             }
 
-            currentFunc.addMov(cpuRegs[1], reg)
-            currentFunc.addCall(Stdlib.free)
+            currentFunc.addCall(Stdlib.free, listOf(reg))
             currentFunc.addLabel(label)
         }
 
@@ -1090,7 +1017,7 @@ fun TctExpr.codeGenAggregateRvalue(dest:Reg) {
             genCall(func, thisArgReg, argRegs,dest)
         }
 
-        else -> Log.error(location, "Cannot use expression of type '${this.type}' as an aggregate")
+        else -> error("$location Cannot use expression of type '${this.type}' as an aggregate")
     }
 }
 

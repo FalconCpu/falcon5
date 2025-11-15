@@ -22,33 +22,22 @@ class CodeGenTest {
 
         val expected = """
             Function topLevel:
-            LINE null:0
-            LINE input.fpl:1
-            LINE input.fpl:1
-            LINE input.fpl:4
-            END
+            END 0
             Function add(Int,Int):
             START
-            MOV x, R1
-            MOV y, R2
-            LINE input.fpl:2
-            ADD_I t0, x, y
-            MOV R8, t0
+            ADD_I t1, x, y
+            MOV u0, t1
             JMP L0
             L0:
-            END
+            END u0
             Function main():
             START
-            LINE input.fpl:5
-            MOV t0, 1
-            MOV t1, 2
-            MOV R1, t0
-            MOV R2, t1
-            CALL add(Int,Int)
-            MOV t2, R8
-            MOV z, t2
+            MOV t1, 1
+            MOV t2, 2
+            CALL add(Int,Int), t3, [t1, t2]
+            MOV z, t3
             L0:
-            END
+            END u0
 
         """.trimIndent()
 
@@ -67,19 +56,13 @@ class CodeGenTest {
 
         val expected = """
             Function topLevel:
-            LINE null:0
-            LINE input.fpl:1
-            LINE input.fpl:1
-            LINE input.fpl:3
-            END
+            END 0
             Function main():
             START
-            LINE input.fpl:4
-            LEA t0, STRING0
-            MOV R1, t0
-            CALL print(String)
+            LEA t1, STRING0
+            CALL print(String), t2, [t1]
             L0:
-            END
+            END u0
 
         """.trimIndent()
 
@@ -100,33 +83,24 @@ class CodeGenTest {
 
         val expected = """
             Function topLevel:
-            LINE null:0
-            LINE input.fpl:1
-            LINE input.fpl:1
-            LINE input.fpl:3
-            END
+            END 0
             Function main():
             START
-            LINE input.fpl:4
-            MOV t0, 0
-            MOV i, t0
-            LINE input.fpl:5
-            JMP L3
-            L1:
-            LINE input.fpl:6
-            MOV R1, i
-            CALL print(Int)
-            LINE input.fpl:7
-            MOV t1, 1
-            ADD_I t2, i, t1
-            MOV i, t2
-            L3:
-            MOV t3, 10
-            BLT i, t3, L1
-            JMP L2
+            MOV t1, 0
+            MOV i, t1
+            JMP L4
             L2:
+            CALL print(Int), t2, [i]
+            MOV t3, 1
+            ADD_I t4, i, t3
+            MOV i, t4
+            L4:
+            MOV t5, 10
+            BLT i, t5, L2
+            JMP L3
+            L3:
             L0:
-            END
+            END u0
 
         """.trimIndent()
 
@@ -160,103 +134,76 @@ class CodeGenTest {
 
         val expected = """
             Function topLevel:
-            LINE null:0
-            LINE input.fpl:1
-            LINE input.fpl:1
-            LINE input.fpl:3
-            LINE input.fpl:11
-            END
+            END 0
             Function sum(Array<Int>):
             START
-            MOV a, R1
-            LINE input.fpl:4
-            MOV t0, 0
-            MOV total, t0
-            LINE input.fpl:5
             MOV t1, 0
-            MOV index, t1
-            LINE input.fpl:6
-            JMP L3
-            L1:
-            LINE input.fpl:7
-            LD4 t2, a[length]
-            IDX4 t3, index, t2
-            ADD_I t4, a, t3
-            LD4 t5, t4[0]
-            ADD_I t6, total, t5
-            MOV total, t6
-            LINE input.fpl:8
-            MOV t7, 1
-            ADD_I t8, index, t7
-            MOV index, t8
-            L3:
-            LD4 t9, a[length]
-            BLT index, t9, L1
-            JMP L2
+            MOV total, t1
+            MOV t2, 0
+            MOV index, t2
+            JMP L4
             L2:
-            LINE input.fpl:9
-            MOV R8, total
+            LD4 t3, a[length]
+            IDX4 t4, index, t3
+            ADD_I t5, a, t4
+            LD4 t6, t5[0]
+            ADD_I t7, total, t6
+            MOV total, t7
+            MOV t8, 1
+            ADD_I t9, index, t8
+            MOV index, t9
+            L4:
+            LD4 t10, a[length]
+            BLT index, t10, L2
+            JMP L3
+            L3:
+            MOV u0, total
             JMP L0
             L0:
-            END
+            END u0
             Function main():
             START
-            LINE input.fpl:12
-            MOV t0, 5
-            MOV R1, t0
-            MOV R2, 4
-            CALL mallocArray(Int,Int)
-            MOV t1, R8
-            MUL_I t2, t0, 4
-            MOV R1, t1
-            MOV R2, t2
-            CALL bzero
-            MOV arr, t1
-            LINE input.fpl:13
-            MOV t3, 1
-            MOV t4, 0
-            LD4 t5, arr[length]
-            IDX4 t6, t4, t5
-            ADD_I t7, arr, t6
-            ST4 t3, t7[0]
-            LINE input.fpl:14
-            MOV t8, 2
-            MOV t9, 1
-            LD4 t10, arr[length]
-            IDX4 t11, t9, t10
-            ADD_I t12, arr, t11
-            ST4 t8, t12[0]
-            LINE input.fpl:15
-            MOV t13, 3
-            MOV t14, 2
-            LD4 t15, arr[length]
-            IDX4 t16, t14, t15
-            ADD_I t17, arr, t16
-            ST4 t13, t17[0]
-            LINE input.fpl:16
-            MOV t18, 4
-            MOV t19, 3
-            LD4 t20, arr[length]
-            IDX4 t21, t19, t20
-            ADD_I t22, arr, t21
-            ST4 t18, t22[0]
-            LINE input.fpl:17
-            MOV t23, 5
-            MOV t24, 4
-            LD4 t25, arr[length]
-            IDX4 t26, t24, t25
-            ADD_I t27, arr, t26
-            ST4 t23, t27[0]
-            LINE input.fpl:18
-            MOV R1, arr
-            CALL sum(Array<Int>)
-            MOV t28, R8
-            MOV result, t28
-            LINE input.fpl:19
-            MOV R1, result
-            CALL print(Int)
+            MOV t1, 5
+            MOV t2, 4
+            CALL mallocArray(Int,Int), t3, [t1, t2]
+            MUL_I t4, t1, 4
+            CALL bzero, t5, [t3, t4]
+            MOV arr, t3
+            MOV t6, 1
+            MOV t7, 0
+            LD4 t8, arr[length]
+            IDX4 t9, t7, t8
+            ADD_I t10, arr, t9
+            ST4 t6, t10[0]
+            MOV t11, 2
+            MOV t12, 1
+            LD4 t13, arr[length]
+            IDX4 t14, t12, t13
+            ADD_I t15, arr, t14
+            ST4 t11, t15[0]
+            MOV t16, 3
+            MOV t17, 2
+            LD4 t18, arr[length]
+            IDX4 t19, t17, t18
+            ADD_I t20, arr, t19
+            ST4 t16, t20[0]
+            MOV t21, 4
+            MOV t22, 3
+            LD4 t23, arr[length]
+            IDX4 t24, t22, t23
+            ADD_I t25, arr, t24
+            ST4 t21, t25[0]
+            MOV t26, 5
+            MOV t27, 4
+            LD4 t28, arr[length]
+            IDX4 t29, t27, t28
+            ADD_I t30, arr, t29
+            ST4 t26, t30[0]
+            CALL sum(Array<Int>), t31, [arr]
+            MOV result, t31
+            CALL print(Int), t32, [result]
             L0:
-            END
+            END u0
 
         """.trimIndent()
 

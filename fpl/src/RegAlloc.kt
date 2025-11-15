@@ -33,6 +33,8 @@ class RegisterAllocator(private val func: Function, private val livemap: LiveMap
             if (dest != null)
                 for (liveIndex in livemap.live[instr.index + 1].stream()) {
                     if (liveIndex != dest.index && !(instr is InstrMov && liveIndex == instr.src.index)) {
+                        if (dest.index==-1)
+                            error("Internal error: dest index is -1 in interfere graph building for instruction $instr")
                         interfere[dest.index] += liveIndex
                         interfere[liveIndex] += dest.index
                     }
@@ -106,9 +108,18 @@ class RegisterAllocator(private val func: Function, private val livemap: LiveMap
             is InstrAlu -> InstrAlu(op, replace(dest), replace(src1), replace(src2))
             is InstrAluLit -> InstrAluLit(op, replace(dest), replace(src), lit)
             is InstrBranch -> InstrBranch(op, replace(src1), replace(src2), label)
-            is InstrCall -> this
-            is InstrVCall -> this
-            is InstrIndCall -> InstrIndCall(replace(func), retType)
+            is InstrCall -> {
+                assert(args.isEmpty())
+                InstrCall(func, zeroReg, emptyList())
+            }
+            is InstrVCall -> {
+                assert(args.isEmpty())
+                InstrVCall(func, zeroReg, emptyList())
+            }
+            is InstrIndCall -> {
+                assert(args.isEmpty())
+                InstrIndCall(replace(func), zeroReg, emptyList(), retType)
+            }
             is InstrJump -> this
             is InstrLabel -> this
             is InstrMov -> InstrMov(replace(dest), replace(src))

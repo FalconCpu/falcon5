@@ -20,17 +20,12 @@ class BackendTest {
 
         val expected = """
             Function topLevel:
-            LINE null:0
-            LINE input.fpl:1
-            LINE input.fpl:1
-            LINE input.fpl:3
-            END
+            END 0
             Function main():
             START
-            LINE input.fpl:4
             LEA R1, STRING0
-            CALL print(String)
-            END
+            CALL print(String), 0, []
+            END 0
 
         """.trimIndent()
 

@@ -2,6 +2,7 @@ import java.io.FileReader
 import java.io.FileWriter
 
 var debug = false
+var noInline = false
 
 
 //TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or

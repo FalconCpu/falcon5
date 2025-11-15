@@ -1044,7 +1044,7 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
                 if (lhs.type != TypeInt)
                     Log.error(location, "Operator '$op' not defined for type '${lhs.type}'")
             }
-            if (rhs.type.isAggregate()) {
+            if (rhs.type is TypeStruct) {
                 if (op != TokenKind.EQ)
                     Log.error(location, "Can only assign to aggregate types with '=' operator")
                 TctAssignAggregateStmt(location, lhs, rhs)

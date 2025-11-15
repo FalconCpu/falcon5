@@ -41,7 +41,9 @@ class GraphicsContext
 
     fun drawRect(x1:Int, y1:Int, x2:Int, y2:Int, color:Int)
         while (hwregs.blit_cmd < 3)         # Wait for blitter to have at least 3 free slots in command queue
+            hwregs.ledr = 1
             val dummy=0
+        hwregs.ledr = 0
         hwregs.blit_cmd = CMD_DRAW_RECT | color  # CMD RECT COLOR = color
         hwregs.blit_cmd = y1 lsl 16 | (x1 & 0xFFFF)          # x,y
         hwregs.blit_cmd = y2 lsl 16 | (x2 & 0xFFFF)          # w,h
@@ -102,8 +104,10 @@ class GraphicsContext
 
     fun drawImage(x:Int, y:Int, image:Image)
         while (hwregs.blit_cmd < 12)         # Wait for blitter to have at least 4 free slots in command queue
+            hwregs.ledr = 2
             val dummy = 1
 
+        hwregs.ledr = 0
         if affineSet
             hwregs.blit_cmd = CMD_SET_AFFINE    # CMD SET AFFINE
             hwregs.blit_cmd = 65536             # scaleX = 1.0
@@ -126,8 +130,10 @@ class GraphicsContext
 
 
         while (hwregs.blit_cmd < 12)         # Wait for blitter to have free slots
+            hwregs.ledr = 2
             val dummy = 1
 
+        hwregs.ledr = 0
         hwregs.blit_cmd = CMD_SET_AFFINE    # CMD SET AFFINE
         hwregs.blit_cmd = dx                # scaleX
         hwregs.blit_cmd = dy                # scaleY
@@ -154,10 +160,10 @@ class GraphicsContext
         val dx = (65536.0/scaleX) as Int
         val dy = (65536.0/scaleY) as Int
 
-
         while (hwregs.blit_cmd < 12)         # Wait for blitter to have free slots
+            hwregs.ledr = 2
             val dummy = 1
-
+        hwregs.ledr = 0
         hwregs.blit_cmd = CMD_SET_AFFINE    # CMD SET AFFINE
         hwregs.blit_cmd = dx                # scaleX
         hwregs.blit_cmd = dy                # scaleY

@@ -19,12 +19,15 @@ class Function (
     val regAllocComments = mutableListOf<String>()
     var maxRegister = 0
     var stackVarSize = 0
+    val returnRegister = if (returnType.isAggregate()) newCompoundReg(returnType.getNumElements()) else newUserTemp()
 
     // For an aggregate return type, the caller allocates memory return value
-    val returnDestAddr = if (returnType.isAggregate()) newTemp() else null
+    val returnDestAddr = if (returnType is TypeStruct) newTemp() else null
 
 
     val endLabel = newLabel()
+    val exitLabel = newLabel()
+    var used = false
 
     init {
         // Don't add extern functions to allFunctions list - as we don't want to generate code for them
@@ -41,9 +44,37 @@ class Function (
         return ret
     }
 
-    fun newUserTemp() : UserReg {
-        val ret = UserReg("t${tempCount++}")
+    fun newTemp(name:String) : TempReg {
+        val ret = TempReg(name)
         regs += ret
+        return ret
+    }
+
+
+    fun newTempAgg(name:String) : TempReg {
+        val ret = TempReg("${name}_${tempCount++}")
+        regs += ret
+        return ret
+    }
+
+
+    fun newUserTemp() : UserReg {
+        val ret = UserReg("u${tempCount++}")
+        regs += ret
+        return ret
+    }
+
+    fun newUserTemp(name:String) : UserReg {
+        val ret = UserReg(name)
+        regs += ret
+        return ret
+    }
+
+
+    fun newAggregateTemp(numElements:Int) : CompoundReg {
+        val name = "agg${tempCount++}"
+        val regs = (0 until numElements).map { newTempAgg(name) }
+        val ret = CompoundReg(regs, name)
         return ret
     }
 
@@ -58,7 +89,7 @@ class Function (
             val ret = when(sym.type) {
                 is TypeErrable ->  CompoundReg(listOf(newUserTemp(), newUserTemp()), name)
                 is TypeTuple -> {
-                    val regs = (0..<sym.type.elementTypes.size).map{newUserTemp() }
+                    val regs = sym.type.elementTypes.map{newUserTemp() }
                     CompoundReg(regs, name)
                 }
                 else -> UserReg(sym.name)
@@ -70,13 +101,22 @@ class Function (
 
     fun newCompoundReg(numElements:Int) : CompoundReg {
         val regs = (0 until numElements).map { newUserTemp() }
-        val ret = CompoundReg(regs, "u${tempCount++}")
+        val name = regs.joinToString(prefix = "{", postfix = "}")
+        val ret = CompoundReg(regs, name)
         return ret
     }
 
+    fun newInlineCompoundReg(base:CompoundReg) : CompoundReg {
+        val regs = (0 until base.regs.size).map { newUserTemp("inline_$it") }
+        val ret = CompoundReg(regs, regs.joinToString(prefix = "{", postfix = "}") )
+        return ret
+    }
+
+
     fun newCompoundReg(regs:List<Reg>) : CompoundReg {
         val copy = regs.map{ addCopy(it) }
-        val ret = CompoundReg(copy, "u${tempCount++}")
+        val name = copy.joinToString(prefix = "{", postfix = "}")
+        val ret = CompoundReg(copy, name)
         return ret
     }
 
@@ -120,9 +160,14 @@ class Function (
         return dest
     }
 
-
     fun addMov(dest: Reg, src: Reg) {
-        prog += InstrMov(dest, src)
+        if (src is CompoundReg) {
+            require(dest is CompoundReg)
+            require(dest.regs.size == src.regs.size)
+            for (i in src.regs.indices)
+                addMov(dest.regs[i], src.regs[i])
+        } else
+            prog += InstrMov(dest, src)
     }
 
     fun addLdImm(value:Int): TempReg {
@@ -199,13 +244,27 @@ class Function (
         prog += InstrLabel(label)
     }
 
-    fun addCall(func: Function) {
-        prog += InstrCall(func)
+    fun addCall(func: Function, args:List<Reg>) : Reg {
+        val dest = when (func.returnType) {
+            is TypeErrable -> newAggregateTemp(2)
+            is TypeTuple -> newAggregateTemp(func.returnType.elementTypes.size)
+            else -> newTemp()
+        }
+        prog += InstrCall(func, dest, args)
+        return dest
     }
 
-    fun addVCall(func: Function) {
+
+    fun addVCall(func: Function, args:List<Reg>) : TempReg {
         assert(func.virtualFunctionNumber >= 0)
-        prog += InstrVCall(func)
+
+        val dest = when (func.returnType) {
+            is TypeErrable -> TODO("Handle errable return types in calls")
+            is TypeTuple -> TODO("Handle tuple return types in calls")
+            else -> newTemp()
+        }
+        prog += InstrVCall(func, dest, args)
+        return dest
     }
 
     fun addBranch(op: BinOp, src1: Reg, src2: Reg, label: Label) {
