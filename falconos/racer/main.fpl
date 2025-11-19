@@ -19,6 +19,22 @@ fun atos(n:Int) -> String
         nn = nn / 10
     return unsafe(ret as String)
 
+const levelNames = const Array<String> [
+    "Coconut Beach",
+    "Devil's Canyon",
+    "Gateway",
+    "Cloudy Mountain",
+    "Alps",
+    "Desert",
+    "Seaside Town",
+    "Wheat Field",
+    "Old Capital",
+    "Wilderness",
+    "Lakeside",
+    "Autobahn",
+    "Desolation Hill",
+    "Death Valley",
+    "Vineyard" ]
 
 fun dumpPathElements(elements:Array<PathElement>, widths:Array<PathWidth>, scenery:Array<SceneryObject>)
     for i in elements
@@ -38,12 +54,14 @@ class NpcVehicle(var x:Float, var z:Float, var spriteIndex:Int, var maxSpeed:Flo
     fun move()
         # kprintf("NPC vehicle at x=%f z=%f speed=%f\n", npc.x, npc.z, npc.speed)
         # accelerate to max speed
+        if game.startTimer>0
+            return  
         val (curve,slope) = game.getPathCurvature(z)
         val absCurve = if curve<0.0 then -curve else curve
-        val localMaxSpeed = maxSpeed - (absCurve * 20.0) 
+        val localMaxSpeed = maxSpeed - (absCurve * 40.0) 
         
         if speed<localMaxSpeed
-            speed = speed + (if speed<50.0 then 0.5 else if speed<100.0 then 0.3 else 0.1)
+            speed = speed + (if speed<50.0 then 0.6 else if speed<100.0 then 0.3 else 0.1)
         elsif speed>localMaxSpeed
             speed = speed - 0.6
 
@@ -59,14 +77,14 @@ class NpcVehicle(var x:Float, var z:Float, var spriteIndex:Int, var maxSpeed:Flo
         # However dual-carriageways have a central reservation, which means they have edges at 0,10 and 15,25
 
         if (roadWidth<=7.0)
-            if x>5*roadWidth-10
+            if x>3*roadWidth-5
                 dx = -0.1
-            if x<-5.0 
+            if x<-10.0 
                 dx = 0.1
         else
-            if (x>10.0 and x<12.0) or x>35.0
+            if (x>12.5 and x<14.5) or x>35.0
                 dx = -0.1
-            if x<-0.0 or (x>23.0 and x<25.0)
+            if x<2.5 or (x>23.0 and x<25.0)
                 dx = 0.1
 
 const COPPER_HALT    = 0x00000000
@@ -77,11 +95,11 @@ const COPPER_WAIT_GE = 0x01000000
 fun createCopperList() -> List<Int>
     val copperList = new List<Int>()
 
-    const SKY_COLOR_INDEX = 0x1f
+    const SKY_COLOR_INDEX = 0
     const PALETTE_REGISTER = 0x1000
 
 
-    for i in 0..240
+    for i in 0..480
         val color = 0
         copperList.add(COPPER_WRITE | PALETTE_REGISTER | (SKY_COLOR_INDEX lsl 2))
         copperList.add(color)
@@ -94,24 +112,15 @@ fun setCopperList(copperList:List<Int>, cameraTilt:Float)
     const SKY_COLOR_INDEX = 0x1f
     const PALETTE_REGISTER = 0x1000
 
-    for i in 0..240
+    val pal_index = 32 * level_palette[3*game.level + 2]   # sky palette index
+    for i in 0..460
         # normalized height 0..1 (0 = bottom, 1 = top)
+        if i=game.horizonRow
+            break
         val t1 = 1.0 - i / 240.0 + (cameraTilt * 0.2)
-        val t = if t1<0.0 then 0.0 else if t1>1.0 then 1.0 else t1
-
-        # Sunset colors using smooth interpolation
-        # val r = ( 255.0 * (1.0 - t*t) ) as Int   # more red near horizon
-        # val g = ( 160.0 * (1.0 - t) ) as Int     # slight yellow/orange
-        # val b = ( 50.0 + 200.0 * t*t ) as Int    # blue increases with height
-
-        # Adjusted sunset gradient: warmer base, pale sky top
-        val r = (220.0 * (1.0 - t*t*t)) as Int    # fade red more gradually
-        val g = (140.0 * (1.0 - t*0.4)) as Int    # keep a little green tint higher up
-        val b = (130.0 + 100.0 * t) as Int  # bright sky-blue top instead of dark navy
-
-        # pack into 32-bit ARGB (alpha = 0)
-        val color = (r lsl 16) | (g lsl 8) | b
-
+        val t = if t1<0.0 then 0.0 else if t1>0.99 then 0.99 else t1
+        val index = (t*32) as Int
+        val color = skyPalettes[pal_index + index]
         copperList.set(i*3+1, color)
 
 
@@ -127,12 +136,18 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
     var carZ = 0.0      # car position along the road
     var cameraTilt = 0.0
     var carTurning = 0
+    var level = 0
+    var allGameMap : Array<Array<PathElement>>
+    var allWidthMap : Array<Array<PathWidth>>
+    var allSlopeMap : Array<Array<Float>>
+    var allScenery: Array<Array<SceneryObject>>
     var gameMap : Array<PathElement>
     var widthMap : Array<PathWidth>
     var slopeMap : Array<Float>
-    var scenery: Array<SceneryObject>
+    var scenery : Array<SceneryObject>
 
     var sprites : Array<Image>
+    var backgroundImage : Array<Image>
     
     var speed = 0.0         # speed along the road
     var smokeCounter = 0
@@ -146,6 +161,10 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
     var lastBreak = false
     var gear = 1
     var engineVol = 64
+    var backgroundOffset = new Array<Float>(2)
+    var startTimer = 200
+    var rank = 1
+    var score = 0
 
     val scanZ = new Array<Float>(480)              # Z distance for each screen row
     val roadWidthOnScreen = new Array<Float>(480)  # Road width in pixels for each screen row
@@ -168,13 +187,29 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
         if file is Error
             kprintf("Error loading path elements file %s\n", filename)
             abort(1)
-        gameMap = unsafe(((file as Int) +4) as Array<PathElement>) # First 4 bytes in file are length, then the array
-        widthMap = unsafe(((gameMap as Int) + (gameMap.length * 16)+ 4) as Array<PathWidth>)
-        scenery = unsafe(((widthMap as Int) + (widthMap.length * 12)+ 4) as Array<SceneryObject>)
-        slopeMap = unsafe(((scenery as Int) + (scenery.length * 24)+ 4) as Array<Float>)
-        totalPathDistance = gameMap[gameMap.length-1].endPos
+        var address = unsafe(file as Int)
+        allGameMap = new Array<Array<PathElement>>(18)
+        allWidthMap = new Array<Array<PathWidth>>(18)
+        allScenery = new Array<Array<SceneryObject>>(18)
+        allSlopeMap = new Array<Array<Float>>(18)
+        for level in 0..17
+            kprintf("Loading level %d path data from address %x\n", level, address)
+            allGameMap[level] = unsafe((address)+4) as Array<PathElement> # First 4 bytes in file are length, then the array
+            address += 4 + (allGameMap[level].length * 16)
+            kprintf("Loading width map for level %d from address %x\n", level, address)
+            allWidthMap[level] = unsafe((address + 4) as Array<PathWidth>)
+            address += 4 + (allWidthMap[level].length * 12)
+            kprintf("Loading scenery for level %d from address %x\n", level, address)
+            allScenery[level] = unsafe((address + 4) as Array<SceneryObject>)
+            address += 4 + (allScenery[level].length * 24)
+            kprintf("Loading slope map for level %d from address %x\n", level, address)
+            allSlopeMap[level] = unsafe((address + 4) as Array<Float>)
+            address += 4 + (allSlopeMap[level].length * 4)
+        kprintf("Finished loading path data %x\n",allGameMap[0])
+        totalPathDistance = allGameMap[0][allGameMap[0].length-1].endPos
 
     var printCounter = 0
+
 
     var currentCurveIndex = 0
     fun getPathCurvature(distance:Float) -> (Float,Float)
@@ -207,10 +242,23 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
 
 
     fun updateCarPosition()
+        if startTimer=100
+            audio.beepBeepBeep.play()
+        if startTimer>0
+            return
+
         val key = kb.getKey()
         val (curve, slope) = getPathCurvature(carZ)
         val distanceTravelled = speed * 0.002   # Convert km/h into m/frame
-        carX = carX + 5 * curve * distanceTravelled * distanceTravelled
+        val dx = curve * distanceTravelled * distanceTravelled
+        carX = carX + 5 * dx
+        backgroundOffset[0] = backgroundOffset[0] + curve * distanceTravelled * 24.0
+        backgroundOffset[1] = backgroundOffset[1] + curve * distanceTravelled * 32.0
+        for i in 0..1
+            if backgroundOffset[i]<0.0
+                backgroundOffset[i] = backgroundOffset[i] + backgroundImage[i].width
+            if backgroundOffset[i]> (backgroundImage[i].width as Float)
+                backgroundOffset[i] = backgroundOffset[i] - backgroundImage[0].width
 
         val grip = if speed<20.0 then 0.00012 else 0.00006
         carX = carX + grip * speed * carTurning
@@ -219,6 +267,8 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
             carZ = carZ - totalPathDistance
             laps = laps + 1
             audio.checkpoint.play()
+            if laps=2
+                selectLevel(level + 1)
 
         if flipState=0
             if kb.keyDown[KEY_SCANCODE_LEFT]
@@ -355,6 +405,7 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
         var prevRoadCenterX = 320.0
         var prevRoadWidth = 640.0
         var prevScale = 1.0
+        gc.setTransparentColor(-1)  # no transparency for road drawing
 
         # kprintf("Drawing road width=%f:\n", roadWidth[0])
         
@@ -399,12 +450,32 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
             prevScale = scale
             # kprintf("Projected road z=%d to screenY=%d center=%f width=%f\n", z, thisScreenY, thisRoadCenter, thisRoadWidth)
         end for
-        gc.drawRect(0, 0, SCREEN_WIDTH, horizonRow, 0x1F)  # sky
+        gc.drawRect(0, 0, SCREEN_WIDTH, horizonRow, 0)  # sky
+
+        gc.setTransparentColor(0)  # enable transparency after road drawing
+        for bg in 0..1
+            val image = backgroundImage[2*level+bg]
+            var bgHorizontRow = (screenCenterY + cameraTilt*50) as Int
+            if bgHorizontRow<horizonRow
+                bgHorizontRow = horizonRow
+            val bgTop = bgHorizontRow - image.height + 2*bg
+            val visible = if bgHorizontRow>horizonRow then horizonRow - bgTop else image.height
+            if visible>0
+                val offsetInt = backgroundOffset[bg] as Int
+                if offsetInt+640>=image.width
+                    val overlap =  image.width - offsetInt
+                    gc.drawImage(0, bgTop, overlap, visible, offsetInt,0,  image)
+                    gc.drawImage(overlap, bgTop, 640 - overlap, visible, 0,0,  image)
+                else
+                    gc.drawImage(0, bgTop, 640, visible, offsetInt,0,  image) 
     end fun
 
     fun calcRoadEdges (x:Float, width:Float) -> (Float, Float)
         const laneWidth = 5.0
-        val leftEdgeWorldX = x - 1.5 * laneWidth + (if width>7.0 then (width - 7.0) * laneWidth else 0.0)
+        var leftEdgeWorldX = x - 2.2 * laneWidth
+        if width>5.5
+            leftEdgeWorldX = leftEdgeWorldX + (width - 5.6) * laneWidth
+        
         val rightEdgeWorldX = leftEdgeWorldX + width*laneWidth
         return (leftEdgeWorldX, rightEdgeWorldX)
 
@@ -419,19 +490,24 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
         val startX = (screenCenterX + leftEdgeWorldX * scale) as Int
         val endX = (screenCenterX + rightEdgeWorldX * scale) as Int
 
+        # add entry to copper list for road color at this scanline
+        val groundPallette = 8*level_palette[3*level]
+        val groundColorIndex = groundPalettes[groundPallette + ((stripePhase lsr 1)&7)]   # road palette index
+        copperList.set(y*3+1, groundColorIndex)
+
         # kprintf("  Road scanline at y=%d center=%f startX=%d endX=%d width=%f scale=%f\n", y, x, startX, endX, width, scale)
 
         if startX>=SCREEN_WIDTH or endX<=0
-            gc.drawRect(0, y, SCREEN_WIDTH, y+1, 0x0F) # all grass
+            gc.drawRect(0, y, SCREEN_WIDTH, y+1, 0x00) # all grass
             return
         elsif (startX<0 and endX>SCREEN_WIDTH) # all road
             gc.drawRect(0, y, SCREEN_WIDTH, y+1, 0x24)
         else 
             val startXClipped = if startX<0 then 0 else startX
             val endXClipped = if endX>SCREEN_WIDTH then SCREEN_WIDTH else endX
-            gc.drawRect(0, y, startXClipped, y+1, 0x0F)
+            gc.drawRect(0, y, startXClipped, y+1, 0x00)
             gc.drawRect(startXClipped, y, endXClipped, y+1, 0x24) # road
-            gc.drawRect(endXClipped, y, SCREEN_WIDTH, y+1, 0x0F)
+            gc.drawRect(endXClipped, y, SCREEN_WIDTH, y+1, 0x00)
         
         const laneWidth = 5.0
         val laneWidthPixels = (laneWidth * scale) as Int
@@ -440,7 +516,8 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
             # draw central divider
             val divStart = startX + 3 * laneWidthPixels
             val divEnd = endX - 3 * laneWidthPixels
-            gc.drawRect(divStart, y, divEnd, y+1, 0x0F)
+            gc.drawRect(divStart, y, divEnd, y+1, 0x0)
+
 
         # draw road stripes
         val lineWidth = (0.3 * scale) as Int
@@ -468,14 +545,16 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
             val x1 = startX + 3 * laneWidthPixels
             gc.drawRect(x1- lineWidth, y, x1, y+1, curbColor)
             val x2 = endX - 3 * laneWidthPixels
-            gc.drawRect(x2-lineWidth, y, x2, y+1, curbColor)
+            gc.drawRect(x2-lineWidth, y, x2, y+1, curbColor)        
 
     fun drawScenery()
         # scan through scenery list back to front
         hwregs.ledr = 0
+        gc.setTransparentColor(0)
         for index in scenery.length-1..>=0
             val distance = scenery[index].pos - carZ
             val props = (scenery[index].props lsr 4) as SpriteProperties
+            val mirrored = (scenery[index].props&1)!=0
 
             if distance<0.0 or distance>50.0
                 continue  # object is behind us or too far ahead    
@@ -483,7 +562,7 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
             val (roadX, roadY) = interpolateRoadCoords(distance)
             val scale = focalLength / (distance + cameraZ)
             val screenY = (screenCenterY - (roadY + scenery[index].y/20.0 - cameraY) * scale) as Int
-            # kprintf("Drawing scenery index %d %f %f scale=%f screenY=%d\n", index, scenery[index].y, cameraY, scale, screenY)
+            # kprintf("Drawing scenery index %d %f %f scale=%f screenY=%d props=%d\n", index, scenery[index].y, cameraY, scale, screenY,props)
             val spriteX = scenery[index].x + roadX
 
             val screenX = (screenCenterX + spriteX * scale) as Int
@@ -494,10 +573,24 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
             val scalex = scale * 0.11 # convert from world scale to sprite scale
             val spriteWidth = (sprite.width * scalex) as Int
             val spriteHeight = (sprite.height * scalex) as Int
-            val drawX = screenX - (spriteWidth / 2)
+            var drawX = screenX - (spriteWidth / 2)
+            if props.alignEdgeX
+                drawX -= if mirrored then spriteWidth/2 else -spriteWidth/2
 
-            if distance<(0.5+0.01*speed) and drawX<320 and drawX+spriteWidth>320 and scenery[index].y<50.0
-                kprintf("Scenery object %d %f %d %d %f\n", scenery[index].type, distance, drawX, drawX+spriteWidth, scenery[index].y)
+            var drawL = drawX
+            var drawR = drawX + spriteWidth
+            var type = scenery[index].type
+
+            # Special case for certain trees - make collision box smaller 
+            if type=33
+                if mirrored
+                    drawR -= spriteWidth/2
+                else
+                    drawL += spriteWidth/2
+
+            if distance<(0.5+0.01*speed) and drawL<320 and drawR>320 and scenery[index].y<50.0 and not props.noCollision
+                kprintf("Collision with scenery object %d type=%d at X=%d-%d props=%d\n", index, scenery[index].type, drawX,drawX+spriteWidth, props)
+
                 if flipState=0
                     if speed>120.0
                         audio.crash.play()
@@ -510,7 +603,9 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
 
             if drawX+spriteWidth<0 or drawX>=SCREEN_WIDTH
                 continue  # sprite is off left or right of screen
-            val drawY = if props.alignCenterY then screenY - spriteHeight/2 else screenY - spriteHeight
+            var drawY = if props.alignCenterY then screenY - spriteHeight/2 else screenY - spriteHeight
+            if props.alignBottom
+                drawY -= 3*spriteHeight
             if drawY+spriteHeight<0 or drawY>=SCREEN_HEIGHT
                 continue  # sprite is off top or bottom of screen
 
@@ -529,16 +624,19 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
             if scenery[index].props=49
                 gc.drawRect(0, drawY, drawX, drawY + (sprite.height*scalex) as Int, 0xFC) # water color
 
-            val mirrorX = if scenery[index].props&1 !=0 then -1.0 else 1.0
+            val mirrorX = if mirrored then -1.0 else 1.0
             if scale<60.0 and scale>-60.0
                 gc.drawImage(drawX, drawY, adjMaxDraw, sprite, scalex*mirrorX, scalex)
+                if props.extraWide
+                    gc.drawImage(drawX+spriteWidth, drawY, adjMaxDraw, sprite, scalex*mirrorX, scalex)
+                    gc.drawImage(drawX-spriteWidth, drawY, adjMaxDraw, sprite, scalex*mirrorX, scalex)
                 # kprintf(" %d scale=%f\n", index, scalex)
 
     fun drawNpcVehicles()
-        var position = 1
+        rank = 1
         for vehicle in npcVehicles
             if  vehicle.laps>laps or (vehicle.laps=laps and vehicle.z>carZ)
-                position = position + 1
+                rank += 1
 
             val distance = vehicle.z - carZ
             if distance<0.0 or distance>50.0
@@ -597,24 +695,24 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
             if scale<120.0
                 gc.drawImage(drawX, drawY, maxDrawHeight, sprite, scalex, scalex)
 
-        val speedStr = atos(position)
-        gc.drawText(10, 10, 0, 10, "Position ") 
-        gc.drawText(90, 10, 0, 10, speedStr)
+        val speedStr = atos(rank)
+        gc.drawText(10, 10, 1, "Position ") 
+        gc.drawText(90, 10, 1, speedStr)
         free speedStr
 
 
     fun drawFrame()
         # lastRow now contains the screen coordinate of the horizonRow
-
+        gc.setTransparentColor(0)  # enable transparency
         # add speedometer
         val speedStr = atos(speed as Int)
-        gc.drawText(280, 10, 0, 10, "Speed ")
-        gc.drawText(340, 10, 0, 10, speedStr)
+        gc.drawText(280, 10, 1, "Speed ")
+        gc.drawText(340, 10, 1, speedStr)
         free speedStr
 
         val distStr = atos(carZ as Int)
-        gc.drawText(280, 30, 0, 10, "Dist ")
-        gc.drawText(340, 30, 0, 10, distStr)
+        gc.drawText(280, 30, 1, "Dist ")
+        gc.drawText(340, 30, 1,  distStr)
         free distStr
 
         # draw the car sprite
@@ -702,6 +800,112 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
         for npc in npcVehicles
             npc.move()
 
+    fun gameOver()
+        val finalStr : String
+        if level=16 and rank<=10
+            finalStr = "Well done! You finished the game with score "
+        else
+            finalStr = "Game Over! Your final score is "
+        gc.drawText(100, 200, 20, finalStr)
+        val scoreStr = atos(score)
+        gc.drawText(400, 200, 20, scoreStr) 
+        gc.drawText(200, 240, 20, "Press 'N' to start again")
+        gc.setTransparentColor(0)  # Enable transparency
+        hwregsAudio[1].volume = 0
+
+
+        while true
+            val key = kb.getKey()
+            if key='m'
+                score = 0
+                selectLevel(0)
+    end fun
+
+    fun rankToScore(rank:Int) -> Int
+        when rank
+            1 ->  return 20
+            2 ->  return 15
+            3 ->  return 12
+            4 ->  return 10
+            5 ->  return 7
+            6 ->  return 5
+            7 ->  return 4
+            8 ->  return 3
+            9 ->  return 2
+            10 -> return 1
+            else -> return 0
+
+    fun selectLevel(levelIndex:Int)
+        gc.setGraphicsBuffer(screenBuffer1)
+        hwregsVideo.addr = screenBuffer1
+        gc.setTransparentColor(-1)  # Disable transparency
+        gc.drawRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0)  # black background
+        
+        if level=16 or rank>10
+            gameOver()
+
+        level = levelIndex
+        scenery = allScenery[levelIndex]
+        slopeMap = allSlopeMap[levelIndex]
+        gameMap = allGameMap[levelIndex]
+        widthMap = allWidthMap[levelIndex]
+
+        val levelStr = atos(levelIndex+1)
+        gc.drawText(200, 200, 20, "Get ready for level ")
+        gc.drawText(400, 200, 20, levelStr)
+        free levelStr
+
+        if level!=0
+            gc.drawText(200, 160, 20, "You finished in position ")
+            val rankStr = atos(rank)
+            gc.drawText(450, 160, 20, rankStr)
+            free rankStr
+            score += rankToScore(rank)
+            gc.drawText(200, 180, 20, "Total score: ")
+            val scoreStr = atos(score)
+            gc.drawText(320, 180, 20, scoreStr)
+            free scoreStr
+
+
+        gc.drawText(200, 240, 20, levelNames[levelIndex])
+        gc.drawText(200, 280, 20, "Press 'S' to start")
+        gc.setTransparentColor(0)  # Enable transparency
+        hwregsAudio[1].volume = 0
+
+        # Set the copperlist to all black
+        val paletteRegs = unsafe(0xE0001000 as Pointer<Int>)
+
+        var x = -5.0
+        var dx = 0.2
+        for i in 0..<npcVehicles.length
+            val v = npcVehicles.get(i)
+            dx = -dx
+            x = x + 5.0
+            if x>=18.0
+                x = -5.0
+            v.speed = 0.0
+            v.x = x
+            v.z = 3.0*(19-i)
+            v.dx = dx
+            v.laps = 0
+
+        speed = 0.0
+        carX = 0.0
+        carZ = 0.0
+        carTurning = 0
+        currentCurveIndex = 0
+        laps = 0
+        startTimer = 200 
+
+        while true
+            paletteRegs[0] = 0x00000000
+            val key = kb.getKey()
+            if key='s'
+                break
+
+        
+
+
     fun gameLoop()
         # Wait for vertical blank
         # hwregs.seven_seg = hwregs.vga_pos
@@ -709,6 +913,9 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
             delay()
         while hwregs.vga_pos < 480
             delay()
+        
+        if startTimer>0
+            startTimer = startTimer - 1
 
         if doubleBufferPhase=0
             gc.setGraphicsBuffer(screenBuffer1)
@@ -791,7 +998,7 @@ fun main()
     val gc = new GraphicsContext()
     gc.setup()
     gc.setTransparentColor(0)  # Set transparency color to palette index 0
-
+    
     val kb = new Keyboard()
 
 
@@ -809,6 +1016,8 @@ fun main()
     game = new Game(gc, kb, audioSamples)
 
     game.sprites = loadSprites()
+    game.backgroundImage = loadBackgroundImage()
+
     game.loadGameMap("level_path.bin")
 
     game.copperList = createCopperList()
@@ -829,13 +1038,17 @@ fun main()
             x = -5.0
 
     # game.displaySprites()
-    game.audio.getReady.play()
     hwregsAudio[1].addr = unsafe(enginePcmData as Int) + 0x6208
     hwregsAudio[1].rep_addr = unsafe(enginePcmData as Int) + 0x6208
     hwregsAudio[1].volume = (48 lsl 16) | 48  # Left and right volume
     hwregsAudio[1].pitch = 0x3000            # Playback frequency
     hwregsAudio[1].rep_length = 0x08f0  # Set repeat length for looping
     hwregsAudio[1].length = 0x008f0  # Set length to start playback
+
+    game.selectLevel(0)
+    hwregsAudio[1].volume = 0
+    game.audio.getReady.play()
+
 
     while true
         game.gameLoop()

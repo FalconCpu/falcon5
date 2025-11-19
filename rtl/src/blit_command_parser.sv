@@ -9,12 +9,12 @@
 //
 //
 // 00 = NOP
-// 01 = DRAW_RECT   Params: (color) (x1/y1) (x2/y2)
-// 02 = COPY_RECT   Params: (color) (x1/y1) (x2/y2) (src_x/src_y)
-// 03 = DRAW_TEXT   Params: (color/bgcolor) (x1/y1) (char0) (char1) ... (NUL)
+// 01 = DRAW_RECT        Params: (color) (x1/y1) (x2/y2)
+// 02 = COPY_RECT        Params: (color) (x1/y1) (x2/y2) (src_x/src_y)
+// 03 = DRAW_TEXT        Params: (color/bgcolor) (x1/y1) (char0) (char1) ... (NUL)
 // 04 = SET_TRANSPARENCY Params: (transparent_color)
-// 05 = SET_AFFINE  Params: () (src_dx_x) (src_dy_y) (src_dy_x) (src_dx_y)
-
+// 05 = SET_AFFINE       Params: () (src_dx_x) (src_dy_y) (src_dy_x) (src_dx_y)
+// 06 = DRAW_TRAPEZOID   Params: (color) (x1/y1) (x2/y2) (slope_x1) (slope_x2)
 
 // FF = SETUP       Params: (dest_stride) (dest_addr) (clip_x1/y1) (clip_x2/y2) (offset_x/y) (src_addr) (src_stride)
 // FE = SET_SRC     Params: (src_stride) (src_addr)
@@ -52,6 +52,8 @@ module blit_command_parser(
     output logic [31:0]   reg_src_dy_y,   // Delta Y for source address calculation
     output logic [31:0]   reg_src_dy_x,   // Delta X for source address calculation
     output logic [31:0]   reg_src_dx_y,   // Delta Y for source address calculation
+    output logic [31:0]   reg_slope_x1,   // For triangle/trapezoid fills
+    output logic [31:0]   reg_slope_x2,
     output logic [7:0]    reg_color,       // Color to write
     output logic [7:0]    reg_bgcolor,     // Background color for text
     output logic [8:0]    transparent_color, // Transparent color for blitting (set to 9'b1xxxx_xxxx to disable)
@@ -94,6 +96,8 @@ logic [31:0]   next_reg_src_dx_x;
 logic [31:0]   next_reg_src_dy_y;
 logic [31:0]   next_reg_src_dy_x;
 logic [31:0]   next_reg_src_dx_y;
+logic [31:0]   next_reg_slope_x1;
+logic [31:0]   next_reg_slope_x2;
 
 logic [3:0]   state, next_state;    
 localparam STATE_IDLE=0, 
@@ -107,7 +111,8 @@ localparam STATE_IDLE=0,
            STATE_TEXT3=8,
            STATE_TEXT4=9,
            STATE_SET_SRC=10,
-           STATE_SET_AFFINE=11;
+           STATE_SET_AFFINE=11,
+           STATE_DRAW_TRAPEZOID=12;
 logic         consume_cmd;
 logic         next_start;
 
@@ -117,6 +122,7 @@ localparam CMD_COPY_RECT  = 8'h02;
 localparam CMD_DRAW_TEXT  = 8'h03;  // Setup for text rendering
 localparam CMD_SET_TRANSPARENCY = 8'h04;
 localparam CMD_SET_AFFINE = 8'h05;
+localparam CMD_DRAW_TRAPEZOID = 8'h06;
 localparam CMD_SETUP      = 8'hFF;
 localparam CMD_SET_SRC    = 8'hFE;
 
@@ -162,6 +168,8 @@ always_comb begin
     next_reg_src_dy_y    = reg_src_dy_y;
     next_reg_src_dy_x    = reg_src_dy_x;
     next_reg_src_dx_y    = reg_src_dx_y;
+    next_reg_slope_x1    = reg_slope_x1;
+    next_reg_slope_x2    = reg_slope_x2;
     
     // Handle writes to the FIFO
     if (hwregs_blit_valid) begin
@@ -230,6 +238,12 @@ always_comb begin
                         next_transparent_color = this_cmd[8:0];
                         consume_cmd = 1'b1;
                     end 
+
+                CMD_DRAW_TRAPEZOID: begin
+                        next_reg_color = this_cmd[7:0];
+                        next_state = STATE_DRAW_TRAPEZOID;
+                        consume_cmd = 1'b1;
+                     end
                 
                 default: begin
                         $display("BLIT_CMD: Warning: Unknown command %x", cmd_code);
@@ -243,6 +257,8 @@ always_comb begin
                 if (arg_count == 3'd0) begin
                     next_reg_x1 = this_cmd[15:0] + offset_x;
                     next_reg_y1 = this_cmd[31:16] + offset_y;
+                    next_reg_slope_x1 = 32'h0;                      // Default to vertical edges
+                    next_reg_slope_x2 = 32'h0;
                 end else if (arg_count == 3'd1) begin
                     next_reg_x2 = this_cmd[15:0] + offset_x;
                     next_reg_y2 = this_cmd[31:16] + offset_y;
@@ -260,6 +276,8 @@ always_comb begin
                 if (arg_count == 3'd0) begin
                     next_reg_x1 = this_cmd[15:0] + offset_x;
                     next_reg_y1 = this_cmd[31:16] + offset_y;
+                    next_reg_slope_x1 = 32'h0;
+                    next_reg_slope_x2 = 32'h0;
                 end else if (arg_count == 3'd1) begin
                     next_reg_x2 = this_cmd[15:0] + offset_x;
                     next_reg_y2 = this_cmd[31:16] + offset_y;
@@ -280,6 +298,8 @@ always_comb begin
         STATE_TEXT: begin
             next_src_stride = {8'b0,font_width} >> 3; // bytes per row
             next_src_base_addr = font_addr;
+            next_reg_slope_x1 = 32'h0;
+            next_reg_slope_x2 = 32'h0;
 
             if (cmd_valid) begin
                 next_reg_x1 = this_cmd[15:0] + offset_x;
@@ -387,6 +407,30 @@ always_comb begin
             end
         end
 
+        STATE_DRAW_TRAPEZOID: begin
+            if (cmd_valid) begin
+                if (arg_count == 3'd0) begin
+                    next_reg_x1 = this_cmd[15:0] + offset_x;
+                    next_reg_y1 = this_cmd[31:16] + offset_y;
+                    next_reg_slope_x1 = 32'h0;                      // Default to vertical edges
+                    next_reg_slope_x2 = 32'h0;
+                end else if (arg_count == 3'd1) begin
+                    next_reg_x2 = this_cmd[15:0] + offset_x;
+                    next_reg_y2 = this_cmd[31:16] + offset_y;
+                end else if (arg_count == 3'd2) begin
+                    next_reg_slope_x1 = this_cmd[31:0];
+                end else if (arg_count == 3'd3) begin
+                    next_reg_slope_x2 = this_cmd[31:0];
+                    next_reg_command = `BLIT_RECT;
+                    next_start = 1'b1;
+                    next_state = STATE_WAIT_ACK;
+                end 
+                next_arg_count = arg_count + 3'd1;
+                consume_cmd = 1'b1;
+            end
+        end
+
+
 
     endcase
 
@@ -445,6 +489,8 @@ always_ff @(posedge clock) begin
     reg_src_dy_y    <= next_reg_src_dy_y;
     reg_src_dy_x    <= next_reg_src_dy_x;
     reg_src_dx_y    <= next_reg_src_dx_y;
+    reg_slope_x1    <= next_reg_slope_x1;
+    reg_slope_x2    <= next_reg_slope_x2;
 
     if (hwregs_blit_valid) begin
         cmd_fifo[fifo_wr_ptr] <= {hwregs_blit_privaledge,hwregs_blit_command};

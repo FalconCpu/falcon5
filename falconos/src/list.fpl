@@ -16,6 +16,7 @@ class List<T>
         return array[index]
 
     fun set(index:Int, item: T)
+        # kprintf("Setting index %d len %d to item %x\n", index, array.length, item)
         array[index] = item
 
     fun isEmpty() -> Bool

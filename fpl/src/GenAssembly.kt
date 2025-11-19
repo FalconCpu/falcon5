@@ -180,6 +180,11 @@ fun genAssembly() : String {
     // Trace functions which are reachable from top level
     allFunctions[0].markUsed()
     allFunctions.find{ it.name=="main()" }?.markUsed()
+    allFunctions.find{ it.name=="initializeMemorySystem()" }?.markUsed()
+    allFunctions.find{ it.name=="mallocArray(Int,Int)" }?.markUsed()
+    allFunctions.find{ it.name=="mallocObject(ClassDescriptor)" }?.markUsed()
+    allFunctions.find{ it.name=="freeMem(Int)" }?.markUsed()
+    allFunctions.find{ it.name=="exceptionHandler(Int,Int,Int)" }?.markUsed()
     ClassValue.allClasses.forEach { cls ->
         cls.klass.virtualFunctions.forEach { func ->
                 func.markUsed()

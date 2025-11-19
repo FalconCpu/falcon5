@@ -485,7 +485,8 @@ jsr /print(String)            # Print " at "
 ld $1, $10
 jsr /printHex(Int)            # Print the return address
 
-ldw $2, $1[HWREGS_SIM_MODE]  # Load simulator mode register
+ld $7, HWREGS_BASE           # Load base address of hardware registers
+ldw $2, $7[HWREGS_SIM_MODE]  # Load simulator mode register
 beq $2, 0, .on_hardware      # If in hardware mode then we have nowhere to return to
 
 # On simulator, so do a jump to address 0 to stop the simulator

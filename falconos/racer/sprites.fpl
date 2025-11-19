@@ -1,21 +1,21 @@
 
 var spriteData : Pointer<Char>
 
-enum SpriteProperties(alignCenterY:Bool) [
-    GENERAL         (false),
-    CROPS           (true),
-    CLOUDS          (false),
-    WATER           (true),
-    START           (false),
-    NO_COLLISION    (false),
-    CHECKPOINT      (false),
-    CENTER_COLLISION(false),
-    HALF_SIZE       (false),
-    SPECIAL_ROCK    (false),
-    SAND            (true),
-    SMALL_STONES    (true),
-    MINI_TREE       (false),
-    DEBRIS          (true)]
+enum SpriteProperties(alignCenterY:Bool, alignEdgeX:Bool, alignBottom:Bool, noCollision:Bool, extraWide:Bool) [
+    GENERAL         (false, false, false, false, false),
+    CROPS           (false, true, false, false, false),
+    CLOUDS          (false, false, true, true, true),
+    WATER           (true, true, false, false, false),
+    START           (false, false, false, false, false),
+    NO_COLLISION    (false, false, false, false, false),
+    CHECKPOINT      (false, false, false, false, false),
+    CENTER_COLLISION(false, false, false, false, false),
+    HALF_SIZE       (false, false, false, false, false),
+    SPECIAL_ROCK    (false, false, false, false, false),
+    SAND            (true, true, false, true, false),
+    SMALL_STONES    (true, true, false, false, false),
+    MINI_TREE       (false, true, false, false, false),
+    DEBRIS          (true, true, false, true, false)]
 
 const SPRITE_CAR_STRAIGHT = 0
 const SPRITE_CAR_DOWN = 1
@@ -47,75 +47,177 @@ fun loadSprites() -> Array<Image>
     if (file is Error)
         kprintf("Error loading sprite data file\n")
         abort(1)
-    spriteData = unsafe(file as Pointer<Char>)
+    val spriteData = unsafe(file as Int)
 
     val spriteArray = new Array<Image>(180)
-    spriteArray[0] = createImage("car_straight", 88, 41, 0)
-    spriteArray[1] = createImage("car_down", 88, 36, 3608)
-    spriteArray[2] = createImage("car_up", 88, 44, 6776)
-    spriteArray[3] = createImage("car_turn", 88, 41, 10648)
-    spriteArray[4] = createImage("car_downturn", 88, 36, 14256)
-    spriteArray[5] = createImage("car_upturn", 88, 44, 17424)
-    spriteArray[6] = createImage("car_turn2", 88, 41, 21296)
-    spriteArray[7] = createImage("smoke1", 40, 25, 24904)
-    spriteArray[8] = createImage("smoke2", 40, 29, 25904)
-    spriteArray[9] = createImage("smoke3", 24, 20, 27064)
-    spriteArray[10] = createImage("smoke4", 24, 13, 27544)
-    spriteArray[11] = createImage("car_spin1", 136, 41, 27856)
-    spriteArray[12] = createImage("car_spin2", 184, 40, 33432)
-    spriteArray[13] = createImage("car_spin3", 176, 40, 40792)
-    spriteArray[14] = createImage("car_spin4", 136, 41, 47832)
-    spriteArray[15] = createImage("car_flip1", 152, 72, 53408)
-    spriteArray[16] = createImage("car_flip2", 152, 99, 64352)
-    spriteArray[17] = createImage("car_flip3", 144, 84, 79400)
-    spriteArray[18] = createImage("car_flip4", 144, 38, 91496)
-    spriteArray[19] = createImage("car_flip5", 144, 70, 96968)
-    spriteArray[20] = createImage("car_flip6", 144, 97, 107048)
-    spriteArray[21] = createImage("car_flip7", 144, 78, 121016)
-    spriteArray[22] = createImage("npc_car_1", 48, 55, 132248)
-    spriteArray[23] = createImage("npc_car_2", 48, 55, 134888)
-    spriteArray[24] = createImage("npc_car_3", 48, 31, 137528)
-    spriteArray[25] = createImage("npc_car_4", 48, 31, 139016)
-    spriteArray[26] = createImage("npc_car_5", 48, 35, 140504)
-    spriteArray[27] = createImage("npc_car_6", 48, 35, 142184)
-    spriteArray[28] = createImage("npc_car_7", 48, 35, 143864)
-    spriteArray[29] = createImage("npc_car_8", 48, 35, 145544)
-    spriteArray[30] = createImage("npc_car_9", 56, 31, 147224)
-    spriteArray[31] = createImage("npc_car_10", 56, 31, 148960)
-    spriteArray[32] = createImage("npc_car_11", 48, 35, 150696)
-    spriteArray[33] = createImage("npc_car_12", 48, 35, 152376)
-    spriteArray[34] = createImage("npc_car_13", 56, 32, 154056)
-    spriteArray[35] = createImage("npc_car_14", 56, 32, 155848)
-    spriteArray[36] = createImage("npc_car_15", 64, 43, 157640)
-    spriteArray[37] = createImage("npc_car_16", 64, 43, 160392)
-    spriteArray[38] = createImage("npc_car_17", 64, 43, 163144)
-    spriteArray[39] = createImage("npc_car_18", 64, 43, 165896)
-    spriteArray[40] = createImage("npc_car_19", 64, 43, 168648)
-    spriteArray[41] = createImage("53: Decor - Crowd Stand", 192, 65, 171400)
-    spriteArray[42] = createImage("53: Decor - Crowd Stand", 192, 65, 183880)
-    spriteArray[43] = createImage("16: Tree - Palm", 88, 168, 196360)
-    spriteArray[44] = createImage("39: Decor - Oil", 40, 27, 211144)
-    spriteArray[45] = createImage("38: Bush 3", 72, 39, 212224)
-    spriteArray[46] = createImage("89: Bush 4 - Tropical", 136, 79, 215032)
-    spriteArray[47] = createImage("6: Sign - Directional", 64, 112, 225776)
-    spriteArray[48] = createImage("63: Strip - Water", 248, 32, 232944)
-    spriteArray[49] = createImage("10: Sign - Diving School (Dupe)", 120, 80, 240880)
-    spriteArray[50] = createImage("28: Windsurfer", 56, 86, 250480)
-    spriteArray[51] = createImage("28: Windsurfer", 56, 86, 255296)
-    spriteArray[52] = createImage("28: Windsurfer", 56, 86, 260112)
-    spriteArray[53] = createImage("6: Sign - Directional", 64, 112, 264928)
-    spriteArray[54] = createImage("37: Building - Hut", 128, 86, 272096)
-    spriteArray[55] = createImage("37: Building - Hut", 128, 86, 283104)
-    spriteArray[56] = createImage("37: Building - Hut", 128, 86, 294112)
-    spriteArray[57] = createImage("37: Building - Hut", 128, 86, 305120)
-    spriteArray[58] = createImage("34: Building - Flaminco", 120, 64, 316128)
-    spriteArray[59] = createImage("97: Sign - SEGA 2", 152, 92, 323808)
-    spriteArray[60] = createImage("98: Sign - OutRun Deluxe", 128, 127, 337792)
-    spriteArray[61] = createImage("71: Sign - Ice Cream Parlor", 104, 101, 354048)
-    spriteArray[62] = createImage("6: Sign - Directional", 64, 112, 364552)
-    spriteArray[63] = createImage("47: Sign - Directions", 224, 51, 371720)
-    spriteArray[64] = createImage("23: Pole - Thick", 16, 112, 383144)
+    spriteArray[0] = createImage("car_straight", 88, 41,spriteData, 0)
+    spriteArray[1] = createImage("car_down", 88, 36,spriteData, 3608)
+    spriteArray[2] = createImage("car_up", 88, 44,spriteData, 6776)
+    spriteArray[3] = createImage("car_turn", 88, 41,spriteData, 10648)
+    spriteArray[4] = createImage("car_downturn", 88, 36,spriteData, 14256)
+    spriteArray[5] = createImage("car_upturn", 88, 44,spriteData, 17424)
+    spriteArray[6] = createImage("car_turn2", 88, 41,spriteData, 21296)
+    spriteArray[7] = createImage("smoke1", 40, 25,spriteData, 24904)
+    spriteArray[8] = createImage("smoke2", 40, 29,spriteData, 25904)
+    spriteArray[9] = createImage("smoke3", 24, 20,spriteData, 27064)
+    spriteArray[10] = createImage("smoke4", 24, 13,spriteData, 27544)
+    spriteArray[11] = createImage("car_spin1", 136, 41,spriteData, 27856)
+    spriteArray[12] = createImage("car_spin2", 184, 40,spriteData, 33432)
+    spriteArray[13] = createImage("car_spin3", 176, 40,spriteData, 40792)
+    spriteArray[14] = createImage("car_spin4", 136, 41,spriteData, 47832)
+    spriteArray[15] = createImage("car_flip1", 152, 72,spriteData, 53408)
+    spriteArray[16] = createImage("car_flip2", 152, 99,spriteData, 64352)
+    spriteArray[17] = createImage("car_flip3", 144, 84,spriteData, 79400)
+    spriteArray[18] = createImage("car_flip4", 144, 38,spriteData, 91496)
+    spriteArray[19] = createImage("car_flip5", 144, 70,spriteData, 96968)
+    spriteArray[20] = createImage("car_flip6", 144, 97,spriteData, 107048)
+    spriteArray[21] = createImage("car_flip7", 144, 78,spriteData, 121016)
+    spriteArray[22] = createImage("npc_car_1", 48, 55,spriteData, 132248)
+    spriteArray[23] = createImage("npc_car_2", 48, 55,spriteData, 134888)
+    spriteArray[24] = createImage("npc_car_3", 48, 31,spriteData, 137528)
+    spriteArray[25] = createImage("npc_car_4", 48, 31,spriteData, 139016)
+    spriteArray[26] = createImage("npc_car_5", 48, 35,spriteData, 140504)
+    spriteArray[27] = createImage("npc_car_6", 48, 35,spriteData, 142184)
+    spriteArray[28] = createImage("npc_car_7", 48, 35,spriteData, 143864)
+    spriteArray[29] = createImage("npc_car_8", 48, 35,spriteData, 145544)
+    spriteArray[30] = createImage("npc_car_9", 56, 31,spriteData, 147224)
+    spriteArray[31] = createImage("npc_car_10", 56, 31,spriteData, 148960)
+    spriteArray[32] = createImage("npc_car_11", 48, 35,spriteData, 150696)
+    spriteArray[33] = createImage("npc_car_12", 48, 35,spriteData, 152376)
+    spriteArray[34] = createImage("npc_car_13", 56, 32,spriteData, 154056)
+    spriteArray[35] = createImage("npc_car_14", 56, 32,spriteData, 155848)
+    spriteArray[36] = createImage("npc_car_15", 64, 43,spriteData, 157640)
+    spriteArray[37] = createImage("npc_car_16", 64, 43,spriteData, 160392)
+    spriteArray[38] = createImage("npc_car_17", 64, 43,spriteData, 163144)
+    spriteArray[39] = createImage("npc_car_18", 64, 43,spriteData, 165896)
+    spriteArray[40] = createImage("npc_car_19", 64, 43,spriteData, 168648)
+    spriteArray[41] = createImage("53: Decor - Crowd Stand", 192, 65,spriteData, 171400)
+    spriteArray[42] = createImage("53: Decor - Crowd Stand", 192, 65,spriteData, 183880)
+    spriteArray[43] = createImage("16: Tree - Palm", 88, 168,spriteData, 196360)
+    spriteArray[44] = createImage("39: Decor - Oil", 40, 27,spriteData, 211144)
+    spriteArray[45] = createImage("38: Bush 3", 72, 39,spriteData, 212224)
+    spriteArray[46] = createImage("89: Bush 4 - Tropical", 136, 79,spriteData, 215032)
+    spriteArray[47] = createImage("6: Sign - Directional", 64, 112,spriteData, 225776)
+    spriteArray[48] = createImage("63: Strip - Water", 248, 32,spriteData, 232944)
+    spriteArray[49] = createImage("10: Sign - Diving School (Dupe)", 120, 80,spriteData, 240880)
+    spriteArray[50] = createImage("28: Windsurfer", 56, 86,spriteData, 250480)
+    spriteArray[51] = createImage("28: Windsurfer", 56, 86,spriteData, 255296)
+    spriteArray[52] = createImage("28: Windsurfer", 56, 86,spriteData, 260112)
+    spriteArray[53] = createImage("6: Sign - Directional", 64, 112,spriteData, 264928)
+    spriteArray[54] = createImage("37: Building - Hut", 128, 86,spriteData, 272096)
+    spriteArray[55] = createImage("37: Building - Hut", 128, 86,spriteData, 283104)
+    spriteArray[56] = createImage("37: Building - Hut", 128, 86,spriteData, 294112)
+    spriteArray[57] = createImage("37: Building - Hut", 128, 86,spriteData, 305120)
+    spriteArray[58] = createImage("34: Building - Flaminco", 120, 64,spriteData, 316128)
+    spriteArray[59] = createImage("97: Sign - SEGA 2", 152, 92,spriteData, 323808)
+    spriteArray[60] = createImage("98: Sign - OutRun Deluxe", 128, 127,spriteData, 337792)
+    spriteArray[61] = createImage("71: Sign - Ice Cream Parlor", 104, 101,spriteData, 354048)
+    spriteArray[62] = createImage("6: Sign - Directional", 64, 112,spriteData, 364552)
+    spriteArray[63] = createImage("47: Sign - Directions", 224, 51,spriteData, 371720)
+    spriteArray[64] = createImage("23: Pole - Thick", 16, 112,spriteData, 383144)
+    spriteArray[65] = createImage("4: Rock - Sculpted", 176, 178,spriteData, 384936)
+    spriteArray[66] = createImage("60: Strip - Crops", 232, 32,spriteData, 416264)
+    spriteArray[67] = createImage("94: Sign - SEGA 1", 136, 48,spriteData, 423688)
+    spriteArray[68] = createImage("109: Rock - Halved 1", 176, 90,spriteData, 430216)
+    spriteArray[69] = createImage("49: Arch - Pillar", 88, 122,spriteData, 446056)
+    spriteArray[70] = createImage("48: Arch - Top Section", 240, 48,spriteData, 456792)
+    spriteArray[71] = createImage("46: Sign - Motorcross", 112, 103,spriteData, 468312)
+    spriteArray[72] = createImage("88: Rock - Horizontal 2", 120, 55,spriteData, 479848)
+    spriteArray[73] = createImage("78: Rock - Horizontal 1", 120, 42,spriteData, 486448)
+    spriteArray[74] = createImage("1: Tree - European", 128, 125,spriteData, 491488)
+    spriteArray[75] = createImage("31: Bush 2", 96, 56,spriteData, 507488)
+    spriteArray[76] = createImage("116: Strip - Clouds", 248, 32,spriteData, 512864)
+    spriteArray[77] = createImage("33: Tree - Oak", 128, 126,spriteData, 520800)
+    spriteArray[78] = createImage("32: Bush Double", 136, 53,spriteData, 536928)
+    spriteArray[79] = createImage("36: Sign - Danke", 120, 73,spriteData, 544136)
+    spriteArray[80] = createImage("47: Sign - Directions", 224, 51,spriteData, 552896)
+    spriteArray[81] = createImage("60: Strip - Crops", 232, 32,spriteData, 564320)
+    spriteArray[82] = createImage("60: Strip - Crops", 232, 32,spriteData, 571744)
+    spriteArray[83] = createImage("42: Building - Windmill", 120, 140,spriteData, 579168)
+    spriteArray[84] = createImage("1: Tree - European", 128, 125,spriteData, 595968)
+    spriteArray[85] = createImage("47: Sign - Directions", 224, 51,spriteData, 611968)
+    spriteArray[86] = createImage("2: Road Debris", 248, 32,spriteData, 623392)
+    spriteArray[87] = createImage("3: Strip - Sand", 248, 32,spriteData, 631328)
+    spriteArray[88] = createImage("90: Building - Tower", 80, 164,spriteData, 639264)
+    spriteArray[89] = createImage("34: Building - Flaminco", 120, 64,spriteData, 652384)
+    spriteArray[90] = createImage("91: Building - Tower Top", 80, 83,spriteData, 660064)
+    spriteArray[91] = createImage("37: Building - Hut", 128, 86,spriteData, 666704)
+    spriteArray[92] = createImage("92: Building - Tower Roof", 80, 42,spriteData, 677712)
+    spriteArray[93] = createImage("63: Strip - Water", 248, 32,spriteData, 681072)
+    spriteArray[94] = createImage("78: Rock - Horizontal 1", 120, 42,spriteData, 689008)
+    spriteArray[95] = createImage("88: Rock - Horizontal 2", 120, 55,spriteData, 694048)
+    spriteArray[96] = createImage("109: Rock - Halved 1", 176, 90,spriteData, 700648)
+    spriteArray[97] = createImage("110: Rock - Halved 2", 176, 45,spriteData, 716488)
+    spriteArray[98] = createImage("35: Tree - No Leaves", 120, 132,spriteData, 724408)
+    spriteArray[99] = createImage("60: Strip - Crops", 232, 32,spriteData, 740248)
+    spriteArray[100] = createImage("30: Tree - Pine", 72, 160,spriteData, 747672)
+    spriteArray[101] = createImage("6: Sign - Directional", 64, 112,spriteData, 759192)
+    spriteArray[102] = createImage("30: Tree - Pine", 72, 160,spriteData, 766360)
+    spriteArray[103] = createImage("90: Building - Tower", 80, 164,spriteData, 777880)
+    spriteArray[104] = createImage("34: Building - Flaminco", 120, 64,spriteData, 791000)
+    spriteArray[105] = createImage("91: Building - Tower Top", 80, 83,spriteData, 798680)
+    spriteArray[106] = createImage("37: Building - Hut", 128, 86,spriteData, 805320)
+    spriteArray[107] = createImage("92: Building - Tower Roof", 80, 42,spriteData, 816328)
+    spriteArray[108] = createImage("34: Building - Flaminco", 120, 64,spriteData, 819688)
+    spriteArray[109] = createImage("133: Bush 7", 112, 43,spriteData, 827368)
+    spriteArray[110] = createImage("111: Cactus 1", 104, 47,spriteData, 832184)
+    spriteArray[111] = createImage("134: Bush 8", 96, 43,spriteData, 837072)
+    spriteArray[112] = createImage("130: Tree - Twiggy", 48, 76,spriteData, 841200)
+    spriteArray[113] = createImage("131: Tree - Stump", 64, 44,spriteData, 844848)
+    spriteArray[114] = createImage("132: Tree - Dead Half", 48, 70,spriteData, 847664)
+    spriteArray[115] = createImage("63: Strip - Water", 248, 32,spriteData, 851024)
+    spriteArray[116] = createImage("2: Road Debris", 248, 32,spriteData, 858960)
+    spriteArray[117] = createImage("86: Rock - Medium", 48, 15,spriteData, 866896)
+    spriteArray[118] = createImage("85: Rock - Vertical", 48, 67,spriteData, 867616)
+    spriteArray[119] = createImage("87: Rock - Tiny", 24, 8,spriteData, 870832)
+    spriteArray[120] = createImage("48: Arch - Top Section", 240, 48,spriteData, 871024)
+    spriteArray[121] = createImage("49: Arch - Pillar", 88, 122,spriteData, 882544)
+    spriteArray[122] = createImage("21: Decor - Ancient Dupe", 64, 170,spriteData, 893280)
+    spriteArray[123] = createImage("119: Strip - Pebbles", 248, 16,spriteData, 904160)
+    spriteArray[124] = createImage("66: Strip - Dead Twigs", 224, 64,spriteData, 908128)
+    spriteArray[125] = createImage("60: Strip - Crops", 232, 32,spriteData, 922464)
     return spriteArray
+
+fun loadBackgroundImage() -> Array<Image>
+    val file = readFile("tilemap_output.bin")
+    if (file is Error)
+        kprintf("Error loading tilemap data file\n")
+        abort(1)
+    val spriteData = unsafe(file as Int)
+
+    val backgroundImage = new Array<Image>(30)
+    backgroundImage[0] = createImage("tilemap_level0_1", 1536, 144,spriteData, 0)
+    backgroundImage[1] = createImage("tilemap_level0_0", 1536, 16,spriteData, 221184)
+    backgroundImage[2] = createImage("tilemap_level1_1", 1536, 56,spriteData, 245760)
+    backgroundImage[3] = createImage("tilemap_level1_0", 1536, 16,spriteData, 331776)
+    backgroundImage[4] = createImage("tilemap_level2_1", 1536, 32,spriteData, 356352)
+    backgroundImage[5] = createImage("tilemap_level2_0", 1536, 16,spriteData, 405504)
+    backgroundImage[6] = createImage("tilemap_level3_1", 1536, 32,spriteData, 430080)
+    backgroundImage[7] = createImage("tilemap_level3_0", 1536, 24,spriteData, 479232)
+    backgroundImage[8] = createImage("tilemap_level4_1", 1536, 80,spriteData, 516096)
+    backgroundImage[9] = createImage("tilemap_level4_0", 1536, 16,spriteData, 638976)
+    backgroundImage[10] = createImage("tilemap_level5_1", 1536, 24,spriteData, 663552)
+    backgroundImage[11] = createImage("tilemap_level5_0", 1536, 16,spriteData, 700416)
+    backgroundImage[12] = createImage("tilemap_level6_1", 1536, 32,spriteData, 724992)
+    backgroundImage[13] = createImage("tilemap_level6_0", 1536, 24,spriteData, 774144)
+    backgroundImage[14] = createImage("tilemap_level7_0", 1536, 24,spriteData, 811008)
+    backgroundImage[15] = createImage("tilemap_level7_1", 1536, 24,spriteData, 847872)
+    backgroundImage[16] = createImage("tilemap_level8_0", 1536, 24,spriteData, 884736)
+    backgroundImage[17] = createImage("tilemap_level8_1", 1536, 32,spriteData, 921600)
+    backgroundImage[18] = createImage("tilemap_level9_0", 1536, 16,spriteData, 970752)
+    backgroundImage[19] = createImage("tilemap_level9_1", 1536, 16,spriteData, 995328)
+    backgroundImage[20] = createImage("tilemap_level10_0", 1536, 16,spriteData, 1019904)
+    backgroundImage[21] = createImage("tilemap_level10_1", 1536, 32,spriteData, 1044480)
+    backgroundImage[22] = createImage("tilemap_level11_0", 1536, 16,spriteData, 1093632)
+    backgroundImage[23] = createImage("tilemap_level11_1", 1536, 40,spriteData, 1118208)
+    backgroundImage[24] = createImage("tilemap_level12_0", 1536, 16,spriteData, 1179648)
+    backgroundImage[25] = createImage("tilemap_level12_1", 1536, 32,spriteData, 1204224)
+    backgroundImage[26] = createImage("tilemap_level13_0", 1536, 16,spriteData, 1253376)
+    backgroundImage[27] = createImage("tilemap_level13_1", 1536, 32,spriteData, 1277952)
+    backgroundImage[28] = createImage("tilemap_level14_0", 1536, 16,spriteData, 1327104)
+    backgroundImage[29] = createImage("tilemap_level14_1", 1536, 40,spriteData, 1351680)
+    return backgroundImage
+
 
 const palette = const Array<Int> [
     0x000000, 0x9C9FDC, 0xD58B08, 0x179C91,
@@ -191,8 +293,789 @@ fun loadImageFromFile(filename:String, width:Int, height:Int) -> Image
     return new Image(width, height, data)
 
 
-fun createImage(filename:String, width:Int, height:Int, offset:Int) -> Image
+fun createImage(filename:String, width:Int, height:Int, fileAddr:Int, offset:Int) -> Image
     kprintf("width=%d height=%d\n", width, height)
-    val addr = unsafe((spriteData as Int)+offset) as Pointer<Char>
+    val addr = unsafe(fileAddr+offset) as Pointer<Char>
     kprintf("Creating image %s at offset %d addr %08x  size=%d,%d\n", filename, offset, addr, width, height)
     return new Image(width, height, addr)
+
+
+const level_palette = const Array<Int> [ 
+    # ground, road, sky
+    1,     0,    0,
+    2,     1,    2,
+    0,     2,    7,
+    0,     3,    1,
+    2,     4,    4,
+    10,    5,    5,
+    13,    6,    6,
+    6,     7,    2,
+    4,     8,    8,
+    8,     9,    9,
+    5,    10,   12,
+    2,    11,   11,
+    7,    12,   10,
+    12,   13,   13,
+    14,   14,   14 ]
+
+
+# Palette data for roadPalettes
+const roadPalettes = const Array<Int> [
+    0x909090,
+    0x909090,
+    0xF0F0F0,
+    0x909090,
+    0x909090,
+    0x909090,
+    0xF0F0F0,
+    0x909090,
+    0xA0A090,
+    0xF0F0F0,
+    0xF0F0F0,
+    0xA0A090,
+    0xA0A090,
+    0xF0F0F0,
+    0xF0F0F0,
+    0xA0A090,
+    0x909090,
+    0x909090,
+    0xF0F0F0,
+    0x909090,
+    0x909090,
+    0x909090,
+    0xF0F0F0,
+    0x909090,
+    0x909090,
+    0xF0F0F0,
+    0xF0F0F0,
+    0x909090,
+    0x909090,
+    0xF0F0F0,
+    0xF0F0F0,
+    0x909090,
+    0xA0A0A0,
+    0xF0F0F0,
+    0xF0F0F0,
+    0xA0A0A0,
+    0xA0A0A0,
+    0xF0F0F0,
+    0xF0F0F0,
+    0xA0A0A0,
+    0xD0C0B0,
+    0xD8C8B8,
+    0xD0C0B0,
+    0xD0C0B0,
+    0xD0C0B0,
+    0xD8C8B8,
+    0xD0C0B0,
+    0xD0C0B0,
+    0xA0A090,
+    0xA0A090,
+    0xF0F0F0,
+    0xA0A090,
+    0xA0A090,
+    0xA0A090,
+    0xF0F0F0,
+    0xA0A090,
+    0x808080,
+    0x808080,
+    0xF0F0F0,
+    0x808080,
+    0x808080,
+    0x808080,
+    0xF0F0F0,
+    0x808080,
+    0x605050,
+    0xE8C0A0,
+    0xE8C0A0,
+    0x605050,
+    0x605050,
+    0xE8C0A0,
+    0xE8C0A0,
+    0x605050,
+    0xD0B090,
+    0xD0B080,
+    0xD0B090,
+    0xD0B090,
+    0xD0B090,
+    0xD0B080,
+    0xD0B090,
+    0xD0B090,
+    0xA09888,
+    0xA09888,
+    0xF0F0F0,
+    0xA09888,
+    0xA09888,
+    0xA09888,
+    0xF0F0F0,
+    0xA09888,
+    0x8888A8,
+    0xA00000,
+    0xF0F0F0,
+    0x8888A8,
+    0x8888A8,
+    0xA00000,
+    0xF0F0F0,
+    0x8888A8,
+    0xA0A0A0,
+    0xF0F0F0,
+    0xF0F0F0,
+    0xA0A0A0,
+    0xA0A0A0,
+    0xF0F0F0,
+    0xF0F0F0,
+    0xA0A0A0,
+    0x807070,
+    0x807070,
+    0x807070,
+    0x807070,
+    0x807070,
+    0x807070,
+    0x807070,
+    0x807070,
+    0x909090,
+    0xD0D0D0,
+    0xD0D0D0,
+    0x909090,
+    0x909090,
+    0xD0D0D0,
+    0xD0D0D0,
+    0x909090,
+    0x909090,
+    0x909090,
+    0xF0F0F0,
+    0x909090,
+    0x909090,
+    0x909090,
+    0xF0F0F0,
+    0x909090,
+    0x909090,
+    0x909090,
+    0xF0F0F0,
+    0x909090,
+    0x909090,
+    0x909090,
+    0xF0F0F0,
+    0x909090,
+    0x909090,
+    0x909090,
+    0xF0F0F0,
+    0x909090,
+    0x909090,
+    0x909090,
+    0xF0F0F0,
+    0x909090]
+
+# Palette data for groundPalettes
+const groundPalettes = const Array<Int> [
+    0x788848,
+    0x788848,
+    0x889858,
+    0x98A868,
+    0xA8B878,
+    0xB8C888,
+    0xB8C888,
+    0xB8C888,
+    0xA89888,
+    0xA89888,
+    0xB8A898,
+    0xC8B8A8,
+    0xD8C8B8,
+    0xE8D8C8,
+    0xE8D8C8,
+    0xE8D8C8,
+    0x688858,
+    0x688858,
+    0x789868,
+    0x88A878,
+    0x98B888,
+    0xA8C898,
+    0xA8C898,
+    0xA8C898,
+    0x886808,
+    0x886808,
+    0x987818,
+    0xA88828,
+    0xB89838,
+    0xC8A848,
+    0xC8A848,
+    0xC8A848,
+    0x280808,
+    0x280808,
+    0x381808,
+    0x482818,
+    0x583828,
+    0x684838,
+    0x684838,
+    0x684838,
+    0xB8A898,
+    0xB8A898,
+    0xB8A898,
+    0xC8B8A8,
+    0xD8C8B8,
+    0xE8D8C8,
+    0xE8D8C8,
+    0xE8D8C8,
+    0x583808,
+    0x583808,
+    0x684808,
+    0x785808,
+    0x886808,
+    0x987808,
+    0x987808,
+    0x987808,
+    0xB8A898,
+    0xB8A898,
+    0xC8B8A8,
+    0xD8C8B8,
+    0xE8D8C8,
+    0xF8E8D8,
+    0xF8E8D8,
+    0xF8E8D8,
+    0x785838,
+    0x886848,
+    0x987858,
+    0xA88868,
+    0xB89878,
+    0xC8A888,
+    0xC8A888,
+    0xC8A888,
+    0x887868,
+    0x887868,
+    0x988878,
+    0xA89888,
+    0xA89888,
+    0xB8A898,
+    0xB8A898,
+    0xB8A898,
+    0xC8B898,
+    0xC8B898,
+    0xD8C8A8,
+    0xE8D8B8,
+    0xE8D8B8,
+    0xF8E8C8,
+    0xF8E8C8,
+    0xF8E8C8,
+    0xA88868,
+    0xA88868,
+    0xB89878,
+    0xC8A888,
+    0xC8A888,
+    0xD8B898,
+    0xD8B898,
+    0xD8B898,
+    0x986040,
+    0x986040,
+    0xA87050,
+    0xB88060,
+    0xB88060,
+    0xC89070,
+    0xC89070,
+    0xC89070,
+    0xC89868,
+    0xC89868,
+    0xD8A878,
+    0xE8B888,
+    0xE8B888,
+    0xF8C898,
+    0xF8C898,
+    0xF8C898,
+    0x98A848,
+    0x98A848,
+    0xA8B858,
+    0xB8C868,
+    0xB8C868,
+    0xC8D878,
+    0xC8D878,
+    0xC8D878,
+    0x70D8A0,
+    0x70D8A0,
+    0x78D0A8,
+    0x88C0B8,
+    0x98B0C8,
+    0xA8A0D8,
+    0xB890E8,
+    0xB888F0]
+
+# Palette data for skyPalettes
+const skyPalettes = const Array<Int> [
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0x90F8,
+    0xF8F8F8,
+    0xF0F0F8,
+    0xF0F0F0,
+    0xF0E0F0,
+    0xE0D0F0,
+    0xD0C0F0,
+    0xC0B0F0,
+    0xB0A0F0,
+    0xA090F0,
+    0x9080F0,
+    0x9080F0,
+    0x9080F0,
+    0x9080F0,
+    0x9080F0,
+    0x9080F0,
+    0x9080F0,
+    0x9080F0,
+    0x9080F0,
+    0x9080F0,
+    0x9080F0,
+    0x9080F0,
+    0x9080F0,
+    0x9080F0,
+    0x9080F0,
+    0x9080F0,
+    0x9080F0,
+    0x9080F0,
+    0x9080F0,
+    0x9080F0,
+    0x9080F0,
+    0x9080F0,
+    0x9080F0,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0xF8C060,
+    0x88E0E0,
+    0x88E0E0,
+    0x88E0E0,
+    0x88E0E0,
+    0x88E0E0,
+    0x88E0E0,
+    0x88E0E0,
+    0x88E0E0,
+    0x88E0E0,
+    0x88E0E0,
+    0x80E0E0,
+    0x70E0E0,
+    0x60E0E0,
+    0x50E0E0,
+    0x40E0E0,
+    0x30E0E0,
+    0x20E0E0,
+    0x10E0E0,
+    0xE0E0,
+    0xE0E0,
+    0xE0E0,
+    0xE0E0,
+    0xE0E0,
+    0xE0E0,
+    0xE0E0,
+    0xE0E0,
+    0xE0E0,
+    0xE0E0,
+    0xE0E0,
+    0xE0E0,
+    0xE0E0,
+    0xE0E0,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0x58F8,
+    0xE0E0F8,
+    0xD0D0F8,
+    0xC0C0F8,
+    0xB0B0F8,
+    0xA0A0F8,
+    0x9090F8,
+    0x8080F8,
+    0x7070F8,
+    0x6060F8,
+    0x5050F8,
+    0x4040F8,
+    0x3030F8,
+    0x2020F8,
+    0x1010F8,
+    0xF8,
+    0xF8,
+    0xF8,
+    0xF8,
+    0xF8,
+    0xF8,
+    0xF8,
+    0xF8,
+    0xF8,
+    0xF8,
+    0xF8,
+    0xF8,
+    0xF8,
+    0xF8,
+    0xF8,
+    0xF8,
+    0xF8,
+    0xF8,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0x4070F0,
+    0xF8D0D0,
+    0xF8D0D0,
+    0xF8D0D0,
+    0xF0D0D0,
+    0xE0D0D0,
+    0xD0D0D0,
+    0xC0D0D0,
+    0xB0D0D0,
+    0xA0D0D0,
+    0x90D0D0,
+    0x80D0D0,
+    0x70D0D0,
+    0x60D0D0,
+    0x50D0D0,
+    0x40D0D0,
+    0x30D0D0,
+    0x20D0D0,
+    0x10D0D0,
+    0xD0D0,
+    0xD0D0,
+    0xD0D0,
+    0xD0D0,
+    0xD0D0,
+    0xD0D0,
+    0xD0D0,
+    0xD0D0,
+    0xD0D0,
+    0xD0D0,
+    0xD0D0,
+    0xD0D0,
+    0xD0D0,
+    0xD0D0,
+    0xF0E068,
+    0xF0D078,
+    0xF0C088,
+    0xF0B098,
+    0xF0B0A8,
+    0xF0B0B8,
+    0xE0B0C8,
+    0xD0A0E8,
+    0xC090F0,
+    0xB080F0,
+    0xA070F0,
+    0x9060F0,
+    0x9050F0,
+    0x8040F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0xD0C0A0,
+    0x404030,
+    0x505040,
+    0x606050,
+    0x707060,
+    0x808070,
+    0x909080,
+    0xA0A090,
+    0xB0B0A0,
+    0xC0C0B0,
+    0xD0D0C0,
+    0xE0E0D0,
+    0xE8E8D8,
+    0xE8E8D8,
+    0xE8E8D8,
+    0xE8E8D8,
+    0xE8E8D8,
+    0xE8E8D8,
+    0xE8E8D8,
+    0xE8E8D8,
+    0xE8E8D8,
+    0xE8E8D8,
+    0xE8E8D8,
+    0xE8E8D8,
+    0xE8E8D8,
+    0xE8E8D8,
+    0xE8E8D8,
+    0xE8E8D8,
+    0xE8E8D8,
+    0xE8E8D8,
+    0xE8E8D8,
+    0xE8E8D8,
+    0xE8E8D8,
+    0xF0E068,
+    0xF0D078,
+    0xF0C088,
+    0xF0B098,
+    0xF0B0A8,
+    0xF0B0B8,
+    0xE0B0C8,
+    0xD0A0E8,
+    0xC090F0,
+    0xB080F0,
+    0xA070F0,
+    0x9060F0,
+    0x9050F0,
+    0x8040F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0x7030F0,
+    0xF0F088,
+    0xF0F078,
+    0xF0F068,
+    0xF0E858,
+    0xF0D848,
+    0xF0C838,
+    0xF0B828,
+    0xF0A818,
+    0xF0A018,
+    0xF0A028,
+    0xF0A038,
+    0xF0A048,
+    0xF0A058,
+    0xF0A068,
+    0xF0A078,
+    0xF0A088,
+    0xF0A098,
+    0xF0A0A0,
+    0xF0A0A0,
+    0xF0A0A0,
+    0xF0A0A0,
+    0xF0A0A0,
+    0xF0A0A0,
+    0xF0A0A0,
+    0xF0A0A0,
+    0xF0A0A0,
+    0xF0A0A0,
+    0xF0A0A0,
+    0xF0A0A0,
+    0xF0A0A0,
+    0xF0A0A0,
+    0xF0A0A0,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x5060F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8,
+    0x18A8F8]

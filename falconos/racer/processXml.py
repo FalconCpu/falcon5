@@ -117,7 +117,7 @@ sprite_file_map = {
     "59: Porche - dupe":                "Sprite_0034_251.png",
     "60: Strip - Crops":                "Sprite_0602_71.png",
     "63: Strip - Water":                "Sprite_0576_6.png",
-    "66 Strip - Dead Twigs":            "Sprite_0632_228.png",
+    "66: Strip - Dead Twigs":            "Sprite_0632_228.png",
     "71: Sign - Ice Cream Parlor":      "Sprite_0661_27.png",
     "78: Rock - Horizontal 1":          "Sprite_0859_160.png",
     "85: Rock - Vertical":              "Sprite_0864_160.png",
@@ -276,7 +276,7 @@ def output_sprite(img:Image, sprite_name: str):
     global output_file
     size_x = img.size[0]
     size_y = img.size[1]
-    text_file.write(f"spriteArray[{index}] = createImage(\"{sprite_name}\", {size_x}, {size_y}, {offset})\n")
+    text_file.write(f"spriteArray[{index}] = createImage(\"{sprite_name}\", {size_x}, {size_y},spriteData, {offset})\n")
     index += 1
     offset += size_x * size_y
 
@@ -392,12 +392,12 @@ def build_flat_slope_map(level: Level, height_maps: dict[int, HeightMap]) -> lis
             print(f"  Skipping height map {hp.map} at pos {hp.pos} - not found or empty")
             continue
 
-        step = hmap.step
+        step = hmap.step*2
         vals = hmap.values
         print(f"Processing height map {hp.map} at pos {hp.pos} with step {step} and {len(vals)} values")
 
         # Precompute normalized slopes (convert raw delta values to slopes per step)
-        slopes = [v / step / 128.0 for v in vals]
+        slopes = [v / 300.0 for v in vals]
 
         # For each pair of consecutive slope control points, interpolate linearly
         for i in range(len(slopes) - 1):
@@ -498,39 +498,40 @@ def assortedHacks(sprites: List[FlatSprite]):
         if sp.type==27 and sp.x<-50:
             sp.x += 40
 
+f = open("level_path.bin", "wb")
+
 def exportPath(level: Level, sprites: List[FlatSprite], flat_slope_map: List[float]):
     startPos = 0.0
-    with open("level_path.bin", "wb") as f:
-        # Output the curvature data
-        f.write(len(level.path).to_bytes(4, byteorder='little'))
-        for seg in level.path:
-            length = float(seg.length)
-            endPos = startPos + length
-            curvature = seg.angle / -150.0    # convert degrees to radians per unit length
-            f.write(struct.pack('<ffff', startPos, endPos, curvature, 0.0))
-            startPos = endPos
+    # Output the curvature data
+    f.write(len(level.path).to_bytes(4, byteorder='little'))
+    for seg in level.path:
+        length = float(seg.length)
+        endPos = startPos + length
+        curvature = seg.angle / -150.0    # convert degrees to radians per unit length
+        f.write(struct.pack('<ffff', startPos, endPos, curvature, 0.0))
+        startPos = endPos
 
-        # Output the width data
-        f.write((len(level.width)+1).to_bytes(4, byteorder='little'))
-        f.write(struct.pack('<fff', 0.0, 6.0, 0))  # initial width
-        for wd in level.width:
-            newWidth = 3 + wd.width / 72    # convert from game units to number of lanes
-            if newWidth>7.0:                # When the road divides add an extra space for the divider
-                newWidth = 8.0
-            # print(f"Width point at pos {wd.pos} width {newWidth} change {wd.change}")
-            f.write(struct.pack('<fff', wd.pos, newWidth, wd.change))
+    # Output the width data
+    f.write((len(level.width)+1).to_bytes(4, byteorder='little'))
+    f.write(struct.pack('<fff', 0.0, 6.0, 0))  # initial width
+    for wd in level.width:
+        newWidth = 3 + wd.width / 72    # convert from game units to number of lanes
+        if newWidth>7.0:                # When the road divides add an extra space for the divider
+            newWidth = 8.0
+        # print(f"Width point at pos {wd.pos} width {newWidth} change {wd.change}")
+        f.write(struct.pack('<fff', wd.pos, newWidth, wd.change))
 
-        # Output the scenery sprites
-        f.write(len(sprites).to_bytes(4, byteorder='little'))
-        for sp in sprites:
-            f.write(struct.pack('<fffIII', sp.pos+40, sp.x, sp.y, sp.type, sp.pal, sp.props))
-            print(f"Exporting sprite at pos {sp.pos+40} x {sp.x} y {sp.y} type {sp.type} pal {sp.pal} props {sp.props}")
-        print("Exported", len(sprites), "sprites")
+    # Output the scenery sprites
+    f.write(len(sprites).to_bytes(4, byteorder='little'))
+    for sp in sprites:
+        f.write(struct.pack('<fffIII', sp.pos+40, sp.x, sp.y, sp.type, sp.pal, sp.props))
+        print(f"Exporting sprite at pos {sp.pos+40} x {sp.x} y {sp.y} type {sp.type} pal {sp.pal} props {sp.props}")
+    print("Exported", len(sprites), "sprites")
 
-        # Output flat slope map
-        f.write(len(flat_slope_map).to_bytes(4, byteorder='little'))
-        for slope in flat_slope_map:
-            f.write(struct.pack('<f', slope))
+    # Output flat slope map
+    f.write(len(flat_slope_map).to_bytes(4, byteorder='little'))
+    for slope in flat_slope_map:
+        f.write(struct.pack('<f', slope))
         
 def output_non_scenery_sprites():
     convert_sprite("car_straight", "Sprite_0001_2.png")
@@ -580,11 +581,11 @@ def output_non_scenery_sprites():
 
 levels, patterns, HeightMaps = load_game_data('../../../Downloads/LayOut-win32/outrun_data.xml')
 
-lvl = levels[0]
-sprites = expand_scenery(lvl, patterns)
-flat_slope_map = build_flat_slope_map(lvl, HeightMaps)
-assortedHacks(sprites)
-exportPath(lvl, sprites, flat_slope_map)
+for lvl in levels:
+    sprites = expand_scenery(lvl, patterns)
+    flat_slope_map = build_flat_slope_map(lvl, HeightMaps)
+    assortedHacks(sprites)
+    exportPath(lvl, sprites, flat_slope_map)
 
 output_non_scenery_sprites()
 print("Unique sprite variants:")
@@ -604,3 +605,4 @@ for sv in sprite_variant_list:
 
 text_file.close()
 output_file.close()
+f.close()

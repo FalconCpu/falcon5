@@ -5,6 +5,7 @@ const CMD_COPY_RECT = 0x02000000
 const CMD_DRAW_TEXT = 0x03000000
 const CMD_SET_TRANSPARENCY_COLOR = 0x04000000
 const CMD_SET_AFFINE = 0x05000000
+const CMD_DRAW_TRAP  = 0x06000000
 
 var fontAddress : Array<Int>
 
@@ -48,9 +49,83 @@ class GraphicsContext
         hwregs.blit_cmd = y1 lsl 16 | (x1 & 0xFFFF)          # x,y
         hwregs.blit_cmd = y2 lsl 16 | (x2 & 0xFFFF)          # w,h
 
+    fun drawTriangle(x1:Int, y1:Int, x2:Int, y2:Int, x3:Int, y3:Int, color:Int)
+        # Sort the points by y-coordinate ascending (y1 <= y2 <= y3)
+        var (tx1,ty1) = (x1, y1)
+        var (tx2,ty2) = (x2, y2)
+        var (tx3,ty3) = (x3, y3)
+        if ty1 > ty2
+            (ty1, ty2) = (ty2, ty1)
+            (tx1, tx2) = (tx2, tx1)
+        if ty1 > ty3
+            (ty1, ty3) = (ty3, ty1)
+            (tx1, tx3) = (tx3, tx1)
+        if ty2 > ty3
+            (ty2, ty3) = (ty3, ty2)
+            (tx2, tx3) = (tx3, tx2)
+
+        if ty1 = ty3 and ty1=ty3 then return  # Degenerate triangle
+
+        # Three cases - flat bottom, flat top, general
+        if ty2 = ty3
+            # Flat bottom
+            # make sure tx2 is left edge and tx3 is right edge
+            if tx2 > tx3
+                (tx2, tx3) = (tx3, tx2)
+            var slope1 = ((tx2 - tx1) lsl 16) / (ty2 - ty1)
+            var slope2 = ((tx3 - tx1) lsl 16) / (ty3 - ty1)
+
+            # Send to blitter
+            while (hwregs.blit_cmd < 6)         
+                hwregs.ledr = 1
+            hwregs.ledr = 0
+            hwregs.blit_cmd = CMD_DRAW_TRAP | color  # CMD RECT COLOR = color
+            hwregs.blit_cmd = ty1 lsl 16 | (tx1 & 0xFFFF)          # x,y
+            hwregs.blit_cmd = (ty3+1) lsl 16 | ((tx1+1) & 0xFFFF)          # w,h
+            hwregs.blit_cmd = slope1                      # slope1
+            hwregs.blit_cmd = slope2                      # slope2
+        else if ty1 = ty2
+            # Flat top
+            # make sure tx1 is left edge and tx2 is right edge
+            if tx1 > tx2
+                (tx1, tx2) = (tx2, tx1)
+            var slope1 = ((tx3 - tx1) lsl 16) / (ty3 - ty1)
+            var slope2 = ((tx3 - tx2) lsl 16) / (ty3 - ty2)
+
+            kprintf("Triangle flat top: (%d,%d), (%d,%d), (%d,%d)\n", tx1,ty1, tx2,ty2, tx3,ty3)
+            kprintf("  slopes: %x, %x\n", slope1, slope2)
+
+            # Send to blitter
+            while (hwregs.blit_cmd < 6)         
+                hwregs.ledr = 1
+            hwregs.ledr = 0
+            hwregs.blit_cmd = CMD_DRAW_TRAP | color  # CMD RECT COLOR = color
+            hwregs.blit_cmd = ty1 lsl 16 | (tx1 & 0xFFFF)          # x,y
+            hwregs.blit_cmd = (ty3+1) lsl 16 | ((tx2+1) & 0xFFFF)          # w,h
+            hwregs.blit_cmd = slope1                      # slope1
+            hwregs.blit_cmd = slope2                      # slope2
+        else
+            # General case - split the triangle in two
+            val splitX = tx1 + (((ty2 - ty1) * (tx3 - tx1)) / (ty3 - ty1))
+            drawTriangle(tx1, ty1, tx2, ty2, splitX, ty2, color)
+            drawTriangle(tx3, ty3, tx2, ty2, splitX, ty2, color)
+
+
+
+
+
     fun drawText(x:Int, y:Int, color:Int, text:String)
         while (hwregs.blit_cmd < 3)         # Wait for blitter to have at least 3 free slots in command queue
             val dummy = 1
+
+        if affineSet
+            hwregs.blit_cmd = CMD_SET_AFFINE    # CMD SET AFFINE
+            hwregs.blit_cmd = 65536             # scaleX = 1.0
+            hwregs.blit_cmd = 65536             # scaleY = 1.0
+            hwregs.blit_cmd = 0                 # shearX
+            hwregs.blit_cmd = 0                 # shearY
+            affineSet = false
+
         hwregs.blit_cmd = CMD_DRAW_TEXT | color
         hwregs.blit_cmd = y lsl 16 | x
         for c in text
@@ -163,6 +238,7 @@ class GraphicsContext
         while (hwregs.blit_cmd < 12)         # Wait for blitter to have free slots
             hwregs.ledr = 2
             val dummy = 1
+            
         hwregs.ledr = 0
         hwregs.blit_cmd = CMD_SET_AFFINE    # CMD SET AFFINE
         hwregs.blit_cmd = dx                # scaleX
@@ -187,6 +263,52 @@ class GraphicsContext
                           (if scaleY<0.0 then image.height else 0) lsl 16
 
 
+
+    fun drawImage(x:Int, y:Int, width:Int, height:Int, image:Image)
+
+        while (hwregs.blit_cmd < 12)         # Wait for blitter to have free slots
+            hwregs.ledr = 2
+            val dummy = 1
+        hwregs.ledr = 0
+
+        if affineSet
+            hwregs.blit_cmd = CMD_SET_AFFINE    # CMD SET AFFINE
+            hwregs.blit_cmd = 65536             # scaleX = 1.0
+            hwregs.blit_cmd = 65536             # scaleY = 1.0
+            hwregs.blit_cmd = 0                 # shearX
+            hwregs.blit_cmd = 0                 # shearY
+            affineSet = false
+
+        hwregs.blit_cmd = CMD_SET_SRC | image.width  # CMD SET SRC, width
+        hwregs.blit_cmd = unsafe(image.data as Int)  # SRC address
+
+        hwregs.blit_cmd = CMD_COPY_RECT     # CMD COPY
+        hwregs.blit_cmd = (y lsl 16) | (x & 0xFFFF)      # dest x1,y1
+        hwregs.blit_cmd = (y + height) lsl 16 | ((x + width) & 0xFFFF)  # dest x2,y2
+        hwregs.blit_cmd = 0
+
+    fun drawImage(x:Int, y:Int, width:Int, height:Int, offsetX:Int, offsetY:Int, image:Image)
+
+        while (hwregs.blit_cmd < 12)         # Wait for blitter to have free slots
+            hwregs.ledr = 2
+            val dummy = 1
+        hwregs.ledr = 0
+
+        if affineSet
+            hwregs.blit_cmd = CMD_SET_AFFINE    # CMD SET AFFINE
+            hwregs.blit_cmd = 65536             # scaleX = 1.0
+            hwregs.blit_cmd = 65536             # scaleY = 1.0
+            hwregs.blit_cmd = 0                 # shearX
+            hwregs.blit_cmd = 0                 # shearY
+            affineSet = false
+
+        hwregs.blit_cmd = CMD_SET_SRC | image.width  # CMD SET SRC, width
+        hwregs.blit_cmd = unsafe(image.data as Int)  # SRC address
+
+        hwregs.blit_cmd = CMD_COPY_RECT     # CMD COPY
+        hwregs.blit_cmd = (y lsl 16) | (x & 0xFFFF)      # dest x1,y1
+        hwregs.blit_cmd = (y + height) lsl 16 | ((x + width) & 0xFFFF)  # dest x2,y2
+        hwregs.blit_cmd = (offsetY lsl 16 | (offsetX & 0xFFFF))    # src x,y
 
 
     fun setTransparentColor(color:Int)

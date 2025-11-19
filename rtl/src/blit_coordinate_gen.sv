@@ -28,6 +28,8 @@ module blit_coordinate_gen(
     input logic [31:0]   reg_src_dy_y,
     input logic [31:0]   reg_src_dy_x,
     input logic [31:0]   reg_src_dx_y,
+    input logic [31:0]   reg_slope_x1,      // For triangle/trapezoid fills
+    input logic [31:0]   reg_slope_x2,
 
     // Outputs to the next stage in the pipeline
     input  logic         p2_ready,          // Stall the pipeline
@@ -44,6 +46,7 @@ wire signed [15:0] p1_y_inc = p1_y + 1'b1;
 
 logic [31:0] src_x, src_y;      // Current source coordinates in 16.16 fixed point
 logic [31:0] src_x0, src_y0;    // Base source coordinates in 16.16 fixed point
+logic [31:0] left_edge_x, right_edge_x; // For triangle/trapezoid fills
 
 assign p1_src_x = src_x[31:16];
 assign p1_src_y = src_y[31:16];
@@ -73,13 +76,15 @@ always_ff @(posedge clock) begin
             src_y <= src_y + reg_src_dy_x;
         end
 
-        if (p1_x_inc == reg_x2) begin
-            p1_x <= reg_x1;
+        if (p1_x_inc == right_edge_x[31:16]) begin
+            p1_x <= left_edge_x[31:16];
             p1_y <= p1_y_inc;
             src_x <= src_x0 + reg_src_dx_y;
             src_y <= src_y0 + reg_src_dy_y;
             src_x0 <= src_x0 + reg_src_dx_y;
             src_y0 <= src_y0 + reg_src_dy_y;
+            left_edge_x <= left_edge_x + reg_slope_x1;
+            right_edge_x <= right_edge_x + reg_slope_x2;
             if (p1_y_inc == reg_y2) begin
                 busy <= 1'b0;
                 p1_valid <= 1'b0;
@@ -100,6 +105,8 @@ always_ff @(posedge clock) begin
                 src_y <= {reg_src_y,16'b0};
                 src_x0 <= {reg_src_x,16'b0};
                 src_y0 <= {reg_src_y,16'b0};
+                left_edge_x <= {reg_x1,16'b0};
+                right_edge_x <= {reg_x2,16'b0};
                 p1_bit_index <= 3'h0;
                 p1_valid <= 1'b1;
                 busy <= 1'b1;

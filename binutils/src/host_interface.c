@@ -27,7 +27,6 @@ const char* RESET = "\x1b[0m";
 #define NETFS_RESP_ERROR 0x020202B0
 
 
-FILE* dump_file;
 int checksum = 0;
 
 /// -----------------------------------------------------
@@ -145,11 +144,6 @@ static int output_to_com_port(char* s, int length) {
     
     if (bytesWritten != length)
         fatal("Error sending string to com port (only %ld of %d bytes sent)", bytesWritten, length);
-    // Also save a copy to the dump file
-    if (dump_file != NULL) {
-        for(int i=0; i<bytesWritten; i++)
-            fprintf(dump_file, "%x\n", s[i] & 0xff);
-    }
     return bytesWritten;
 }
 
@@ -391,8 +385,6 @@ static void run_loop() {
 int main(int argc, char** argv) {
     // keep a copy of everything we send to the com port so we can 
     // replay it in the simulator later
-    dump_file = fopen("uart_input.hex", "w");  
-    
     open_com_port();
     run_loop();
 

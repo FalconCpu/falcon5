@@ -46,6 +46,8 @@ logic [15:0]   src_stride;
 logic [7:0]    reg_color;  // Color to write
 logic [7:0]    reg_bgcolor;
 logic [8:0]    transparent_color;
+logic [31:0]   reg_slope_x1;
+logic [31:0]   reg_slope_x2;
 
 logic         start;
 logic         ack;
@@ -112,6 +114,8 @@ blit_command_parser  blit_command_parser_inst (
     .reg_src_dy_y(src_dy_y),
     .reg_src_dy_x(src_dy_x),
     .reg_src_dx_y(src_dx_y),
+    .reg_slope_x1(reg_slope_x1),
+    .reg_slope_x2(reg_slope_x2),
     .dest_base_addr(dest_base_addr),
     .dest_stride(dest_stride),
     .src_base_addr(src_base_addr),
@@ -139,6 +143,8 @@ blit_coordinate_gen  blit_coordinate_gen_inst (
     .reg_src_dy_y(src_dy_y),
     .reg_src_dy_x(src_dy_x),
     .reg_src_dx_y(src_dx_y),
+    .reg_slope_x1(reg_slope_x1),
+    .reg_slope_x2(reg_slope_x2),
     .busy(busy),
     .p2_ready(p2_ready),
     .p1_x(p1_x),
