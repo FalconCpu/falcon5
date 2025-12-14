@@ -7,6 +7,8 @@ struct PathElement(startPos:Float, endPos:Float, curvature:Float, slope:Float)
 struct PathWidth(startPos:Float, width:Float, changeDist:Float)
 struct SceneryObject(pos:Float, x:Float, y:Float, type:Int, pal:Int, props:Int)
 
+class DrawObject(val x:Int, val y:Int, val maxDrawHeight:Int, val scale:Float, val image:Image, val z:Float, val next: DrawObject?)
+
 # Workaround for now until we get better string handling
 fun atos(n:Int) -> String
     var len = if n<10 then 1 else if n<100 then 2 else if n<1000 then 3 else 4
@@ -165,6 +167,7 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
     var startTimer = 200
     var rank = 1
     var score = 0
+    var drawObjects : DrawObject? = null
 
     val scanZ = new Array<Float>(480)              # Z distance for each screen row
     val roadWidthOnScreen = new Array<Float>(480)  # Road width in pixels for each screen row
@@ -260,15 +263,17 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
             if backgroundOffset[i]> (backgroundImage[i].width as Float)
                 backgroundOffset[i] = backgroundOffset[i] - backgroundImage[0].width
 
-        val grip = if speed<20.0 then 0.00012 else 0.00006
+        val grip = if speed<20.0 then 0.0001 else 0.00006
         carX = carX + grip * speed * carTurning
         carZ = carZ + distanceTravelled
         if carZ>totalPathDistance
             carZ = carZ - totalPathDistance
             laps = laps + 1
-            audio.checkpoint.play()
             if laps=2
+                audio.applause2.play()
                 selectLevel(level + 1)
+            else
+                audio.checkpoint.play()
 
         if flipState=0
             if kb.keyDown[KEY_SCANCODE_LEFT]
@@ -570,23 +575,31 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
 
              # Check for collision with car
             val sprite = sprites[SPRITE_SCENERY + scenery[index].type]
-            val scalex = scale * 0.11 # convert from world scale to sprite scale
+            var scalex = scale * 0.11 # convert from world scale to sprite scale
+            if props=SpriteProperties.CLOUDS then scalex = scalex * 3
             val spriteWidth = (sprite.width * scalex) as Int
             val spriteHeight = (sprite.height * scalex) as Int
             var drawX = screenX - (spriteWidth / 2)
             if props.alignEdgeX
                 drawX -= if mirrored then spriteWidth/2 else -spriteWidth/2
+            if props=SpriteProperties.SAND or props=SpriteProperties.SMALL_STONES
+                drawX -= if mirrored then spriteWidth else -spriteWidth
 
             var drawL = drawX
             var drawR = drawX + spriteWidth
             var type = scenery[index].type
 
             # Special case for certain trees - make collision box smaller 
-            if type=33
+            if type=33 
                 if mirrored
                     drawR -= spriteWidth/2
                 else
                     drawL += spriteWidth/2
+            if type=21 or type=6  # Road signs - thin collision box (pole only)
+                if mirrored
+                    drawL += spriteWidth*3/4
+                else
+                    drawR -= spriteWidth*3/4
 
             if distance<(0.5+0.01*speed) and drawL<320 and drawR>320 and scenery[index].y<50.0 and not props.noCollision
                 kprintf("Collision with scenery object %d type=%d at X=%d-%d props=%d\n", index, scenery[index].type, drawX,drawX+spriteWidth, props)
@@ -616,6 +629,13 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
             if maxDrawHeight<0
                 continue  # totally occluded
 
+            # Check to see if there are any closer objects to draw first
+            while drawObjects!=null and drawObjects.z>distance
+                val obj = drawObjects
+                drawObjects = drawObjects.next
+                gc.drawImage(obj.x, obj.y, obj.maxDrawHeight, obj.image, obj.scale, obj.scale)    
+                free(obj)
+
             # Center alinged sprites (such as water) need special handling for occlusion. 
             # These represent horizontal surfaces at ground level, not vertical objects like trees.
             # If the center of such a sprite is visible then we can treat it as if the whole sprite is visible - even if
@@ -631,6 +651,14 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
                     gc.drawImage(drawX+spriteWidth, drawY, adjMaxDraw, sprite, scalex*mirrorX, scalex)
                     gc.drawImage(drawX-spriteWidth, drawY, adjMaxDraw, sprite, scalex*mirrorX, scalex)
                 # kprintf(" %d scale=%f\n", index, scalex)
+        end for
+
+        while drawObjects!=null
+            val obj = drawObjects
+            drawObjects = drawObjects.next
+            gc.drawImage(obj.x, obj.y, obj.maxDrawHeight, obj.image, obj.scale, obj.scale)    
+            free(obj)
+
 
     fun drawNpcVehicles()
         rank = 1
@@ -693,7 +721,7 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
 
 
             if scale<120.0
-                gc.drawImage(drawX, drawY, maxDrawHeight, sprite, scalex, scalex)
+                drawObjects = new DrawObject(drawX, drawY, maxDrawHeight, scalex, sprite, distance, drawObjects)
 
         val speedStr = atos(rank)
         gc.drawText(10, 10, 1, "Position ") 
@@ -800,9 +828,10 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
         for npc in npcVehicles
             npc.move()
 
+
     fun gameOver()
         val finalStr : String
-        if level=16 and rank<=10
+        if level=15 and rank<=10
             finalStr = "Well done! You finished the game with score "
         else
             finalStr = "Game Over! Your final score is "
@@ -813,10 +842,12 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
         gc.setTransparentColor(0)  # Enable transparency
         hwregsAudio[1].volume = 0
 
+        val paletteRegs = unsafe(0xE0001000 as Pointer<Int>)
 
         while true
+            paletteRegs[0] = 0x00000000
             val key = kb.getKey()
-            if key='m'
+            if key='n'
                 score = 0
                 selectLevel(0)
     end fun
@@ -841,7 +872,7 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
         gc.setTransparentColor(-1)  # Disable transparency
         gc.drawRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0)  # black background
         
-        if level=16 or rank>10
+        if level=15 or rank>10
             gameOver()
 
         level = levelIndex
@@ -877,7 +908,7 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
 
         var x = -5.0
         var dx = 0.2
-        for i in 0..<npcVehicles.length
+        for i in 0..npcVehicles.length
             val v = npcVehicles.get(i)
             dx = -dx
             x = x + 5.0
@@ -885,7 +916,7 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
                 x = -5.0
             v.speed = 0.0
             v.x = x
-            v.z = 3.0*(19-i)
+            v.z = 3.0*(i+1)
             v.dx = dx
             v.laps = 0
 
@@ -938,8 +969,8 @@ class Game(val gc:GraphicsContext, val kb:Keyboard, val audio:AudioSamples)
         drawRoad()
         val t4 = hwregs.vga_pos
         drawFrame()
-        drawScenery()
         drawNpcVehicles()
+        drawScenery()
         setCopperList(copperList, cameraTilt)
         val t5 = hwregs.vga_pos
         # kprintf("Frame %d: start=%d calcRoad=%d drawRoad=%d drawFrame=%d end=%d\n", frameNumber, t1, t2, t3, t4, t5)
@@ -1030,8 +1061,8 @@ fun main()
 
     var dx = 0.025
     var x = -5.0
-    for i in 19..>=1
-        game.npcVehicles.add(new NpcVehicle(x, 2.0*i, SPRITE_NPC_CAR1-1+i, 110.0+i*2.0, dx))
+    for i in 1..19
+        game.npcVehicles.add(new NpcVehicle(x, 2.0*i, SPRITE_NPC_CAR1-1+i, 111.0+i*2.0, dx))
         dx = -dx
         x = x + 5.0
         if x>=18.0

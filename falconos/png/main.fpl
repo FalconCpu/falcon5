@@ -1,0 +1,12 @@
+fun readPNGFile(filePath: String)
+    val file = readFile(filePath)
+    if file is Error
+        kprintf("Error reading file: %s\n", file.message)
+        return
+    kprintf("Successfully read PNG file: %d\n", file.length)
+
+
+
+fun main()
+    readPNGFile("example.png")
+    
