@@ -202,7 +202,33 @@ class StructTest {
         runTest(prog, expected)
     }
 
+    @Test
+    fun argAliasResult() {
+        // This test demonstrates an existing BUG in the compiler where
+        // an argument that is a struct alias the return value struct
+        // causes incorrect code generation.
 
+        val prog = """
+            extern fun print(i:Int)
+            struct Point(x:Int, y:Int)
+            
+            fun swap(p: Point) -> Point
+                return Point(p.y, p.x)
+            end
+            
+            fun main()
+                var a = Point(1, 2)
+                a = swap(a)
+                print(a.x)
+                print(a.y)
+            end
+        """.trimIndent()
 
+        // Expected output is "21", but due to the bug it produces "22"
+        val expected = """
+            21
+        """.trimIndent()
 
+        runTest(prog, expected)
+    }
 }

@@ -1,0 +1,642 @@
+const SCREEN_WIDTH = 640
+const SCREEN_HEIGHT = 480
+
+# Viewport window coordinates
+const VIEWPORT_X1 = 8
+const VIEWPORT_Y1 = 8
+const VIEWPORT_X2 = 631
+const VIEWPORT_Y2 = 271
+const VIEWPORT_CENTER_X = (VIEWPORT_X1 + VIEWPORT_X2) / 2
+const VIEWPORT_CENTER_Y = (VIEWPORT_Y1 + VIEWPORT_Y2) / 2
+
+# Scanner coordinates
+const SCANNER_X1 = 180
+const SCANNER_Y1 = 300
+const SCANNER_X2 = 460
+const SCANNER_Y2 = 460
+const SCANNER_CENTER_X = (SCANNER_X1 + SCANNER_X2) / 2
+const SCANNER_CENTER_Y = (SCANNER_Y1 + SCANNER_Y2) / 2
+
+const NEAR = 0.1
+
+struct Point3d(x:Float, y:Float, z:Float)
+struct Face3d(v1:Int, v2:Int, v3:Int, color:Int)
+struct Point2d(x:Int, y:Int)
+
+var debug = false
+
+fun project(point:Point3d) ->  (Int, Int) 
+    val scale = 400 / point.z
+    val x2d = (point.x * scale + VIEWPORT_CENTER_X) as Int
+    val y2d = (point.y * scale + VIEWPORT_CENTER_Y) as Int
+    return (x2d, y2d)
+
+fun addPoints(a: Point3d, b: Point3d) -> Point3d
+    val xx = a.x + b.x
+    val yy = a.y + b.y
+    val zz = a.z + b.z
+    return Point3d(xx,yy,zz)
+
+fun subtractPoints(a: Point3d, b: Point3d) -> Point3d
+    val xx = a.x - b.x
+    val yy = a.y - b.y
+    val zz = a.z - b.z
+    return Point3d(xx,yy,zz)
+
+fun translateMinus(a: Point3d, camera:Camera) -> Point3d
+    return Point3d(
+        a.x - camera.x,
+        a.y - camera.y,
+        a.z - camera.z)
+
+fun multMatrix(matrix:Array<Float>, point:Point3d) -> Point3d
+    val x = matrix[0]*point.x + matrix[1]*point.y + matrix[2]*point.z + matrix[3]
+    val y = matrix[4]*point.x + matrix[5]*point.y + matrix[6]*point.z + matrix[7]
+    val z = matrix[8]*point.x + matrix[9]*point.y + matrix[10]*point.z + matrix[11]
+    return Point3d(x,y,z)
+
+fun rotateAroundAxis(v:Point3d, axis:Point3d, angle:Float) -> Point3d
+    val c = cos(angle)
+    val s = sin(angle)
+
+    val xx = v.x*c + (axis.y*v.z - axis.z*v.y)*s
+    val yy = v.y*c + (axis.z*v.x - axis.x*v.z)*s
+    val zz = v.z*c + (axis.x*v.y - axis.y*v.x)*s
+    return Point3d(xx,yy,zz)
+
+
+fun createRotationMatrix(rx:Float, ry:Float, rz:Float, translate:Point3d) -> Array<Float>
+    val cx = cos(rx)
+    val sx = sin(rx)
+    val cy = cos(ry)
+    val sy = sin(ry)
+    val cz = cos(rz)
+    val sz = sin(rz)
+
+    val matrix = new Array<Float>(12)
+
+    matrix[0] = cy * cz
+    matrix[1] = -cy * sz
+    matrix[2] = sy
+    matrix[3] = translate.x
+    matrix[4] = sx * sy * cz + cx * sz
+    matrix[5] = -sx * sy * sz + cx * cz
+    matrix[6] = -sx * cy
+    matrix[7] = translate.y
+    matrix[8] = -cx * sy * cz + sx * sz
+    matrix[9] = cx * sy * sz + sx * cz
+    matrix[10]= cx * cy
+    matrix[11]= translate.z
+    return matrix
+
+fun invSqrt(x:Float) -> Float
+    # Initial guess — very rough but works
+    var y = 1.0
+
+    if    x<0.000122 then y = 128.0
+    elsif x<0.000488 then y = 64.0
+    elsif x<0.001953 then y = 32.0
+    elsif x<0.007813 then y = 16.0
+    elsif x<0.03125 then y = 8.0
+    elsif x<0.125 then y = 4.0
+    elsif x<0.5 then y = 2.0
+    elsif x<2.0 then y = 1.0
+    elsif x<8.0 then y = 0.5
+    elsif x<32.0 then y = 0.25
+    elsif x<128.0 then y = 0.125
+    else y = 0.00625
+
+    # Two Newton iteration
+    y = y * (1.5 - 0.5 * x * y * y)
+    y = y * (1.5 - 0.5 * x * y * y)
+    y = y * (1.5 - 0.5 * x * y * y)
+    y = y * (1.5 - 0.5 * x * y * y)
+    # kprintf("invSqrt: x=%f invSqrt=%f\n", x, y)
+    return y
+
+
+fun wait()
+    for i in 0..10000
+        val dummy = 0
+
+fun max(a:Float, b:Float) -> Float
+    return if a>b then a else  b
+
+class DrawElement(val p1:Point3d, val p2:Point3d, val p3:Point3d, val color:Int)
+    val depth = max(p1.z,max(p2.z,p3.z))
+
+fun interpolateNearPlane(pFront: Point3d, pBack: Point3d) -> Point3d
+    val t = (NEAR - pBack.z) / (pFront.z - pBack.z)
+    return Point3d(
+        pBack.x + t*(pFront.x - pBack.x),
+        pBack.y + t*(pFront.y - pBack.y),
+        NEAR )
+
+class Object3d(
+    var location:Point3d,
+    var angularVelocity:Point3d,
+    val points:Array<Point3d>,
+    val faces:Array<Face3d>)
+    var velocity = Point3d(0.0, 0.0, 0.0)
+    var rotation = Point3d(1.0, 0.1, 0.0)
+
+    fun move()
+        location = addPoints(location, velocity)
+        rotation = addPoints(rotation, angularVelocity)
+
+    fun render(camera:Camera, drawList:List<DrawElement>)
+        val rotatedPoints = new Array<Point3d>(points.length)
+        val translate = translateMinus(location, camera)
+        val rotationMatrix = createRotationMatrix(rotation.x, rotation.y, rotation.z, translate)
+        for i in 0..<points.length
+            # Rotate the points around the objects own axis, and translate to world location
+            var rp = multMatrix(rotationMatrix, points[i])
+
+            # World → camera transform
+            rotatedPoints[i] = multMatrix(camera.inverseCameraMatrix, rp)
+
+            if debug
+                kprintf("Point %d: Camera pos (%f, %f, %f)\n", i, rotatedPoints[i].x, rotatedPoints[i].y, rotatedPoints[i].z)
+
+        for face in faces
+            hwregs.ledr = 1
+            val p1 = rotatedPoints[face.v1]
+            val p2 = rotatedPoints[face.v2]
+            val p3 = rotatedPoints[face.v3]
+
+            # back-face culling
+            val u = subtractPoints(p2, p1)
+            val v = subtractPoints(p3, p1)
+            val nz = u.x * v.y - u.y * v.x
+            if nz > 0.0
+                continue
+
+
+            # Do the near plane clipping
+            if p1.z>NEAR and p2.z>NEAR and p3.z>NEAR
+                # Entire face is in front of near plane, render as normal
+                drawList.add(new DrawElement(p1, p2, p3, face.color))
+            elsif p1.z<=NEAR and p2.z<=NEAR and p3.z<=NEAR
+                # Entire face is behind near plane, skip
+                continue
+            elsif p1.z>NEAR and p2.z>NEAR and p3.z<=NEAR
+                # Two points in front, one behind - create two new triangles
+                val q1 = interpolateNearPlane(p1, p3)
+                val q2 = interpolateNearPlane(p2, p3)
+                drawList.add(new DrawElement(p1, p2, q1, face.color))
+                drawList.add(new DrawElement(p2, q2, q1, face.color))
+            elsif p1.z>NEAR and p2.z<=NEAR and p3.z>NEAR
+                # Two points in front, one behind - create two new triangles
+                val q1 = interpolateNearPlane(p1, p2)
+                val q2 = interpolateNearPlane(p3, p2)
+                drawList.add(new DrawElement(p1, q1, p3, face.color))
+                drawList.add(new DrawElement(p3, q1, q2, face.color))
+            elsif p1.z<=NEAR and p2.z>NEAR and p3.z>NEAR
+                # Two points in front, one behind - create two new triangles
+                val q1 = interpolateNearPlane(p2, p1)
+                val q2 = interpolateNearPlane(p3, p1)
+                drawList.add(new DrawElement(q1, p2, p3, face.color))
+                drawList.add(new DrawElement(q2, q1, p3, face.color))
+            elsif p1.z>NEAR and p2.z<=NEAR and p3.z<=NEAR
+                # One point in front, two behind - create one new triangle
+                val q1 = interpolateNearPlane(p2, p1)
+                val q2 = interpolateNearPlane(p3, p1)
+                drawList.add(new DrawElement(p1, q1, q2, face.color))
+            elsif p1.z<=NEAR and p2.z>NEAR and p3.z<=NEAR
+                # One point in front, two behind - create one new triangle
+                val q1 = interpolateNearPlane(p1, p2)
+                val q2 = interpolateNearPlane(p3, p2)
+                drawList.add(new DrawElement(q1, p2, q2, face.color))
+            elsif p1.z<=NEAR and p2.z<=NEAR and p3.z>NEAR
+                # One point in front, two behind - create one new triangle  
+                val q1 = interpolateNearPlane(p1, p3)
+                val q2 = interpolateNearPlane(p2, p3)   
+                drawList.add(new DrawElement(q1, q2, p3, face.color))
+
+        hwregs.ledr = 0
+        free rotatedPoints
+        free rotationMatrix
+
+fun normalize(v:Point3d) -> Point3d
+    val len2 = v.x*v.x + v.y*v.y + v.z*v.z
+    val invLen = invSqrt(len2)
+    val xx = v.x*invLen
+    val yy = v.y*invLen
+    val zz = v.z*invLen
+    return Point3d(xx,yy,zz)
+
+fun cross(a:Point3d, b:Point3d) -> Point3d
+    val xx = a.y*b.z - a.z*b.y
+    val yy = a.z*b.x - a.x*b.z
+    val zz = a.x*b.y - a.y*b.x
+    return Point3d(xx,yy,zz)
+
+class Camera()
+    var x = 0.0
+    var y = 0.0
+    var z = 0.0
+
+    var forward = Point3d(0.0,0.0,1.0)
+    var up      = Point3d(0.0,1.0,0.0)
+    var right   = Point3d(1.0,0.0,0.0)
+    var inverseCameraMatrix = new Array<Float>(12)
+    
+    fun updateInverseMatrix(rearView:Bool)
+        inverseCameraMatrix[0]  = right.x
+        inverseCameraMatrix[1]  = right.y
+        inverseCameraMatrix[2]  = right.z
+        inverseCameraMatrix[4]  = up.x
+        inverseCameraMatrix[5]  = up.y
+        inverseCameraMatrix[6]  = up.z
+        inverseCameraMatrix[8]  = if rearView then -forward.x else forward.x
+        inverseCameraMatrix[9]  = if rearView then -forward.y else forward.y
+        inverseCameraMatrix[10] = if rearView then -forward.z else forward.z
+
+        # kprintf("Camera inverse matrix:-\n")
+        # for i in 0..2
+        #     kprintf("%f %f %f %f\n",
+        #         inverseCameraMatrix[i*4 + 0],
+        #         inverseCameraMatrix[i*4 + 1],
+        #         inverseCameraMatrix[i*4 + 2],
+        #         inverseCameraMatrix[i*4 + 3])
+
+
+    fun move(kb:Keyboard, delta:Float)
+        if kb.keyDown[KEY_SCANCODE_LEFT]
+            forward = rotateAroundAxis(forward, up,  1.0)
+
+        if kb.keyDown[KEY_SCANCODE_RIGHT]
+            forward = rotateAroundAxis(forward, up, -1.0)
+
+        if kb.keyDown[KEY_SCANCODE_UP]
+            forward = rotateAroundAxis(forward, right,  -1.0)
+
+        if kb.keyDown[KEY_SCANCODE_DOWN]
+            forward = rotateAroundAxis(forward, right, 1.0)
+
+        # Roll
+        if kb.keyDown[KEY_SCANCODE_A]
+            right = rotateAroundAxis(right, forward,  1.0)
+            up    = rotateAroundAxis(up,    forward,  1.0)
+
+        if kb.keyDown[KEY_SCANCODE_D]
+            right = rotateAroundAxis(right, forward,  -1.0)
+            up    = rotateAroundAxis(up,    forward,  -1.0)
+
+        if kb.keyDown[KEY_SCANCODE_SPACE]
+            x = x + forward.x * delta
+            y = y + forward.y * delta
+            z = z + forward.z * delta
+
+        if kb.keyDown[KEY_SCANCODE_B]
+            x = x - forward.x * delta
+            y = y - forward.y * delta
+            z = z - forward.z * delta
+
+        val rearView = kb.keyDown[KEY_SCANCODE_R]
+
+        forward = normalize(forward)
+        up      = cross(right, forward)
+        right   = cross(forward, up)
+        updateInverseMatrix(rearView)
+        # if kb.keyDown[KEY_SCANCODE_LEFT]
+        #     ry = ry - 1
+        # if kb.keyDown[KEY_SCANCODE_RIGHT]
+        #     ry = ry + 1
+        # if kb.keyDown[KEY_SCANCODE_UP]
+        #     rx = rx + 1
+        # if kb.keyDown[KEY_SCANCODE_DOWN]
+        #     rx = rx - 1
+        # if kb.keyDown[KEY_SCANCODE_SPACE]
+        #     x = x + fx * delta
+        #     y = y + fy * delta
+        #     z = z + fz * delta
+        # if kb.keyDown[KEY_SCANCODE_B]
+        #     x = x - fx * delta
+        #     y = y - fy * delta
+        #     z = z - fz * delta
+        
+struct Star (
+    x : Float,
+    y : Float,
+    z : Float,
+    brightness : Int)
+
+var seed = 123456789
+fun random() -> Int
+    seed = (seed * 1103515245 + 12345) & 0x7FFFFFFF
+    return seed
+
+fun randomFloat() -> Float
+    return (random() as Float) / 2147483647.0
+
+fun calcFaceNormal(d:DrawElement) -> Point3d
+    val u = Point3d(
+        d.p2.x - d.p1.x,
+        d.p2.y - d.p1.y,
+        d.p2.z - d.p1.z)
+    val v = Point3d(
+        d.p3.x - d.p1.x,
+        d.p3.y - d.p1.y,
+        d.p3.z - d.p1.z)
+    val nx = u.y * v.z - u.z * v.y
+    val ny = u.z * v.x - u.x * v.z
+    val nz = u.x * v.y - u.y * v.x
+
+    val lengthInv = invSqrt(nx * nx + ny * ny + nz * nz)
+    return Point3d(nx*lengthInv, ny*lengthInv, nz*lengthInv)
+
+fun dotProduct(a:Point3d, b:Point3d) -> Float
+    return a.x * b.x + a.y * b.y + a.z * b.z
+
+fun applyBrightness(color:Int, brightness:Float) -> Int
+    # 256 color palette - colors are 16 base colors with 16 brightness levels
+    val baseColor = color & 0xF0
+    val baseBrightness = color & 0x0F
+    val newBrightness = (baseBrightness - 8 + 8.0*brightness) as Int
+    val clampedBrightness = if newBrightness>15 then 15 else if newBrightness<0 then 0 else newBrightness
+    if brightness<0.0 or brightness>1.0
+        kprintf("applyBrightness: color=%d brightness=%d adjustment=%f newBrightness=%d clamped=%d\n", color, baseBrightness, brightness, newBrightness, clampedBrightness)
+    return baseColor | clampedBrightness
+
+fun loadObjectModel(path:String) -> (Array<Point3d>, Array<Face3d>)
+    # Load a model from a file
+    val f = readFile(path)
+    if f is Error
+        kprintf("loadObjectModel: error reading file %s\n", path)
+        abort ABORT_IO_ERROR
+    val pointer = unsafe(f as Int)
+    val points = unsafe((pointer+4) as Array<Point3d>)
+    val faces = unsafe((pointer+8 + points.length * 12) as Array<Face3d>)
+    return (points, faces)
+
+
+class Game(val gc:GraphicsContext, val kb:Keyboard)
+    val camera = new Camera()
+    val objects = new List<Object3d>()
+
+    val stars = new Array<Star>(100)
+
+    fun initializeStars()
+        for i in 0..<stars.length
+            var dist = 0.0
+            repeat
+                stars[i] = Star(
+                    (randomFloat() - 0.5) * 2000.0,
+                    (randomFloat() - 0.5) * 2000.0,
+                    (randomFloat() - 0.5) * 2000.0,
+                    1)
+                dist = stars[i].x * stars[i].x +
+                    stars[i].y * stars[i].y +
+                    stars[i].z * stars[i].z
+            until dist < 4000000.0
+
+    fun addObject(obj:Object3d)
+        objects.add(obj)
+
+    fun clearViewPort()
+        gc.setClipRect(0, 0, SCREEN_WIDTH-1, SCREEN_HEIGHT-1)
+        gc.drawRect(VIEWPORT_X1, VIEWPORT_Y1, VIEWPORT_X2, VIEWPORT_Y2, 0)   # Clear viewport to black
+        gc.drawRect(SCANNER_X1, SCANNER_Y1, SCANNER_X2, SCANNER_Y2, 0)   # Clear scanner to black
+        gc.drawRect(SCANNER_X1, SCANNER_CENTER_Y-1, SCANNER_X2, SCANNER_CENTER_Y+1, 255)
+        gc.drawRect(SCANNER_CENTER_X-1, SCANNER_Y1, SCANNER_CENTER_X+1, SCANNER_Y2, 255)   # Draw scanner center lines
+        gc.drawRect(40,350, 50, 470, 2)
+        gc.drawRect(10,350, 30, 470, 1)
+
+
+    fun drawViewPort(drawList:List<DrawElement>) 
+        # Sort draw list by depth (simple painter's algorithm)
+        gc.setClipRect(VIEWPORT_X1, VIEWPORT_Y1, VIEWPORT_X2, VIEWPORT_Y2)
+        hwregs.ledr = 4
+        # bubbleSort(drawList)
+        quickSortDrawList(drawList, 0, drawList.length - 1)
+
+        val lightDir = Point3d(0.0, 0.0, -1.0)
+
+        hwregs.ledr = 8
+        for element in drawList
+            # kprintf("Draw Element: depth=%f\n", element.depth)
+            val (x1, y1) = project(element.p1)
+            val (x2, y2) = project(element.p2)
+            val (x3, y3) = project(element.p3)
+
+            # Calculate lighting
+            val normal = calcFaceNormal(element)
+            # val nn = dotProduct(normal, normal)
+            # if (nn <0.7 or nn >1.3)
+            #     kprintf("drawViewPort: warning - face normal not unit length (%f)\n", nn)
+            val dot = dotProduct(normal, lightDir)
+            val newColor = applyBrightness(element.color, dot)
+            # val newColor = element.color
+
+            gc.drawTriangle(
+                x1, y1,
+                x2, y2,
+                x3, y3,
+                newColor)
+            free(element)
+
+    fun drawStars()
+        gc.setClipRect(VIEWPORT_X1, VIEWPORT_Y1, VIEWPORT_X2, VIEWPORT_Y2)
+        for star in stars
+            val pos = Point3d(star.x, star.y, star.z)
+            val rot = multMatrix(camera.inverseCameraMatrix, pos)
+            if rot.z<=0.0
+                continue
+            val proj = project(rot)
+            gc.drawPixel(proj.0, proj.1, star.brightness)
+
+    fun drawScanner(objList:List<Object3d>)
+        gc.setClipRect(SCANNER_X1, SCANNER_Y1, SCANNER_X2, SCANNER_Y2)
+        camera.updateInverseMatrix(false)   
+        for object in objList
+            val pos = translateMinus(object.location, camera)
+            val rot = multMatrix(camera.inverseCameraMatrix, pos)
+            val scale = 1.0
+            val sx = (rot.x * scale + SCANNER_CENTER_X) as Int
+            val sy = (-rot.z * scale + SCANNER_CENTER_Y) as Int
+            val sz = (rot.y * scale) as Int
+            gc.drawRect(sx-2, sy-2, sx+3, sy+3, 1)
+            if (sz<0) 
+                gc.drawRect(sx-1, sy+sz, sx+1, sy, 1)
+            else
+                gc.drawRect(sx-1, sy-1, sx+1, sy+sz, 1)
+            # kprintf("Scanner object at (%f, %f, %f) projected to (%d, %d, %d)\n", rot.x, rot.y, rot.z, sx, sy, sz)
+
+
+    fun hammerMemory()
+        val x = new Array<Int>(100000)
+        for i in 0..<x.length
+            x[i] = i
+        free x
+
+    fun renderFrame()
+        # Project and draw each face
+        clearViewPort()
+
+        val drawList = new List<DrawElement>()
+        for obj in objects
+            obj.move()
+            obj.render(camera, drawList)
+            # hammerMemory()
+            # for i in 0..10000
+            #     val dummy = 0
+
+        drawStars()
+        drawViewPort(drawList)
+        free(drawList)
+
+        drawScanner(objects)
+        hwregs.ledr = 16
+
+        val key = kb.getKey()
+        debug = (key = 'D')
+        camera.move(kb, 0.1)
+
+
+
+fun bubbleSort(drawList: List<DrawElement>)
+    val n = drawList.length
+    var swapped = true
+    while swapped
+        swapped = false
+        for i in 0..(n-2)
+            if drawList.get(i).depth < drawList.get(i+1).depth
+                # Swap
+                val temp = drawList.get(i)
+                drawList.set(i, drawList.get(i+1))
+                drawList.set(i+1, temp)
+                swapped = true
+
+fun quickSortDrawList(drawList: List<DrawElement>, low: Int, high: Int)
+    val n = drawList.length
+
+    if low < high
+        val p = hoarePartition(drawList, low, high)
+        quickSortDrawList(drawList, low, p)
+        quickSortDrawList(drawList, p + 1, high)
+
+fun hoarePartition(drawList: List<DrawElement>, low: Int, high: Int) -> Int
+    val pivotDepth = drawList.get((low + high) / 2).depth
+    var i = low - 1
+    var j = high + 1
+    # kprintf("hoarePartition: pivotDepth=%f i=%d j=%d\n", pivotDepth, i, j)
+
+    while true
+        # kprintf("hoarePartition: loop i=%d j=%d\n", i, j)
+        repeat
+            i += 1 
+        until drawList.get(i).depth <= pivotDepth # farthest first
+        # kprintf("hoarePartition: after i=%d\n", i)
+        repeat 
+            j -= 1 
+        until drawList.get(j).depth >= pivotDepth
+
+        if i >= j
+            return j
+
+        # Swap elements i and j
+        val temp = drawList.get(i)
+        drawList.set(i, drawList.get(j))
+        drawList.set(j, temp)
+
+fun partition(drawList: List<DrawElement>, low: Int, high: Int) -> Int
+    val pivotDepth = drawList.get(high).depth
+    var i = low - 1
+
+    for j in low..high-1
+        if drawList.get(j).depth >= pivotDepth   # '>= ' so farthest faces first
+            i += 1
+            # swap drawList[i] and drawList[j]
+            val temp = drawList.get(i)
+            drawList.set(i, drawList.get(j))
+            drawList.set(j, temp)
+
+    # swap drawList[i+1] and drawList[high] (pivot)
+    val temp = drawList.get(i+1)
+    drawList.set(i+1, drawList.get(high))
+    drawList.set(high, temp)
+
+    return i+1
+
+fun showPalette(gc:GraphicsContext)
+    gc.setClipRect(0, 0, SCREEN_WIDTH-1, SCREEN_HEIGHT-1)
+    val boxWidth = SCREEN_WIDTH / 16
+    val boxHeight = SCREEN_HEIGHT / 16
+    for color in 0..255
+        val x = (color % 16) * boxWidth
+        val y = (color / 16) * boxHeight
+        gc.drawRect(x, y, x + boxWidth - 1, y + boxHeight - 1, color)
+    while true
+        wait()
+
+
+fun main() 
+    # Define a cube with 8 vertices
+    # val points = new Array<Point3d>[
+    #     Point3d(-0.5,  -0.5, -0.5),  # 0
+    #     Point3d(-0.5,  0.5, -0.5),  # 1
+    #     Point3d(0.5,  -0.5, -0.5),  # 2
+    #     Point3d(0.5,  0.5, -0.5),  # 3
+    #     Point3d(-0.5,  -0.5, 0.5),  # 4
+    #     Point3d(-0.5,  0.5, 0.5),  # 5
+    #     Point3d(0.5,  -0.5, 0.5),  # 6
+    #     Point3d(0.5,  0.5, 0.5)]  # 7
+
+    # # Define the 12 faces of the cube (two triangles per face)
+    # val faces = new Array<Face3d>[
+    #     Face3d(0, 2, 1, 0x1F), Face3d(2, 3, 1, 0x1F),     # Front
+    #     Face3d(6, 4, 5, 0x2F), Face3d(6, 5, 7, 0x2F),     # Back
+    #     Face3d(4, 0, 1, 0x3F), Face3d(4, 1, 5, 0x3F),     # Left
+    #     Face3d(2, 6, 7, 0x4F), Face3d(2, 7, 3, 0x4F),     # Right
+    #     Face3d(4, 6, 2, 0x5F), Face3d(4, 2, 0, 0x5F),     # Top
+    #     Face3d(1, 3, 7, 0x6F), Face3d(1, 7, 5, 0x6F)]     # Bottom
+
+
+
+    val gc = new GraphicsContext()
+    gc.setup()
+    gc.setTransparentColor(-1)  # Disable transparency    
+    val kb = new Keyboard()
+
+    val (points, faces) = loadObjectModel("models/spaceship.dat")
+    kprintf("Loaded model with %d points and %d faces\n", points.length, faces.length)
+
+    val obj1 = new Object3d(
+        Point3d(0.0, 0.0, 5.0),
+        Point3d(0.1, 0.0, 0.0),
+        points,
+        faces)
+
+
+    val game = new Game(gc, kb)
+    game.addObject(obj1)
+    game.initializeStars()
+    loadPalette()
+
+    # showPalette(gc)
+
+    val camera = new Camera()
+
+    val screenBuffer0 = unsafe(new Array<Char>(640*480) as Int)
+    val screenBuffer1 = unsafe(new Array<Char>(640*480) as Int)
+    var screenBufferIndex = 0
+
+    var frame = 0
+    while true
+        # Wait for vertical blank
+        hwregs.seven_seg = hwregs.vga_pos
+        while hwregs.vga_pos > SCREEN_HEIGHT
+            wait()
+        while hwregs.vga_pos < SCREEN_HEIGHT
+            wait()
+
+        if screenBufferIndex=0
+            gc.setGraphicsBuffer(screenBuffer0)
+            hwregsVideo.addr = screenBuffer1
+        else
+            gc.setGraphicsBuffer(screenBuffer1)
+            hwregsVideo.addr = screenBuffer0
+        screenBufferIndex = 1 - screenBufferIndex
+
+        game.renderFrame()

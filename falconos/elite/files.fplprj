@@ -1,0 +1,13 @@
+../modtracker/start.f32
+../src/errors.fpl
+../src/hwregs.fpl
+../modtracker/memory.fpl
+../src/kprintf.fpl
+../src/graphicsContext.fpl
+../src/keyboard.fpl
+../src/list.fpl
+../modtracker/exceptions.fpl
+../modtracker/filehandler.fpl
+main.fpl
+sinetable.fpl
+palette.fpl

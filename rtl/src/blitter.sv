@@ -25,7 +25,9 @@ module blitter(
     input  logic        blitw_sdram_ready,   // Access granted
     output logic [25:0] blitw_sdram_address, // Address to write to
     output logic [3:0]  blitw_sdram_wstrb,
-    output logic [31:0] blitw_sdram_wdata    // Data to write
+    output logic [31:0] blitw_sdram_wdata,    // Data to write
+
+    output logic        fault_detected
 );
 
 logic [4:0]   reg_command;
@@ -145,6 +147,10 @@ blit_coordinate_gen  blit_coordinate_gen_inst (
     .reg_src_dx_y(src_dx_y),
     .reg_slope_x1(reg_slope_x1),
     .reg_slope_x2(reg_slope_x2),
+    .reg_clip_x1(reg_clip_x1),
+    .reg_clip_y1(reg_clip_y1),
+    .reg_clip_x2(reg_clip_x2),
+    .reg_clip_y2(reg_clip_y2),
     .busy(busy),
     .p2_ready(p2_ready),
     .p1_x(p1_x),
@@ -251,7 +257,8 @@ blit_color  blit_color_inst (
     .blitw_sdram_ready(blitw_sdram_ready),
     .blitw_sdram_address(blitw_sdram_address),
     .blitw_sdram_wstrb(blitw_sdram_wstrb),
-    .blitw_sdram_wdata(blitw_sdram_wdata)
+    .blitw_sdram_wdata(blitw_sdram_wdata),
+    .fault_detected(fault_detected)
   );
 
 

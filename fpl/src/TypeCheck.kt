@@ -1060,7 +1060,7 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
             for (clause in body.filterIsInstance<AstIfClause>()) {
                 val tctCondition = clause.condition?.typeCheckBoolExpr(scope)
                 pathContext = tctCondition?.trueBranch ?: pathContext
-                val tctBody = clause.body.map { it.typeCheckStmt(this) }
+                val tctBody = clause.body.map { it.typeCheckStmt(clause) }
                 mergeContexts += pathContext
                 clauses += TctIfClause(location, tctCondition?.expr, tctBody)
                 pathContext = tctCondition?.falseBranch ?: pathContext

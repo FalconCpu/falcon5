@@ -100,6 +100,7 @@ fun mallocInternal(sizeReq:Int) -> FreeMemBlock
         # Create a new block at the end of the current block
         val newBlock = unsafe(((p as Int) + sizeReq) as FreeMemBlock)
         insertBlockIntoFreeList(newBlock, sizeSplit)
+    # kprintf("mallocInternal: requested size %d returned %x\n", sizeReq,p)
     return p
 end fun
 
@@ -124,6 +125,7 @@ fun freeMem(ptr:Int)
     val size = block.size
     if (size & 0xF)=0
         abort ABORT_DOUBLE_FREE
+    # kprintf("freeMem: freeing block %x of size %d\n",block,size & 0xfffffff0)
     insertBlockIntoFreeList(block, size & 0xfffffff0)
 
 fun dumpMemorySystem()

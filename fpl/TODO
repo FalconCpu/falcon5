@@ -53,3 +53,6 @@ Dead Store elimination
 Loop invariant code motion
 vcall devirtualisation
 syscalls
+
+BUG:
+function calls which return a struct, if that struct aliases one of the function arguments, the aliasing is not detected - results in incorrect codegen.

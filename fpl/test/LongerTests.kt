@@ -67,4 +67,40 @@ class LongerTests {
         runTest(prog, expected)
     }
 
+    @Test
+    fun arrayOfPoints() {
+        val prog = """
+            extern fun print(i:Int)
+            extern fun print(s:String)
+
+            struct Point3d(x:Int, y:Int, z:Int)
+
+            fun main() 
+                val points = new Array<Point3d>[
+                    Point3d(1,2,3),
+                    Point3d(4,5,6),
+                    Point3d(7,8,9) ]
+                
+                for p in points
+                    print(p.x)
+                    print(",")
+                    print(p.y)
+                    print(",")
+                    print(p.z)
+                    print("\n")
+                    
+                end
+            
+        """.trimIndent()
+
+        val expected = """
+            1,2,3
+            4,5,6
+            7,8,9
+            
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
+
 }

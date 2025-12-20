@@ -97,4 +97,5 @@ class List<T>
         return array[0]
 
     fun free()
+        # kprintf("Freeing list with array %x\n", array)
         free array

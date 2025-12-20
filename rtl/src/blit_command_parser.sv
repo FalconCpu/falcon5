@@ -98,6 +98,7 @@ logic [31:0]   next_reg_src_dy_x;
 logic [31:0]   next_reg_src_dx_y;
 logic [31:0]   next_reg_slope_x1;
 logic [31:0]   next_reg_slope_x2;
+logic [3:0]    prev_busy;
 
 logic [3:0]   state, next_state;    
 localparam STATE_IDLE=0, 
@@ -215,14 +216,18 @@ always_comb begin
                      end
 
                 CMD_SETUP: begin
-                        if (this_cmd[32]==0)
-                            $display("BLIT_CMD: Warning: Ignoring SETUP command without privaledge");
-                        else begin  
-                            next_state = STATE_SETUP;
-                            next_dest_stride = this_cmd[15:0];
+                        if (prev_busy!=4'b0) begin
+                            // wait until blitter finished
+                        end else begin
+                            if (this_cmd[32]==0)
+                                $display("BLIT_CMD: Warning: Ignoring SETUP command without privaledge");
+                            else begin  
+                                next_state = STATE_SETUP;
+                                next_dest_stride = this_cmd[15:0];
+                            end
+                            consume_cmd = 1'b1;
                         end
-                        consume_cmd = 1'b1;
-                     end
+                    end
 
                 CMD_SET_SRC: begin
                         if (this_cmd[32]==0)
@@ -340,7 +345,7 @@ always_comb begin
         end
 
         STATE_SETUP: begin
-            if (cmd_valid) begin
+            if (cmd_valid && !busy) begin
                 if (arg_count == 3'd0) begin
                     next_dest_base_addr = this_cmd[25:0];
                 end else if (arg_count == 3'd1) begin
@@ -491,6 +496,7 @@ always_ff @(posedge clock) begin
     reg_src_dx_y    <= next_reg_src_dx_y;
     reg_slope_x1    <= next_reg_slope_x1;
     reg_slope_x2    <= next_reg_slope_x2;
+    prev_busy       <= {prev_busy[2:0], busy};
 
     if (hwregs_blit_valid) begin
         cmd_fifo[fifo_wr_ptr] <= {hwregs_blit_privaledge,hwregs_blit_command};

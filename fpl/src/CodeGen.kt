@@ -113,7 +113,11 @@ fun TctExpr.codeGenRvalue() : Reg {
             val ret = allocateArray(sizeExpr, elementType, arena, false, null)
             val elementSize = elementType.getSize()
             for(index in elements.indices)
-                currentFunc.addStore(elementSize, elements[index].codeGenRvalue(), ret, index*elementSize)
+                if (elementType.isAggregate()) {
+                    elements[index].codeGenAggregateRvalue(
+                        currentFunc.addAlu(BinOp.ADD_I, ret, index * elementSize))
+                } else
+                    currentFunc.addStore(elementSize, elements[index].codeGenRvalue(), ret, index*elementSize)
             ret
         }
 
@@ -1017,7 +1021,33 @@ fun TctExpr.codeGenAggregateRvalue(dest:Reg) {
             genCall(func, thisArgReg, argRegs,dest)
         }
 
-        else -> error("$location Cannot use expression of type '${this.type}' as an aggregate")
+        is TctIndexExpr -> {
+            require(type is TypeStruct)
+            val arrayReg = array.codeGenRvalue()
+            val indexReg = index.codeGenRvalue()
+            val size = type.getSize()
+            val bounds = if (array.type is TypeInlineArray)
+                currentFunc.addLdImm(array.type.size)
+            else if (array.type is TypePointer)
+                currentFunc.addLdImm(0x7FFFFFFF) // Arbitrary large value - we can't do bounds checking on pointers
+            else
+                currentFunc.addLoad(arrayReg, lengthSymbol)
+            val dummy = currentFunc.addIndex(1, indexReg, bounds)   // Check bounds
+            val scaled = currentFunc.addAlu(BinOp.MUL_I, dummy, size)
+            val srcAddr = currentFunc.addAlu(BinOp.ADD_I, arrayReg, scaled)
+            genMemCopy(dest, srcAddr, size)
+        }
+
+        is TctMemberExpr -> {
+            val objectReg = objectExpr.codeGenRvalue()
+            val size = member.type.getSize()
+            if (size == 0)
+                Log.error(location, "Cannot access member '${member.name}' of type '${objectExpr.type}'")
+            val srcAddr = currentFunc.addAlu(BinOp.ADD_I, objectReg, member.offset)
+            genMemCopy(dest, srcAddr, size)
+        }
+
+        else -> error("$location Cannot use expression of type ${this.javaClass} '${this.type}' as an aggregate")
     }
 }
 
@@ -1043,7 +1073,15 @@ fun TctExpr.codeGenAggregateLvalue() : Reg {
             return currentFunc.addAlu(BinOp.ADD_I, arrayReg, scaled)
         }
 
-        else -> error("Cannot use expression of type '${this.type}' as an aggregate at $location" )
+        is TctMemberExpr -> {
+            val objectReg = objectExpr.codeGenRvalue()
+            val size = member.type.getSize()
+            if (size == 0)
+                Log.error(location, "Cannot access member '${member.name}' of type '${objectExpr.type}'")
+            return currentFunc.addAlu(BinOp.ADD_I, objectReg, member.offset)
+        }
+
+        else -> error("Cannot use expression of type ${this.javaClass} '${this.type}' as an aggregate at $location" )
     }
 }
 

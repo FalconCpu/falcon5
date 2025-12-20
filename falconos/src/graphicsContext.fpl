@@ -19,6 +19,10 @@ class GraphicsContext
     var fontWidth = 8
     var fontHeight = 16
     var affineSet = false
+    var clip_x1 = 0
+    var clip_y1 = 0
+    var clip_x2 = 640
+    var clip_y2 = 480
 
     fun setGraphicsBuffer(address:Int)
         screenAddress = address
@@ -26,12 +30,12 @@ class GraphicsContext
 
     fun setup()
         hwregs.blit_ctrl = 1                # Enable blitter
-        while (hwregs.blit_cmd < 9)         # Wait for blitter to have at least 3 free slots in command queue
+        while (hwregs.blit_cmd < 12)         # Wait for blitter to have at least 3 free slots in command queue
             val dummy = 1
         hwregs.blit_cmd = 0xFF000000 | screenStride  # CMD setup, stride=640
         hwregs.blit_cmd = screenAddress     # Screen address
-        hwregs.blit_cmd = 0                 # CLIP 0,0
-        hwregs.blit_cmd = screenHeight lsl 16 | screenWidth  # CLIP 640,480
+        hwregs.blit_cmd = clip_y1 lsl 16 | clip_x1  # CLIP x1,y1
+        hwregs.blit_cmd = clip_y2 lsl 16 | clip_x2  # CLIP x2,y2
         hwregs.blit_cmd = 0                 # OFFSET 0,0
         hwregs.blit_cmd = screenAddress     # SRC  address
         hwregs.blit_cmd = screenStride      # SRC stride
@@ -49,6 +53,13 @@ class GraphicsContext
         hwregs.blit_cmd = y1 lsl 16 | (x1 & 0xFFFF)          # x,y
         hwregs.blit_cmd = y2 lsl 16 | (x2 & 0xFFFF)          # w,h
 
+    fun drawPixel(x:Int, y:Int, color:Int)
+        while (hwregs.blit_cmd < 2)         # Wait for blitter to have at least 2 free slots in command queue
+            val dummy = 1
+        hwregs.blit_cmd = CMD_DRAW_RECT | color  # CMD RECT COLOR = color
+        hwregs.blit_cmd = y lsl 16 | (x & 0xFFFF)          # x,y
+        hwregs.blit_cmd = (y+1) lsl 16 | ((x+1) & 0xFFFF)          # w,h
+
     fun drawTriangle(x1:Int, y1:Int, x2:Int, y2:Int, x3:Int, y3:Int, color:Int)
         # Sort the points by y-coordinate ascending (y1 <= y2 <= y3)
         var (tx1,ty1) = (x1, y1)
@@ -64,7 +75,25 @@ class GraphicsContext
             (ty2, ty3) = (ty3, ty2)
             (tx2, tx3) = (tx3, tx2)
 
-        if ty1 = ty3 and ty1=ty3 then return  # Degenerate triangle
+        if ty1=ty3 then return  # Degenerate triangle
+        if ty1>clip_y2 then return
+        if ty3<clip_y1 then return
+        if tx1<clip_x1 and tx2<clip_x1 and tx3<clip_x1 then return
+        if tx1>clip_x2 and tx2>clip_x2 and tx3>clip_x2 then return
+
+        # Clamp coordinates - as we are going to switch to 16.16 fixed point 
+        if tx1 < -16384 then tx1 = -16384
+        if tx2 < -16384 then tx2 = -16384
+        if tx3 < -16384 then tx3 = -16384
+        if tx1 > 16383 then tx1 = 16383
+        if tx2 > 16383 then tx2 = 16383
+        if tx3 > 16383 then tx3 = 16383
+        if ty1 < -16384 then ty1 = -16384
+        if ty2 < -16384 then ty2 = -16384
+        if ty3 < -16384 then ty3 = -16384
+        if ty1 > 16383 then ty1 = 16383
+        if ty2 > 16383 then ty2 = 16383
+        if ty3 > 16383 then ty3 = 16383
 
         # Three cases - flat bottom, flat top, general
         if ty2 = ty3
@@ -76,7 +105,9 @@ class GraphicsContext
             var slope2 = ((tx3 - tx1) lsl 16) / (ty3 - ty1)
 
             # Send to blitter
-            while (hwregs.blit_cmd < 6)         
+            if ty3<0 then return
+
+            while (hwregs.blit_cmd < 8)         
                 hwregs.ledr = 1
             hwregs.ledr = 0
             hwregs.blit_cmd = CMD_DRAW_TRAP | color  # CMD RECT COLOR = color
@@ -87,16 +118,14 @@ class GraphicsContext
         else if ty1 = ty2
             # Flat top
             # make sure tx1 is left edge and tx2 is right edge
+            if ty1 > 480 then return
             if tx1 > tx2
                 (tx1, tx2) = (tx2, tx1)
             var slope1 = ((tx3 - tx1) lsl 16) / (ty3 - ty1)
             var slope2 = ((tx3 - tx2) lsl 16) / (ty3 - ty2)
-
-            kprintf("Triangle flat top: (%d,%d), (%d,%d), (%d,%d)\n", tx1,ty1, tx2,ty2, tx3,ty3)
-            kprintf("  slopes: %x, %x\n", slope1, slope2)
-
+            
             # Send to blitter
-            while (hwregs.blit_cmd < 6)         
+            while (hwregs.blit_cmd < 8)         
                 hwregs.ledr = 1
             hwregs.ledr = 0
             hwregs.blit_cmd = CMD_DRAW_TRAP | color  # CMD RECT COLOR = color
@@ -315,6 +344,13 @@ class GraphicsContext
         while (hwregs.blit_cmd < 1)         # Wait for blitter to have at least 1 free slots in command queue
             val dummy = 1
         hwregs.blit_cmd = CMD_SET_TRANSPARENCY_COLOR | (color & 0x1ff)  # CMD SET TRANSPARENCY COLOR
+
+    fun setClipRect(x1:Int, y1:Int, x2:Int, y2:Int)
+        clip_x1 = x1
+        clip_y1 = y1
+        clip_x2 = x2
+        clip_y2 = y2
+        setup()
 
 const fontData = const [
     0x00000000,

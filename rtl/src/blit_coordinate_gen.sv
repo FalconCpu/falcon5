@@ -31,6 +31,12 @@ module blit_coordinate_gen(
     input logic [31:0]   reg_slope_x1,      // For triangle/trapezoid fills
     input logic [31:0]   reg_slope_x2,
 
+    // Clipping rectangle
+    input logic signed [15:0]   reg_clip_x1,   // Clipping rectangle
+    input logic signed [15:0]   reg_clip_y1,
+    input logic signed [15:0]   reg_clip_x2,
+    input logic signed [15:0]   reg_clip_y2,
+
     // Outputs to the next stage in the pipeline
     input  logic         p2_ready,          // Stall the pipeline
     output logic [15:0]  p1_x,
@@ -46,7 +52,7 @@ wire signed [15:0] p1_y_inc = p1_y + 1'b1;
 
 logic [31:0] src_x, src_y;      // Current source coordinates in 16.16 fixed point
 logic [31:0] src_x0, src_y0;    // Base source coordinates in 16.16 fixed point
-logic [31:0] left_edge_x, right_edge_x; // For triangle/trapezoid fills
+logic signed [31:0] left_edge_x, right_edge_x; // For triangle/trapezoid fills
 
 assign p1_src_x = src_x[31:16];
 assign p1_src_y = src_y[31:16];
@@ -76,8 +82,14 @@ always_ff @(posedge clock) begin
             src_y <= src_y + reg_src_dy_x;
         end
 
-        if (p1_x_inc == right_edge_x[31:16]) begin
-            p1_x <= left_edge_x[31:16];
+        if (p1_x_inc >= $signed(right_edge_x[31:16]) || p1_x_inc>=reg_clip_x2  || p1_y<reg_clip_y1) begin
+            // Reached End of scanline - move on to next line
+
+            // If clipped left, adjust start X. Don't do this for COPY operations as it would desync source/dest
+            if (left_edge_x[31:16] < reg_clip_x1 && reg_command!=`BLIT_COPY)
+                p1_x <= reg_clip_x1;
+            else
+                p1_x <= left_edge_x[31:16];
             p1_y <= p1_y_inc;
             src_x <= src_x0 + reg_src_dx_y;
             src_y <= src_y0 + reg_src_dy_y;
@@ -85,7 +97,8 @@ always_ff @(posedge clock) begin
             src_y0 <= src_y0 + reg_src_dy_y;
             left_edge_x <= left_edge_x + reg_slope_x1;
             right_edge_x <= right_edge_x + reg_slope_x2;
-            if (p1_y_inc == reg_y2) begin
+            if (p1_y_inc >= reg_y2 || p1_y_inc >=reg_clip_y2) begin
+                // Finished
                 busy <= 1'b0;
                 p1_valid <= 1'b0;
                 p1_x <= 16'hx;
@@ -105,8 +118,8 @@ always_ff @(posedge clock) begin
                 src_y <= {reg_src_y,16'b0};
                 src_x0 <= {reg_src_x,16'b0};
                 src_y0 <= {reg_src_y,16'b0};
-                left_edge_x <= {reg_x1,16'b0};
-                right_edge_x <= {reg_x2,16'b0};
+                left_edge_x <= {reg_x1,16'b0}; // + reg_slope_x1/2;
+                right_edge_x <= {reg_x2,16'b0}; // + reg_slope_x2/2;
                 p1_bit_index <= 3'h0;
                 p1_valid <= 1'b1;
                 busy <= 1'b1;

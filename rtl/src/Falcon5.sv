@@ -206,6 +206,8 @@ logic [2:0]  perf_count;
 logic [9:0]  ledr;
 logic [31:0] vga_frame_num;
 
+logic fault_detected;
+
 
 assign GPIO_1 = {blitw_sdram_wstrb,sdram_write, sdram_request, 2'b0,sdram_address};
 assign GPIO_0[35:2] = {cpu_pc,perf_count};
@@ -339,7 +341,7 @@ aux_decoder  aux_decoder_inst (
     .hwregs_copper_start(hwregs_copper_start)
   );
 
-assign LEDR[9:0] = ledr[9:0] | {cpu_read_overflow,cpu_stuck,8'b0};
+assign LEDR[9:0] = ledr[9:0] | {cpu_read_overflow,cpu_stuck,fault_detected, 7'b0};
 
 
 // verilator lint_off PINCONNECTEMPTY
@@ -517,7 +519,8 @@ blitter  blitter_inst (
     .blitw_sdram_ready(blitw_sdram_ready),
     .blitw_sdram_address(blitw_sdram_address),
     .blitw_sdram_wstrb(blitw_sdram_wstrb),
-    .blitw_sdram_wdata(blitw_sdram_wdata)
+    .blitw_sdram_wdata(blitw_sdram_wdata),
+    .fault_detected(fault_detected)
   );
 
 audio  audio_inst (
