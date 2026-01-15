@@ -40,7 +40,7 @@ class LongerTests {
             extern fun print(s:String)
 
             fun main()
-                val a = new InlineArray<List<Int>>(4){ new List<Int>() }
+                val a = InlineArray<List<Int>>(4){ new List<Int>() }
                 a[0].add(10)
                 a[1].add(20)
                 a[2].add(30)

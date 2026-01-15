@@ -24,6 +24,7 @@ class AstCallExpr(location: Location, val func: AstExpr, val args: List<AstExpr>
 class AstIndexExpr(location: Location, val array: AstExpr, val index: AstExpr) : AstExpr(location)
 class AstMemberExpr(location: Location, val objectExpr: AstExpr, val memberName:String) : AstExpr(location)
 class AstNewExpr(location: Location, val elementType: AstType, val args:List<AstExpr>, val lambda:AstLambdaExpr?, val arena:Arena) : AstExpr(location)
+class AstInlineArrayExpr(location: Location, val elementType: AstType, val size: AstExpr?, val initializers:List<AstExpr>?, val lambda:AstLambdaExpr?) : AstExpr(location)
 class AstArrayLiteralExpr(location: Location, val elementType: AstType?, val args:List<AstExpr>, val arena:Arena) : AstExpr(location)
 class AstNegateExpr(location: Location, val expr: AstExpr) : AstExpr(location)
 class AstRangeExpr(location: Location, val start: AstExpr, val end: AstExpr, val op:TokenKind) : AstExpr(location)
@@ -114,7 +115,7 @@ class AstEnumEntry(location: Location, val name: String, val args: List<AstExpr>
 class AstDeclNode(location: Location, val name: String, val type:AstType?) : Ast(location)
 
 enum class Arena {
-    STACK, HEAP, CONST
+    HEAP, CONST
 }
 
 

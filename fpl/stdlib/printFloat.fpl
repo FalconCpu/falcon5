@@ -1,7 +1,7 @@
 extern fun print(value: Char)
 
 fun print(value: Float)
-    val buffer = local InlineArray<Char>(16)
+    val buffer = InlineArray<Char>(16)
     var v = value
 
     # Handle sign
@@ -35,7 +35,7 @@ fun print(value: Float)
         print('.')
 
         # Generate up to 6 fractional digits
-        val fracBuf = local InlineArray<Char>(6)
+        val fracBuf = InlineArray<Char>(6)
         var fracIndex = 0
         for i in 0..5
             fracPart = fracPart * 10.0

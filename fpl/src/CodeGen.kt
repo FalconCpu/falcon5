@@ -288,7 +288,10 @@ fun TctExpr.codeGenRvalue() : Reg {
         }
 
         is TctNewInlineArrayExpr ->
-            allocateInlineArray(arena, false, lambda, type as TypeInlineArray)
+            if (initializers!=null)
+                allocateInlineArray(initializers, type as TypeInlineArray)
+            else
+                allocateInlineArray(false, lambda, type as TypeInlineArray)
 
         is TctAbortExpr -> {
             val codeReg = abortCode.codeGenRvalue()
@@ -356,15 +359,15 @@ private fun allocateArray(sizeExpr:TctExpr, elementType:Type, arena:Arena, initi
             val tmp = currentFunc.addLdImm(elementSize)
             currentFunc.addCall(Stdlib.mallocArray, listOf(sizeReg, tmp))
         }
-        Arena.STACK -> {
-            require(sizeExpr is TctConstant && sizeExpr.value is IntValue) {
-                "Stack allocation requires a constant size"
-            }
-            val sizeInt = sizeExpr.value.value
-            val ret = currentFunc.stackAlloc(sizeInt*elementSize+4, 4) // +4 for the length field
-            currentFunc.addStore(sizeReg, ret, lengthSymbol)
-            ret
-        }
+//        Arena.STACK -> {
+//            require(sizeExpr is TctConstant && sizeExpr.value is IntValue) {
+//                "Stack allocation requires a constant size"
+//            }
+//            val sizeInt = sizeExpr.value.value
+//            val ret = currentFunc.stackAlloc(sizeInt*elementSize+4, 4) // +4 for the length field
+//            currentFunc.addStore(sizeReg, ret, lengthSymbol)
+//            ret
+//        }
         Arena.CONST -> TODO()
     }
 
@@ -394,19 +397,9 @@ private fun allocateArray(sizeExpr:TctExpr, elementType:Type, arena:Arena, initi
     return ret
 }
 
-private fun allocateInlineArray(arena:Arena, initialize:Boolean, lambda:TctLambdaExpr?, type:TypeInlineArray) : Reg {
+private fun allocateInlineArray(initialize:Boolean, lambda:TctLambdaExpr?, type:TypeInlineArray) : Reg {
     val size = type.getSize()
-    val ret = when(arena) {
-        Arena.HEAP -> {
-            val sizeReg = currentFunc.addLdImm(size)
-            currentFunc.addCall(Stdlib.malloc, listOf(sizeReg))
-        }
-        Arena.STACK -> {
-            val ret = currentFunc.stackAlloc(size, 0)
-            ret
-        }
-        Arena.CONST -> TODO()
-    }
+    val ret = currentFunc.stackAlloc(size, 0)
 
     if (initialize) {
         val sizeReg = currentFunc.addLdImm(size)
@@ -435,6 +428,19 @@ private fun allocateInlineArray(arena:Arena, initialize:Boolean, lambda:TctLambd
     }
     return ret
 }
+
+private fun allocateInlineArray(initializers:List<TctExpr>, type:TypeInlineArray) : Reg {
+    val size = type.getSize()
+    val ret = currentFunc.stackAlloc(size, 0)
+
+    for(i in initializers.indices) {
+        val v = initializers[i].codeGenRvalue()
+        val elementSize = type.elementType.getSize()
+        currentFunc.addStore(elementSize, v, ret, i*elementSize)
+    }
+    return ret
+}
+
 
 
 

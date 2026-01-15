@@ -99,6 +99,23 @@ class Parser(val lexer: Lexer) {
         return AstIdentifier(tok.location, tok.value)
     }
 
+    private fun parseInlineArray() : AstExpr {
+        val tok = expect(INLINEARRAY)
+        expect(LT)
+        val elementType = parseType()
+        expect(GT)
+        val sizeExpr = if (currentToken.kind==OPENB) {
+            expect(OPENB)
+            val expr = parseExpr()
+            expect(CLOSEB)
+            expr
+        } else null
+        val initializer = if (currentToken.kind==OPENSQ) parseInitializerList() else null
+        val lambda = if (currentToken.kind==OPENCL) parseLambdaExpr() else null
+
+        return AstInlineArrayExpr(tok.location, elementType, sizeExpr, initializer, lambda)
+    }
+
     private fun parseParentheses() : AstExpr {
         val exprs = mutableListOf<AstExpr>()
         expect(OPENB)
@@ -155,9 +172,8 @@ class Parser(val lexer: Lexer) {
         val lambda = if (currentToken.kind==OPENCL) parseLambdaExpr() else null
         val arena = when (arenaTok.kind) {
             NEW -> Arena.HEAP
-            LOCAL -> Arena.STACK
             CONST -> Arena.CONST
-            else -> throw ParseError(arenaTok.location, "Got '$arenaTok' when expecting 'new', 'local' or 'const'")
+            else -> throw ParseError(arenaTok.location, "Got '$arenaTok' when expecting 'new', or 'const'")
         }
         return if (type!=null && initializer==null )
             AstNewExpr(arenaTok.location, type, args, lambda, arena)
@@ -181,7 +197,8 @@ class Parser(val lexer: Lexer) {
             ABORT -> parseAbort()
             OPENB -> parseParentheses()
             UNSAFE -> parseUnsafe()
-            NEW, LOCAL, CONST -> parseNew()
+            NEW, CONST -> parseNew()
+            INLINEARRAY -> parseInlineArray()
             else -> throw ParseError(currentToken.location, "Got '$currentToken' when expecting primary expression")
         }
     }

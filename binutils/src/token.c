@@ -163,7 +163,7 @@ static struct Token predefined_tokens[] = {
 
     { '#', 0, "line",     0 ,0},
 
-    {'!', 0, "!varsion",      0x0, 0},
+    {'!', 0, "!version",      0x0, 0},
     {'!', 0, "!epc",          0x1, 0},
     {'!', 0, "!ecause",       0x2, 0},
     {'!', 0, "!edata",        0x3, 0},

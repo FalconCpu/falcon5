@@ -692,7 +692,7 @@ class InheritanceTests {
                     print("Meow!\n")
 
             fun main()
-                var animals = local Array<Animal> [ new Dog(), new Cat(), new Animal() ]
+                var animals = InlineArray<Animal> [ new Dog(), new Cat(), new Animal() ]
                 for a in animals
                     if (a is Dog)
                         a.bark()

@@ -609,5 +609,55 @@ class MethodsTests {
         runTest(prog, expected)
     }
 
+    @Test
+    fun getMethodTest() {
+        val prog = """
+            # a 'get' method can be called using array syntax
+            
+            extern fun print(i:Int)
+            extern fun print(s:String)
 
+            class List
+                var length = 0
+                var items = new Array<Int>(4)
+                
+                fun get(index:Int) -> Int
+                    return items[index]
+                    
+                fun add(value:Int)
+                    if items.length = length
+                        val oldItems = items
+                        items = new Array<Int>(oldItems.length * 2)
+                        for index in 0..<oldItems.length
+                            items[index] = oldItems[index]
+                        free(oldItems)
+                    items[length] = value
+                    length = length + 1
+                    
+                fun set(index:Int, value:Int)
+                    items[index] = value
+                
+            fun main()
+                val lst = new List()
+                lst.add(10)
+                lst.add(20)
+                lst.add(30)
+                print(lst[1])   # should print 20
+                print("\n")
+                
+                for i in lst
+                    print(i)      # should print all items
+                    print("\n")
+        """.trimIndent()
+
+        val expected = """
+            20
+            10
+            20
+            30
+            
+        """.trimIndent()
+
+        runTest(prog, expected)
+    }
 }

@@ -15,7 +15,7 @@ class InlineArrayTest {
             extern fun print(s:String)
 
             fun main()
-                val t = local InlineArray<String>(5)
+                val t = InlineArray<String>(5)
                 t[0] = "Hello"
                 t[1] = "World"
                 print(t[0])
@@ -35,7 +35,7 @@ class InlineArrayTest {
         val prog = """
             extern fun print(s:String)
             fun main()
-                val t = local InlineArray<String>(5)
+                val t = InlineArray<String>(5)
                 t[0] = "Hello"
                 t[6] = "World"
                 print(t[0])
@@ -60,7 +60,7 @@ class InlineArrayTest {
                     print("\n")
         
             fun main()
-                val t = local InlineArray<String>(5)
+                val t = InlineArray<String>(5)
                 t[0] = "Hello"
                 t[1] = "World"
                 t[2] = "from"
@@ -92,7 +92,7 @@ class InlineArrayTest {
                     print("\n")
         
             fun main()
-                val t = local InlineArray<String>(5)
+                val t = InlineArray<String>(5)
                 t[0] = "Hello"
                 t[1] = "World"
                 t[2] = "from"
@@ -159,7 +159,7 @@ class InlineArrayTest {
             extern fun print(i:Int)
 
             fun main()
-                val t = new InlineArray<Int>(5){it*2}
+                val t = InlineArray<Int>(5){it*2}
                 for i in t
                     print(i)
                     print("\n")

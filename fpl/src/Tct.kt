@@ -25,7 +25,7 @@ class TctCallExpr(location: Location, val thisArg:TctExpr?, val func:Function, v
 class TctIndexExpr(location: Location, val array: TctExpr, val index: TctExpr, type:Type) : TctExpr(location, type)
 class TctMemberExpr(location: Location, val objectExpr: TctExpr, val member:FieldSymbol, type:Type) : TctExpr(location, type)
 class TctNewArrayExpr(location: Location, val elementType: Type, val size:TctExpr, val arena: Arena, val lambda:TctLambdaExpr?, val clearMem:Boolean, type:Type) : TctExpr(location, type)
-class TctNewInlineArrayExpr(location: Location, val arena: Arena, val lambda:TctLambdaExpr?, type:Type) : TctExpr(location, type)
+class TctNewInlineArrayExpr(location: Location, val lambda:TctLambdaExpr?, val initializers:List<TctExpr>?, type:Type) : TctExpr(location, type)
 class TctNewArrayLiteralExpr(location: Location,val elements: List<TctExpr>,val arena: Arena,type:Type) : TctExpr(location, type)
 class TctNegateExpr(location: Location, val expr: TctExpr) : TctExpr(location, expr.type)
 class TctNotExpr(location: Location, val expr: TctExpr) : TctExpr(location, TypeBool)

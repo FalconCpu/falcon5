@@ -209,7 +209,7 @@ class ExecuteTest {
         val prog = """
             extern fun print(i:Int)
             
-            fun sum(a:Array<Int>) -> Int
+            fun sum(a:InlineArray<Int>(5)) -> Int
                 var total = 0
                 var index = 0
                 while index < a.length
@@ -218,7 +218,7 @@ class ExecuteTest {
                 return total
                 
             fun main()
-                val arr = local Array<Int>(5){it*2}
+                val arr = InlineArray<Int>(5){it*2}
                 var result = sum(arr)
                 print(result)
         """.trimIndent()

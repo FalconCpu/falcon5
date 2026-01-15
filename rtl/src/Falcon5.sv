@@ -110,6 +110,7 @@ logic [8:0]  hwregs_rtag;
 logic [31:0] hwregs_rdata_regs;
 logic [31:0] hwregs_rdata_audio;
 logic [31:0] hwregs_rdata;
+logic [31:0] vga_reg_rdata;
 
 logic        iram_request;
 logic        iram_write;
@@ -473,12 +474,15 @@ instruction_ram  instruction_ram_inst (
     .ifetch_iram_rvalid(cpu_icache_rvalid)
   );
 
-vga  vga_inst (
+vga2  vga_inst (
     .clock(clock),
     .reset(reset),
-    .hwregs_write(hwregs_request && hwregs_write),
-    .hwregs_addr(hwregs_addr),
-    .hwregs_wdata(hwregs_wdata),
+    .vga_reg_request(hwregs_request),
+    .vga_reg_write(hwregs_write),
+    .vga_reg_address(hwregs_addr),
+    .vga_reg_wdata(hwregs_wdata),
+    .vga_reg_rdata(vga_reg_rdata),
+    .start_of_frame(start_of_frame),
     .VGA_CLK(VGA_CLK),
     .VGA_R(VGA_R),
     .VGA_G(VGA_G),
@@ -493,12 +497,12 @@ vga  vga_inst (
     .vga_sdram_rvalid(vga_sdram_rvalid),
     .vga_sdram_rdata(vga_sdram_rdata),
     .vga_sdram_raddress(vga_sdram_raddress),
-    .vga_sdram_complete(vga_sdram_complete),
-    .mouse_x(mouse_x),
-    .mouse_y(mouse_y),
-    .vga_row(vga_row),
-    .vga_col(vga_col),
-    .vga_frame_num(vga_frame_num)
+    .vga_sdram_complete(vga_sdram_complete)
+    // // .mouse_x(mouse_x),
+    // // .mouse_y(mouse_y),
+    // .vga_row(vga_row),
+    // .vga_col(vga_col),
+    // .vga_frame_num(vga_frame_num)
   );
 
 blitter  blitter_inst (

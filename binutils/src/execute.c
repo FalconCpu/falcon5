@@ -23,7 +23,7 @@ static int isFloat;
 //                  exception registers
 // ================================================
 
-#define CFG_REG_VARSION      0X0
+#define CFG_REG_VERSION      0X0
 #define CFG_REG_EPC          0X1
 #define CFG_REG_ECAUSE       0X2
 #define CFG_REG_EDATA        0X3
@@ -105,7 +105,7 @@ void raise_exception(int cause, int value) {
     ecause = cause;
     edata = value;
     epc = pc-4;
-    pc = 0xffff0004;
+    pc = evec;
     status |= STATUS_SUPERVISOR;
     if (trace_file)
         fprintf(trace_file, "EXCEPTION: %d %x\n", cause, value);
@@ -270,16 +270,19 @@ static void blit_op(int op, int a1, int a2) {
 // ================================================
 
 static int blit1,blit2;
+static int seven_seg, leds;
 
 static void write_hwregs(unsigned int addr, int value, int mask) {
 
     switch(addr & 0xFFFFFFFC) {
         case 0xE0000000:
             printf("7-Segment = %06x\n", value&0xffffff);
+            seven_seg = value & 0xffffff;
             break;
 
         case 0xE0000004:
             printf("LEDs = %x\n", value&0x3ff);
+            leds = value & 0x3ff;
             break;
 
         case 0xE0000010:
@@ -313,6 +316,12 @@ static int read_hwregs(unsigned int addr) {
     int v;
 
     switch(addr & 0xFFFFFFFC) {
+        case 0xE0000000:   // 7 Segment
+            return seven_seg;
+
+        case 0xE0000004:   // LEDs
+            return leds;
+
         case 0xE0000010:   // UART TX
             return 0x3ff;  // Report the space in the fifo - fake it to always be empty
 
@@ -496,6 +505,7 @@ static int read_memory_size(unsigned int addr, int size) {
 static int read_cfg(int cfg_reg) {
     int ret;
     switch(cfg_reg) {
+        case CFG_REG_VERSION:  ret = 0x00020000; break;
         case CFG_REG_EPC:      ret = epc; break;
         case CFG_REG_ECAUSE:   ret = ecause; break;
         case CFG_REG_EDATA:    ret = edata; break;

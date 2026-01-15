@@ -136,4 +136,74 @@ i2s_receiver  i2s_receiver_inst (
     .sample_valid(sample_valid)
   );
 
+
+// ================================================
+// VGA output dump
+// ================================================
+
+integer vga_fd;
+
+integer x;
+integer y;
+
+logic prev_hs=1'b1;
+logic prev_vs=1'b1;
+
+initial begin
+    vga_fd = $fopen("vga_dump.txt", "w");
+
+    x = -200;
+    y = -1;
+    prev_hs = 1'b1;
+    prev_vs = 1'b1;
+end
+
+// Horizontal timing (pixels)
+localparam H_VISIBLE     = 640;
+localparam H_FRONT_PORCH = 16;
+localparam H_SYNC        = 96;
+localparam H_BACK_PORCH  = 48;
+localparam H_TOTAL       = H_VISIBLE + H_FRONT_PORCH + H_SYNC + H_BACK_PORCH;
+
+// Vertical timing (lines)
+localparam V_VISIBLE     = 480;
+localparam V_FRONT_PORCH = 10;
+localparam V_SYNC        = 2;
+localparam V_BACK_PORCH  = 33;
+localparam V_TOTAL       = V_VISIBLE + V_FRONT_PORCH + V_SYNC + V_BACK_PORCH;
+
+always @(posedge VGA_CLK) begin
+    // Detect VSYNC edge → new frame
+    if (prev_vs && !VGA_VS) begin
+        y <= -V_BACK_PORCH;
+        $fwrite(vga_fd, "# New frame\n");
+    end
+
+    // Detect HSYNC rising edge → new line
+    if (prev_hs==1'b0 && VGA_HS) begin
+        x <= -H_BACK_PORCH;
+        y <= y + 1;
+    end else begin
+        x <= x + 1;
+    end
+
+    // Capture pixel (you may want to gate this)
+    if (x>=0 && y>=0 && x < H_VISIBLE && y < V_VISIBLE) begin
+        $fwrite(
+            vga_fd,
+            "%0d %0d %0d %0d %0d\n",
+            x,
+            y,
+            VGA_R,
+            VGA_G,
+            VGA_B
+        );
+    end
+
+    prev_hs <= VGA_HS;
+    prev_vs <= VGA_VS;
+end
+
+
+
 endmodule

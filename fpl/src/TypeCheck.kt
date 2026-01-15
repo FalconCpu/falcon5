@@ -343,6 +343,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
                 is TypeString -> TypeChar
                 is TypeInlineArray -> arrayExpr.type.elementType
                 is TypePointer -> arrayExpr.type.elementType
+                is TypeClassInstance -> return arrayExpr.checkIndexableClass(indexExpr)
                 else -> reportTypeError(location, "Cannot index type '${arrayExpr.type}'")
             }
             if (arrayExpr.type is TypeInlineArray) {
@@ -368,6 +369,13 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
                         TctErrorExpr(location, "Array type '${tctExpr.type}' has no member '${memberName}'")
                     else
                         TctMemberExpr(location, tctExpr, lengthSymbol, TypeInt)
+                }
+
+                is TypeInlineArray -> {
+                    if (memberName != "length")
+                        TctErrorExpr(location, "InlineArray type '${tctExpr.type}' has no member '${memberName}'")
+                    else
+                        TctConstant(location, IntValue(tctExpr.type.size, TypeInt))
                 }
 
                 is TypeString -> {
@@ -432,8 +440,6 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
                     if (tcArgs.size != 1)
                         return TctErrorExpr(location, "Array constructor requires exactly one argument")
                     val size = tcArgs[0].checkType(TypeInt)
-                    if (arena==Arena.STACK && size !is TctConstant)
-                        return TctErrorExpr(location, "Local arrays must have a constant size")
                     if (size is TctConstant && size.value is IntValue && size.value.value < 0)
                         return TctErrorExpr(location, "Cannot create array of negative size")
                     tcLambda?.checkType(type.elementType)
@@ -453,17 +459,31 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
 
                 is TypeClass -> error("Cannot create new instance of generic class '$type' without type arguments")
 
-                is TypeInlineArray -> {
-                    if (tcArgs.isNotEmpty())
-                        return TctErrorExpr(location, "InlineArray constructor takes no arguments")
-                    val arrayType = TypeInlineArray.create(type.elementType, type.size)
-                    tcLambda?.checkType(type.elementType)
-
-                    return TctNewInlineArrayExpr(location, arena, tcLambda, arrayType)
-                }
-
                 else -> return TctErrorExpr(location, "Cannot create new instance of type '${type.name}'")
             }
+        }
+
+        is AstInlineArrayExpr -> {
+            val elementType = elementType.resolveType(scope)
+            val arraySize = size?.exprAsConstantInt(scope) ?: initializers?.size ?:
+                 return TctErrorExpr(location, "InlineArray must have either a size or initializer arguments")
+            val type = TypeInlineArray.create(elementType, arraySize)
+
+            if (initializers!=null && lambda!=null)
+                return TctErrorExpr(location, "InlineArray cannot have both initializers and a lambda")
+
+            if (initializers!=null) {
+                if (initializers.size != arraySize)
+                    return TctErrorExpr(location, "InlineArray expected $arraySize initializers but got ${initializers.size}")
+                val tcItems = initializers.map { it.typeCheckRvalue(scope).checkType(type.elementType) }
+                TctNewInlineArrayExpr(location, null, tcItems, type)
+            } else if (lambda!=null) {
+                val itSym = VarSymbol(location, "it", TypeInt, false)
+                val tcLambda = lambda?.typeCheckLambda(scope, itSym)
+                tcLambda?.checkType(type.elementType)
+                TctNewInlineArrayExpr(location, tcLambda, null, type)
+            } else
+                TctNewInlineArrayExpr(location, null, null, type)
         }
 
         is AstArrayLiteralExpr -> {
@@ -725,6 +745,19 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
     }
 }
 
+private fun AstExpr.exprAsConstantInt(scope: AstBlock): Int {
+    val tctExpr = typeCheckRvalue(scope)
+    if (tctExpr !is TctConstant) {
+        reportTypeError(location, "Expression must be a constant integer")
+        return 0
+    }
+    if (tctExpr.value !is IntValue) {
+        reportTypeError(location, "Expression must be a constant integer")
+        return 0
+    }
+    return tctExpr.value.value
+}
+
 private fun binopRealTypeCheck(location: Location, op: TokenKind, lhs: TctExpr, rhs: TctExpr): TctExpr {
     val tctLhs = if (lhs.type == TypeInt) TctIntToRealExpr(lhs.location, lhs) else lhs
     val tctRhs = if (rhs.type == TypeInt) TctIntToRealExpr(rhs.location, rhs) else rhs
@@ -832,6 +865,28 @@ fun AstLambdaExpr.typeCheckLambda(scope:AstBlock, itSym:VarSymbol) : TctLambdaEx
     val tcExpr = stmt.expr.typeCheckRvalue(this)
     return TctLambdaExpr(location, tcExpr, itSym, tcExpr.type)
 }
+
+fun TctExpr.checkIndexableClass(arg:TctExpr) : TctExpr {
+    val klass = this.type as TypeClassInstance
+    val getMethod = klass.lookup("get", location)
+    if (getMethod == null || getMethod !is FunctionSymbol)
+        return TctErrorExpr(location, "Class '${klass.name}' is not indexable (missing 'get' method)")
+    val getInstance = getMethod.resolveOverload(location, listOf(arg))
+                        ?: return TctErrorExpr(location, "Class '${klass.name}' has no 'get` method matching the provided arguments")
+    return TctCallExpr(location, this, getInstance.function, listOf(arg), getInstance.returnType)
+}
+
+fun TctExpr.checkIndexableClassLvalue(args:List<TctExpr>) : Type {
+    val klass = this.type as TypeClassInstance
+    val getMethod = klass.lookup("set", location)
+    if (getMethod == null || getMethod !is FunctionSymbol)
+        return reportTypeError(location, "Class '${klass.name}' is not indexable (missing 'set' method)")
+    val getInstance = getMethod.resolveOverload(location, args)
+        ?: return reportTypeError(location, "Class '${klass.name}' has no 'get` method matching the provided arguments")
+    return getInstance.returnType
+}
+
+
 
 // ===========================================================================
 //                          Statements

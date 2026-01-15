@@ -27,6 +27,8 @@ const char* RESET = "\x1b[0m";
 #define NETFS_RESP_ERROR 0x020202B0
 
 
+FILE* uart_log = 0;
+
 int checksum = 0;
 
 /// -----------------------------------------------------
@@ -141,7 +143,13 @@ static int output_to_com_port(char* s, int length) {
     DWORD bytesWritten = 0;
     if (!WriteFile(hSerial, s, length, &bytesWritten, NULL) || bytesWritten != length)
         fatal("Error sending string to com port");
-    
+
+    // Log to uart log file
+    if (uart_log) {
+        fwrite(s, 1, length, uart_log);
+        fflush(uart_log);
+    }
+
     if (bytesWritten != length)
         fatal("Error sending string to com port (only %ld of %d bytes sent)", bytesWritten, length);
     return bytesWritten;
@@ -220,6 +228,18 @@ static void send_boot_image(char* file_name) {
     if (!WriteFile(hSerial, buffer, num_words*4, &bytesWritten, NULL) || bytesWritten != num_words*4)
         fatal("Error sending program data");
     printf("%sSent %ld bytes\n%s", YELLOW,bytesWritten,RESET);
+
+    if (uart_log) {
+        fwrite(buffer, 1, num_words*4, uart_log);
+        fflush(uart_log);
+    }
+
+    if (uart_log) {
+        fclose(uart_log);
+        printf("%sWrote uart log to 'uart_log.bin'%s\n", YELLOW, RESET);
+        uart_log = 0;
+    }
+
 }
 
 /// -----------------------------------------------------------------
@@ -385,6 +405,8 @@ static void run_loop() {
 int main(int argc, char** argv) {
     // keep a copy of everything we send to the com port so we can 
     // replay it in the simulator later
+    uart_log = fopen("uart_log.bin", "wb");
+    printf("%sOpened uart log file 'uart_log.bin'%s\n", YELLOW, RESET);
     open_com_port();
     run_loop();
 

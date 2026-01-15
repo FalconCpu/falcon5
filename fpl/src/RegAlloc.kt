@@ -82,9 +82,9 @@ class RegisterAllocator(private val func: Function, private val livemap: LiveMap
         for(mov in movStatements) {
             val a = mov.src.index
             val d = mov.dest.index
-            if (alloc[a]==UNALLOCATED && alloc[d]!=UNALLOCATED && (a !in interfere[alloc[d]]) && alloc[d]!=0)
+            if (alloc[a]==UNALLOCATED && alloc[d]!=UNALLOCATED && (a !in interfere[alloc[d]]) && alloc[d]!=0 && alloc[d]!=31)
                 assign(a,alloc[d])
-            if (alloc[d]==UNALLOCATED && alloc[a]!=UNALLOCATED && (d !in interfere[alloc[a]]) && alloc[a]!=0)
+            if (alloc[d]==UNALLOCATED && alloc[a]!=UNALLOCATED && (d !in interfere[alloc[a]]) && alloc[a]!=0 && alloc[a]!=31)
                 assign(d,alloc[a])
         }
     }
