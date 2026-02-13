@@ -1,0 +1,24 @@
+# One VOB per block
+vob:
+  ystart: 0
+  yend:   480
+  xclip1: 0
+  xclip2: 640
+  brk_y:  0
+  ctrl:   0x0000        # bitmap
+  src_stride: 640
+  x1:  0
+  x2:  480
+  z:   0
+  u:   0
+  v:   0
+  src_addr: 0x3F80000
+  dzdx: 0
+  dudx: 1
+  dvdx: 0
+  brk_dxdy: 0
+  dx1dy: 0
+  dx2dy: 0
+  dzdy:  0
+  dudy:  0
+  dvdy:  1
