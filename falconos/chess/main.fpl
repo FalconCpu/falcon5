@@ -1,0 +1,237 @@
+
+const BOARD_X = 100
+const BOARD_Y = 40
+const SQUARE_WIDTH = 48
+const SQUARE_HEIGHT = 48
+const PIECE_WIDTH = 40
+const PIECE_HEIGHT = 40
+const PIECE_OFFSET = (SQUARE_WIDTH - PIECE_WIDTH) / 2
+const COLOR_DARK = 0xEB  # Dark square color
+const COLOR_LIGHT = 0xF4 # Light square color
+
+const COMPUTER_PLAYER = 1
+
+const rankNames = const Array<String>["1","2","3","4","5","6","7","8"]
+const fileNames = const Array<String>["a","b","c","d","e","f","g","h"]
+
+val pieceImage = new Array<Image>(12)  # Placeholder for piece graphics data
+
+fun showPalette(gc:GraphicsContext)
+    gc.drawRect(0,0,640,640,0) # Clear background
+    for i in 0..<16
+        for j in 0..<16
+            gc.drawRect(i*30, j*30, i*30+28, j*30+28, i*16 + j)
+end fun
+
+fun createImage(width:Int, height:Int, fileAddr:Int, offset:Int) -> Image
+    kprintf("width=%d height=%d\n", width, height)
+    val addr = unsafe(fileAddr+offset) as Pointer<Char>
+    kprintf("Creating image offset %d addr %08x  size=%d,%d\n", offset, addr, width, height)
+    return new Image(width, height, addr)
+
+fun loadPieceGraphics()
+    val file = readFile("pieces.bin")
+    if (file is Error)
+        kprintf("Error loading sprite data file\n")
+        abort(1)
+    val spriteData = unsafe(file as Int)
+    for i in 0..<12
+        pieceImage[i] = createImage(PIECE_WIDTH, PIECE_HEIGHT, spriteData, i*PIECE_WIDTH*PIECE_HEIGHT)
+end fun
+
+fun delay()
+    for i in 0..100
+        val dummy = 0
+end fun
+
+fun waitForVBlank()
+    hwregs.ledr = 1 # Turn on LED to indicate we're waiting for vblank
+    delay()
+    while (hwregs.vga_pos >= 480) # Wait until we're in the vertical blanking interval
+        delay()
+    while (hwregs.vga_pos < 480) # Wait until we're in the vertical blanking interval
+        delay()
+    delay()
+    hwregs.ledr = 0 # Turn off LED to indicate we've exited vblank
+end fun
+
+class Piece(var type:PieceType, val color:Int)
+    fun draw(gc:GraphicsContext, x:Int, y:Int)
+        val index = (type as Int) + 6*color
+        gc.drawImage(x,y,pieceImage[index])
+
+
+enum PieceType [KING, QUEEN, ROOK, BISHOP, KNIGHT, PAWN]
+
+val board = new Array<Piece?>(64)  # 8x8 board, null for empty squares
+
+fun initializePieces(board:Array<Piece?>)
+    board[0] = new Piece(PieceType.ROOK, 0)
+    board[1] = new Piece(PieceType.KNIGHT, 0)
+    board[2] = new Piece(PieceType.BISHOP, 0)
+    board[3] = new Piece(PieceType.QUEEN, 0)
+    board[4] = new Piece(PieceType.KING, 0)
+    board[5] = new Piece(PieceType.BISHOP, 0)   
+    board[6] = new Piece(PieceType.KNIGHT, 0)
+    board[7] = new Piece(PieceType.ROOK, 0)
+    for i in 0..<8
+        board[8 + i] = new Piece(PieceType.PAWN, 0)
+        board[48 + i] = new Piece(PieceType.PAWN, 1)
+    board[56] = new Piece(PieceType.ROOK, 1)
+    board[57] = new Piece(PieceType.KNIGHT, 1)
+    board[58] = new Piece(PieceType.BISHOP, 1)
+    board[59] = new Piece(PieceType.QUEEN, 1)
+    board[60] = new Piece(PieceType.KING, 1)
+    board[61] = new Piece(PieceType.BISHOP, 1)
+    board[62] = new Piece(PieceType.KNIGHT, 1)
+    board[63] = new Piece(PieceType.ROOK, 1)
+
+fun indexToCoordinates(index:Int) -> (Int, Int)
+    val file = index % 8
+    val rank = 7 - index / 8
+    return (file, rank)
+
+fun indexToScreenCoordinates(index:Int) -> (Int, Int)
+    val (file, rank) = indexToCoordinates(index)
+    val x = BOARD_X + file * SQUARE_WIDTH
+    val y = BOARD_Y + rank * SQUARE_HEIGHT
+    return (x, y)
+
+fun coordinatesToIndex(file:Int, rank:Int) -> Int
+    return (7 - rank) * 8 + file
+
+fun screenCoordinatestoIndex(x:Int, y:Int) -> Int
+    if x < BOARD_X or x >= BOARD_X + 8*SQUARE_WIDTH or y < BOARD_Y or y >= BOARD_Y + 8*SQUARE_HEIGHT
+        return -1
+    val file = (x - BOARD_X) / SQUARE_WIDTH
+    val rank = 7 - (y - BOARD_Y) / SQUARE_HEIGHT
+    return rank*8 + file
+
+
+fun drawSquare(gc:GraphicsContext, index:Int)
+    val (x,y) = indexToCoordinates(index)
+    val color = if ((x + y) % 2 = 0) then COLOR_LIGHT else COLOR_DARK
+    val xx = BOARD_X + x*SQUARE_WIDTH
+    val yy = BOARD_Y + y*SQUARE_HEIGHT
+    gc.drawRect(xx, yy, xx + SQUARE_WIDTH - 1, yy + SQUARE_HEIGHT - 1, color)
+end fun
+
+
+
+
+enum MouseState [IDLE, PRESSED, DRAGGING]
+var mouseState = MouseState.IDLE
+var mouseSquare = -1
+var dragX = 0
+var dragY = 0
+var draggedPiece:Piece? = null
+var currentPlayer = 0
+var capturedPiece:Piece? = null   # The piece that was captured (if any) during the last move
+var previousFromIndex = -1  # The source square of the last move (for undo functionality)
+var previousToIndex = -1    # The destination square of the last move (for undo
+
+fun clearScreen(gc:GraphicsContext)
+    gc.setTransparentColor(-1)
+    gc.drawRect(0,0,640,640,0) # Clear background
+    gc.setTransparentColor(0)
+end fun
+
+fun drawBoard(gc:GraphicsContext)
+    clearScreen(gc)
+    for i in 0..<64
+        drawSquare(gc, i)
+        val piece = board[i]
+        if piece!=null and piece.type=PieceType.KING and isInCheck(piece.color)
+            # Highlight king in red if in check
+            val (x,y) = indexToScreenCoordinates(i)
+            gc.drawRect(x, y, x+SQUARE_WIDTH-1, y+SQUARE_HEIGHT-1, 9)
+
+        if piece!=null and piece!=draggedPiece
+            val (x,y) = indexToScreenCoordinates(i)
+            piece.draw(gc, x + PIECE_OFFSET, y + PIECE_OFFSET)
+    end for
+    
+    for i in 0..<8
+        gc.drawText(BOARD_X + i*SQUARE_WIDTH + 20, BOARD_Y + 8*SQUARE_HEIGHT + 5, 2, fileNames[i])
+        gc.drawText(BOARD_X - 15, BOARD_Y + i*SQUARE_HEIGHT + 20, 2, rankNames[7 - i])
+
+    if draggedPiece != null
+        draggedPiece.draw(gc, dragX - PIECE_WIDTH/2, dragY - PIECE_HEIGHT/2)
+    if (currentPlayer=0)
+        gc.drawText(230,10,2,"White to move")
+    else
+        gc.drawText(230,10,2,"Black to move")
+end fun
+
+fun processMouse(gc:GraphicsContext)
+    val mouseX = hwregs.mouse_x
+    val mouseY = hwregs.mouse_y
+    val mouseButtons = hwregs.mouse_buttons
+
+    when(mouseState)
+        MouseState.IDLE ->
+            if mouseButtons=0
+                return # No buttons pressed, stay idle
+
+            # Mouse has just been pressed, check if it's on a square
+            val square = screenCoordinatestoIndex(mouseX, mouseY)
+            if square = -1
+                # Click outside board, ignore
+                mouseState = MouseState.PRESSED
+                return
+            val piece = board[square]
+            if piece != null
+                # Start dragging this piece
+                mouseState = MouseState.DRAGGING
+                mouseSquare = square
+                draggedPiece = piece
+                dragX = mouseX
+                dragY = mouseY
+
+        MouseState.PRESSED ->
+            if (mouseButtons=0)
+                mouseState = MouseState.IDLE
+
+        MouseState.DRAGGING ->
+            if (mouseButtons=0)
+                # Drop piece
+                if draggedPiece=null then return
+                val targetSquare = screenCoordinatestoIndex(mouseX, mouseY)
+                if isLegalMove(mouseSquare, targetSquare, currentPlayer)
+                    makeMove(mouseSquare, targetSquare)
+                    if (draggedPiece.type = PieceType.PAWN and isPawnPromote(targetSquare, currentPlayer))
+                        draggedPiece.type = PieceType.QUEEN # Auto promote to queen for simplicity
+                    currentPlayer = 1 - currentPlayer # Switch player
+                else
+                    # Not a valid move, snap back to original square
+                    board[mouseSquare] = draggedPiece
+                draggedPiece = null
+                mouseState = MouseState.IDLE
+            elsif (mouseX != dragX or mouseY != dragY)
+                dragX = mouseX
+                dragY = mouseY
+end fun
+
+fun main() -> Int
+    copyFontData()
+    val gc = new GraphicsContext()
+    gc.setup()
+    clearScreen(gc)
+    loadPieceGraphics()
+    initializePieces(board)
+    val screenBuffers = new Array<Int>(2)
+    screenBuffers[0] = unsafe(new Array<Char>(640*480) as Int)
+    screenBuffers[1] = unsafe(new Array<Char>(640*480) as Int)
+    var currentBuffer = 0
+
+    while true
+        waitForVBlank()
+        currentBuffer = 1 - currentBuffer
+        gc.setGraphicsBuffer(screenBuffers[currentBuffer])
+        hwregsVideo.addr = screenBuffers[1-currentBuffer]
+        if (currentPlayer=0)
+            processMouse(gc)
+        else
+            makeAIMove()
+        drawBoard(gc)
+
