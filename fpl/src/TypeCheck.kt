@@ -215,6 +215,10 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
             TctConstant(location, StringValue.create(value))
         }
 
+        is AstLongLiteral -> {
+            TctConstant(location, LongValue(value, TypeLong))
+        }
+
         is AstIdentifier ->
             when(val sym = scope.lookupSymbol(name, location)) {
                 null -> {
@@ -253,6 +257,8 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
                 return TctErrorExpr(location, "")
             if (tctLhs.type is TypeReal || tctRhs.type is TypeReal)
                 return binopRealTypeCheck(location, op, tctLhs, tctRhs)
+            if (tctLhs.type is TypeLong || tctRhs.type is TypeLong)
+                return binopLongTypeCheck(location, op, tctLhs, tctRhs)
             val match = operatorTable.find{it.tokenKind==op && it.lhsType==tctLhs.type && it.rhsType==tctRhs.type}
             if (match==null)
                 return TctErrorExpr(location, "Invalid operator '${op}' for types '${tctLhs.type}' and '${tctRhs.type}'")
@@ -286,7 +292,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
             if (tctArgs.any { it.type is TypeError })
                 return TctErrorExpr(location, "")
             when(tctFunc) {
-                is TctErrorExpr -> return tctFunc
+                is TctErrorExpr -> tctFunc
                 is TctFunctionName -> {
                     val resolvedFunc = tctFunc.sym.resolveOverload(location, tctArgs)
                                      ?: return TctErrorExpr(location, "")  // Error message is reported by resolveOverload()
@@ -329,7 +335,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
                         tctArgs[i].checkType(tctFunc.type.parameterType[i])
                     TctIndirectCallExpr(location, tctFunc, tctArgs, tctFunc.type.returnType)
                 } else
-                    return TctErrorExpr(location, "Invalid function call ${tctFunc.type}")
+                    TctErrorExpr(location, "Invalid function call ${tctFunc.type}")
             }
         }
 
@@ -353,7 +359,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
                         Log.error(location, "Index $idx out of bounds for InlineArray of size ${arrayExpr.type.size}")
                 }
             }
-            return TctIndexExpr(location, arrayExpr, indexExpr, elementType)
+            TctIndexExpr(location, arrayExpr, indexExpr, elementType)
         }
 
         is AstMemberExpr -> {
@@ -362,7 +368,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
             if (tctExpr is TctTypeName)
                 return typecheckStaticMember(tctExpr)
 
-            return when(tctExpr.type) {
+            when(tctExpr.type) {
                 is TypeError -> TctErrorExpr(location, "")
                 is TypeArray -> {
                     if (memberName != "length")
@@ -435,7 +441,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
             val itSym = VarSymbol(location, "it", TypeInt, false)
             val tcLambda = lambda?.typeCheckLambda(scope, itSym)
             when(type) {
-                is TypeError -> return TctErrorExpr(location, "")
+                is TypeError -> TctErrorExpr(location, "")
                 is TypeArray -> {
                     if (tcArgs.size != 1)
                         return TctErrorExpr(location, "Array constructor requires exactly one argument")
@@ -445,7 +451,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
                     tcLambda?.checkType(type.elementType)
                     val arrayType = TypeArray.create(type.elementType)
                     val clearMem = (tcLambda==null) && !insideUnsafe        // Don't clear memory if a lambda is provided or inside an unsafe block
-                    return TctNewArrayExpr(location, type.elementType, size, arena, tcLambda, clearMem, arrayType)
+                    TctNewArrayExpr(location, type.elementType, size, arena, tcLambda, clearMem, arrayType)
                 }
 
                 is TypeClassInstance -> {
@@ -459,7 +465,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
 
                 is TypeClass -> error("Cannot create new instance of generic class '$type' without type arguments")
 
-                else -> return TctErrorExpr(location, "Cannot create new instance of type '${type.name}'")
+                else -> TctErrorExpr(location, "Cannot create new instance of type '${type.name}'")
             }
         }
 
@@ -479,8 +485,8 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
                 TctNewInlineArrayExpr(location, null, tcItems, type)
             } else if (lambda!=null) {
                 val itSym = VarSymbol(location, "it", TypeInt, false)
-                val tcLambda = lambda?.typeCheckLambda(scope, itSym)
-                tcLambda?.checkType(type.elementType)
+                val tcLambda = lambda.typeCheckLambda(scope, itSym)
+                tcLambda.checkType(type.elementType)
                 TctNewInlineArrayExpr(location, tcLambda, null, type)
             } else
                 TctNewInlineArrayExpr(location, null, null, type)
@@ -499,16 +505,16 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
                     return TctErrorExpr(e.location, "Cannot create constant array literal with non-constant element")
                 val values = tcItems.map { (it as TctConstant).value }
                 val arrayValue = ArrayValue.create(values, type)
-                return TctConstant(location, arrayValue)
+                TctConstant(location, arrayValue)
             } else
-                return TctNewArrayLiteralExpr(location, tcItems, arena, type)
+                TctNewArrayLiteralExpr(location, tcItems, arena, type)
         }
 
         is AstNegateExpr -> {
             val tcExpr = expr.typeCheckRvalue(scope)
             if (tcExpr.type is TypeError)
                 return TctErrorExpr(location, "")
-            return when (tcExpr.type) {
+            when (tcExpr.type) {
                 is TypeReal -> {
                     if (tcExpr is TctConstant && tcExpr.value is IntValue) {
                         val v = - (Float.fromBits(tcExpr.value.value))
@@ -619,7 +625,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
             val tctExpr = expr.typeCheckRvalue(scope)
             if (tctExpr.type is TypeError)
                 return TctErrorExpr(location, "")
-            return if (tctExpr.type is TypeNullable)
+            if (tctExpr.type is TypeNullable)
                 TctNullAssertExpr(location, tctExpr, tctExpr.type.elementType)
             else
                 TctErrorExpr(location, "Cannot assert non-null on type '${tctExpr.type}'")
@@ -648,7 +654,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
                 return TctErrorExpr(location, "Is expression is always false, '${typeL.name}' is not a super class of '${typeR.name}'")
             if (typeL==typeR && tctExpr.type !is TypeNullable)
                 return TctErrorExpr(location, "Is expression is always true")
-            return TctIsExpr(location, tctExpr, typeR)
+            TctIsExpr(location, tctExpr, typeR)
         }
 
         is AstAsExpr -> {
@@ -667,7 +673,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
                 return TctConstant(location, entry.value)
             }
 
-            return if ( (tctExpr.type is TypeEnum && typeR is TypeInt) ||
+             if ( (tctExpr.type is TypeEnum && typeR is TypeInt) ||
                 (tctExpr.type is TypeInt && typeR is TypeEnum) ||
                 (tctExpr.type is TypeChar && typeR is TypeInt) ||
                 (tctExpr.type is TypeInt && typeR is TypeChar) ||
@@ -699,7 +705,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
             if (enclosingFunc.returnType !is TypeErrable)
                 return TctErrorExpr(location, "Function '${enclosingFunc.name}' must have an errable return type to use 'try'")
             val type = tctExpr.type.okType
-            return TctTryExpr(location, tctExpr, type)
+            TctTryExpr(location, tctExpr, type)
         }
 
         is AstMakeTupleExpr -> {
@@ -775,6 +781,27 @@ private fun binopRealTypeCheck(location: Location, op: TokenKind, lhs: TctExpr, 
 
     return TctFpuExpr(location, fpuOp, tctLhs, tctRhs, TypeReal)
 }
+
+private fun binopLongTypeCheck(location: Location, op: TokenKind, lhs: TctExpr, rhs: TctExpr): TctExpr {
+//    val tctLhs = if (lhs.type == TypeInt) TctIntToLongExpr(lhs.location, lhs) else lhs
+//    val tctRhs = if (rhs.type == TypeInt) TctIntToLongExpr(rhs.location, rhs) else rhs
+    val tctLhs = lhs
+    val tctRhs = rhs
+
+    if (tctLhs.type != TypeLong || tctRhs.type != TypeLong)
+        return TctErrorExpr(location, "Invalid operator '${op}' for types '${lhs.type}' and '${rhs.type}'")
+
+    val longOp = when(op) {
+        TokenKind.PLUS -> LongOp.ADD_L
+        TokenKind.MINUS -> LongOp.SUB_L
+        TokenKind.STAR -> LongOp.MUL_L
+        TokenKind.SLASH -> LongOp.DIV_L
+        else -> return TctErrorExpr(location, "Invalid operator '${op}' for types '${lhs.type}' and '${rhs.type}'")
+    }
+
+    return TctLongExpr(location, longOp, tctLhs, tctRhs, TypeLong)
+}
+
 
 private fun AstMemberExpr.typecheckStaticMember(tctExpr: TctExpr): TctExpr {
     if (tctExpr.type is TypeEnum) {
@@ -960,7 +987,7 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
             val pathContextIn = pathContext
             val firstTctCondition = condition.typeCheckBoolExpr(scope)
             pathContext = firstTctCondition.trueBranch
-            val firstTctBody = body.map { it.typeCheckStmt(this) }
+            body.map { it.typeCheckStmt(this) }
 
             // Now make a second pass to get the correct pathContext for after the loop
             breakContext = mutableListOf()
@@ -1159,7 +1186,7 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
                 scope.addSymbol(sym)
                 syms += sym
             }
-            return TctDestructuringDeclStmt(location, syms, rhs)
+            TctDestructuringDeclStmt(location, syms, rhs)
         }
 
         is AstConstDecl -> {
@@ -1175,7 +1202,7 @@ private fun AstStmt.typeCheckStmt(scope: AstBlock) : TctStmt {
                 Log.error(location, "Cannot assign constant of type '${tctInitializer.type}' to constant of type '${type}'")
             val sym = ConstSymbol(location, name, type, tctInitializer.value)
             scope.addSymbol(sym)
-            return TctEmptyStmt(location)
+            TctEmptyStmt(location)
         }
 
         is AstFreeStmt -> {

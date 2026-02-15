@@ -50,6 +50,7 @@ class TctIfExpr(location: Location, val cond:TctExpr, val trueExpr:TctExpr, val 
 class TctIntToRealExpr(location: Location, val expr:TctExpr) : TctExpr(location, TypeReal)
 class TctRealToIntExpr(location: Location, val expr:TctExpr) : TctExpr(location, TypeInt)
 class TctFpuExpr(location: Location, val op:FpuOp, val lhs:TctExpr, val rhs:TctExpr, type:Type) : TctExpr(location, type)
+class TctLongExpr(location: Location, val op:LongOp, val lhs:TctExpr, val rhs:TctExpr, type:Type) : TctExpr(location, type)
 class TctRealCompareExpr(location: Location, val op: BinOp, val lhs: TctExpr, val rhs: TctExpr) : TctExpr(location, TypeBool)
 class TctMakeStructExpr(location: Location, type:TypeStruct, val fieldValues:List<TctExpr>) : TctExpr(location, type)
 

@@ -156,7 +156,9 @@ private fun inlineFuncCall(callSite:Instr) : List<Instr> {
 fun MutableList<Instr>.addMov(dest:Reg, src:Reg) {
     if (dest is CompoundReg) {
         require(src is CompoundReg)
-        require(dest.regs.size == src.regs.size)
+        require(dest.regs.size == src.regs.size){
+            "Cannot move from $src to $dest: different number of sub-registers (${src.regs.size} vs ${dest.regs.size})"
+        }
         for (i in src.regs.indices)
             addMov(dest.regs[i], src.regs[i])
     } else

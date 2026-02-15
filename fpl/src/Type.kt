@@ -14,6 +14,7 @@ object TypeChar   : Type("Char")
 object TypeInt    : Type("Int")
 object TypeString : Type("String")
 object TypeReal   : Type("Float")
+object TypeLong   : Type("Long")
 object TypeError  : Type("Error")
 object TypeAny    : Type("Any")
 object TypeNothing: Type("Nothing")
@@ -291,6 +292,7 @@ fun Type.getSize(): Int = when (this) {
     TypeError -> 0
     TypeNothing -> 0
     is TypeClass -> 4
+    is TypeLong -> 8
     TypeNull -> 4
     is TypeEnum -> 4
     is TypeNullable -> 4
@@ -308,6 +310,7 @@ fun Type.isAggregate() : Boolean = when(this) {
     is TypeTuple -> true
     is TypeErrable -> true
     is TypeStruct -> true
+    is TypeLong -> true
     else -> false
 }
 
@@ -315,6 +318,7 @@ fun Type.getNumElements() : Int = when(this) {
     is TypeStruct -> fields.size
     is TypeTuple -> elementTypes.size
     is TypeErrable -> 2
+    is TypeLong -> 2
     else -> 1
 }
 
@@ -350,6 +354,7 @@ fun Type.mapType(typeMap: Map<TypeGenericParameter, Type>): Type {
         TypeNull,
         TypeReal,
         TypeString,
+        TypeLong,
         is TypeStruct,
         TypeUnit -> this
         is TypeInlineArray -> TypeInlineArray.create(elementType.mapType(typeMap), size)

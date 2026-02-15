@@ -23,6 +23,14 @@ class IntValue(val value: Int, type:Type) : Value(type) {
     }
 }
 
+class LongValue(val value: Long, type:Type) : Value(type) {
+    override fun toString(): String = "LongValue:$value"
+
+    override fun emitRef(sb:StringBuilder) {
+        sb.append("dcl $value\n")
+    }
+}
+
 
 class StringValue private constructor(val value: String, val index:Int) : Value(TypeString) {
 

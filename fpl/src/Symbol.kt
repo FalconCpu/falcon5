@@ -38,7 +38,7 @@ val lengthSymbol = FieldSymbol(nullLocation, "length", TypeInt, false, -4)
 
 private fun genPredefinedSymbols(): Map<String, Symbol> {
     val symbols = mutableMapOf<String, Symbol>()
-    for (type in listOf(TypeUnit, TypeBool, TypeChar, TypeInt, TypeReal, TypeString, TypeAny, TypeNothing, TypeNull)) {
+    for (type in listOf(TypeUnit, TypeBool, TypeChar, TypeInt, TypeReal, TypeString, TypeAny, TypeNothing, TypeNull, TypeLong)) {
         val sym = TypeNameSymbol(nullLocation, type.name, type)
         symbols[type.name] = sym
     }

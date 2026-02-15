@@ -17,6 +17,7 @@ fun TctExpr.codeGenRvalue() : Reg {
                 is ArrayValue -> currentFunc.addLea(value)
                 is ClassValue -> currentFunc.addLea(value)
                 is FunctionValue -> currentFunc.addLea(value)
+                is LongValue -> currentFunc.addLdImm64(value.value)
             }
         }
 
@@ -30,6 +31,24 @@ fun TctExpr.codeGenRvalue() : Reg {
             val regLhs = lhs.codeGenRvalue()
             val regRhs = rhs.codeGenRvalue()
             currentFunc.addFpu(op, regLhs, regRhs)
+        }
+
+        is TctLongExpr -> {
+            val regLhs = lhs.codeGenRvalue()
+            val regRhs = rhs.codeGenRvalue()
+            require(regLhs is CompoundReg && regRhs is CompoundReg)
+            when(op) {
+                LongOp.ADD_L -> {
+                    val l1 = currentFunc.addAlu(BinOp.ADD_I, regLhs.regs[0], regRhs.regs[0]) // Add low parts
+                    val carry = currentFunc.addAlu(BinOp.LTU_I, l1, regLhs.regs[0]) // Check for carry from low part
+                    val l2 = currentFunc.addAlu(BinOp.ADD_I, regLhs.regs[1], regRhs.regs[1]) // Add high parts
+                    val h = currentFunc.addAlu(BinOp.ADD_I, l2, carry) // Add carry to high part
+                    currentFunc.newCompoundReg(listOf(l1, h))
+                }
+                LongOp.SUB_L -> TODO()
+                LongOp.MUL_L -> TODO()
+                LongOp.DIV_L -> TODO()
+            }
         }
 
         is TctIntToRealExpr -> {

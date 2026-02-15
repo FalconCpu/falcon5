@@ -9,7 +9,7 @@
 
 typedef const char* string;
 
-#define COM_PORT "COM4"
+#define COM_PORT "COM3"
 #define BAUD_RATE 2000000
 
 static HANDLE hSerial = INVALID_HANDLE_VALUE;

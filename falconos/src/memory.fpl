@@ -76,6 +76,7 @@ fun insertBlockIntoFreeList(block:FreeMemBlock, size:Int)
 end fun
 
 fun mallocInternal(sizeReq:Int) -> FreeMemBlock
+    kprintf("mallocInternal: sizeReq=%d\n", sizeReq)
     var prev : FreeMemBlock? = null
     # The size is a multiple of 16 - and includes the header
     # val sizeReq = (size + 8 + 15) & 0xFFFFFFF0
@@ -119,6 +120,7 @@ fun mallocArray(numElements:Int, elementSize:Int) -> Int
     return retInt
 
 fun freeMem(ptr:Int)
+    kprintf("freeMem: ptr=%08x\n", ptr)
     if ptr=0 then return        # do nothing for a null pointer
     val block = unsafe((ptr - 8) as FreeMemBlock)
     val size = block.size

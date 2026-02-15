@@ -56,9 +56,24 @@ class Parser(val lexer: Lexer) {
     //                                 Expressions
     // =====================================================================================
 
+    private fun parseLongIntLit(tok:Token) : AstLongLiteral {
+        try {
+            val value = if (tok.value.startsWith("0x",ignoreCase = true))
+                java.lang.Long.parseUnsignedLong(tok.value.substring(2, tok.value.length - 1), 16)
+            else
+                java.lang.Long.parseLong(tok.value.substring(0, tok.value.length - 1))
+            return AstLongLiteral(tok.location, value)
+        } catch(_: NumberFormatException) {
+            Log.error(tok.location, "Malformed long integer literal: '$tok'")
+            return AstLongLiteral(tok.location, 0) // Return 0 as default value
+        }
+    }
 
-    private fun parseIntLit() : AstIntLiteral {
+    private fun parseIntLit() : AstExpr {
         val tok = expect(INTLITERAL)
+        if (tok.value.endsWith("L", ignoreCase = true))
+            return parseLongIntLit(tok)
+
         try {
             val value = if (tok.value.startsWith("0x",ignoreCase = true))
                     Integer.parseUnsignedInt(tok.value.substring(2), 16)
@@ -574,7 +589,7 @@ class Parser(val lexer: Lexer) {
         val name = expect(IDENTIFIER, FREE)
         val params = parseParameterList(false)
         val retType = if (canTake(ARROW)) parseType() else null
-        val syscall = if (canTake("syscall")) parseIntLit() else null
+        val syscall = if (canTake("syscall")) (parseIntLit() as AstIntLiteral) else null
         expectEol()
         val body = if (currentToken.kind== INDENT) parseIndentedBlock() else emptyList()
         optionalEnd(FUN)

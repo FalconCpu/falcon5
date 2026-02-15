@@ -92,6 +92,7 @@ class Function (
                     val regs = sym.type.elementTypes.map{newUserTemp() }
                     CompoundReg(regs, name)
                 }
+                is TypeLong -> CompoundReg(listOf(newUserTemp(), newUserTemp()), name)
                 else -> UserReg(sym.name)
             }
             regs += ret
@@ -175,6 +176,14 @@ class Function (
         prog += InstrMovLit(dest, value)
         return dest
     }
+
+    fun addLdImm64(value:Long): CompoundReg {
+        val dest = newAggregateTemp(2)
+        prog += InstrMovLit(dest.regs[0], (value and 0xFFFFFFFF).toInt())
+        prog += InstrMovLit(dest.regs[1], ((value ushr 32) and 0xFFFFFFFF).toInt())
+        return dest
+    }
+
 
     fun addLdImm(dest:CpuReg, value:Int) {
         prog += InstrMovLit(dest, value)

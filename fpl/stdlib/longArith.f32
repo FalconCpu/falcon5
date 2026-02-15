@@ -1,0 +1,297 @@
+# Multiply two 64-bit numbers, returning a 64-bit result.
+
+mult64:
+    # $1 = low 32 bits of first number
+    # $2 = high 32 bits of first number
+    # $3 = low 32 bits of second number
+    # $4 = high 32 bits of second number
+    # returns:
+    # $7 = low 32 bits of result
+    # $8 = high 32 bits of result
+
+    # Track sign and take absolute values
+    ld $9, 0
+    blt $2, 0, .mult64_a_neg
+    jmp .mult64_check_b
+.mult64_a_neg:
+    ld $9, 1
+    # negate ($1,$2)
+    ld $10, $1
+    sub $1, 0, $1
+    sub $2, 0, $2
+    bne $10, 0, .mult64_a_borrow
+    jmp .mult64_check_b
+.mult64_a_borrow:
+    sub $2, 1
+
+.mult64_check_b:
+    blt $4, 0, .mult64_b_neg
+    jmp .mult64_mul
+.mult64_b_neg:
+    xor $9, 1
+    # negate ($3,$4)
+    ld $10, $3
+    sub $3, 0, $3
+    sub $4, 0, $4
+    bne $10, 0, .mult64_b_borrow
+    jmp .mult64_mul
+.mult64_b_borrow:
+    sub $4, 1
+
+.mult64_mul:
+    # Compute p0 = a_lo * b_lo (64-bit via 16-bit partials)
+    ld $10, $1
+    and $10, 0xFFFF        # a0
+    ld $11, $1
+    lsr $11, 16            # a1
+    ld $12, $3
+    and $12, 0xFFFF        # b0
+    ld $13, $3
+    lsr $13, 16            # b1
+
+    mul $14, $10, $12      # p00
+    mul $15, $10, $13      # p01
+    mul $6, $11, $12       # p10
+    mul $5, $11, $13       # p11
+
+    add $15, $6            # mid = p01 + p10
+    ld $7, $14             # low = p00
+    ld $6, $15
+    lsl $6, 16
+    add $7, $6             # low = p00 + (mid<<16)
+    cltu $6, $7, $14       # carry from low add
+
+    ld $8, $5              # high = p11
+    ld $5, $15
+    lsr $5, 16
+    add $8, $5
+    add $8, $6
+
+    # Add cross terms into high (low 32 bits only)
+    mul $6, $2, $3         # a_hi * b_lo (low)
+    mul $5, $1, $4         # a_lo * b_hi (low)
+    add $8, $6
+    add $8, $5
+
+    # Apply sign if needed
+    bne $9, 0, .mult64_neg_result
+    ret
+.mult64_neg_result:
+    ld $10, $7
+    sub $7, 0, $7
+    sub $8, 0, $8
+    bne $10, 0, .mult64_res_borrow
+    ret
+.mult64_res_borrow:
+    sub $8, 1
+    ret
+
+# Divide two 64-bit numbers, returning a 64-bit quotient.
+
+div64:
+    # $1 = low 32 bits of dividend
+    # $2 = high 32 bits of dividend
+    # $3 = low 32 bits of divisor
+    # $4 = high 32 bits of divisor
+    # returns:
+    # $7 = low 32 bits of quotient
+    # $8 = high 32 bits of quotient
+
+    # Division by zero -> return 0
+    or $6, $3, $4
+    bne $6, 0, .div64_start
+    ld $7, 0
+    ld $8, 0
+    ret
+
+.div64_start:
+    # Track sign and take absolute values
+    xor $9, $2, $4
+    lsr $9, 31             # $9 = 1 if result should be negative
+
+    blt $2, 0, .div64_a_neg
+    jmp .div64_check_b
+.div64_a_neg:
+    ld $10, $1
+    sub $1, 0, $1
+    sub $2, 0, $2
+    bne $10, 0, .div64_a_borrow
+    jmp .div64_check_b
+.div64_a_borrow:
+    sub $2, 1
+
+.div64_check_b:
+    blt $4, 0, .div64_b_neg
+    jmp .div64_unsigned
+.div64_b_neg:
+    ld $10, $3
+    sub $3, 0, $3
+    sub $4, 0, $4
+    bne $10, 0, .div64_b_borrow
+    jmp .div64_unsigned
+.div64_b_borrow:
+    sub $4, 1
+
+.div64_unsigned:
+    # quotient ($7,$8) = 0, remainder ($10,$11) = 0
+    ld $7, 0
+    ld $8, 0
+    ld $10, 0
+    ld $11, 0
+    ld $6, 64
+
+.div64_loop:
+    # rem = (rem << 1) | (dividend >> 63)
+    lsr $12, $2, 31
+    lsl $10, 1
+    lsr $13, $11, 31
+    or $10, $13
+    lsl $11, 1
+    or $11, $12
+
+    # dividend <<= 1
+    lsl $2, 1
+    lsr $13, $1, 31
+    or $2, $13
+    lsl $1, 1
+
+    # quotient <<= 1
+    lsl $8, 1
+    lsr $13, $7, 31
+    or $8, $13
+    lsl $7, 1
+
+    # if rem >= divisor then rem -= divisor; quotient |= 1
+    cltu $12, $10, $4
+    bne $12, 0, .div64_no_sub
+    cltu $12, $4, $10
+    bne $12, 0, .div64_do_sub
+    cltu $12, $11, $3
+    bne $12, 0, .div64_no_sub
+
+.div64_do_sub:
+    ld $12, $11
+    sub $11, $11, $3
+    cltu $13, $12, $3
+    sub $10, $10, $4
+    sub $10, $10, $13
+    or $7, 1
+
+.div64_no_sub:
+    sub $6, 1
+    bne $6, 0, .div64_loop
+
+    # Apply sign if needed
+    bne $9, 0, .div64_neg_result
+    ret
+.div64_neg_result:
+    ld $10, $7
+    sub $7, 0, $7
+    sub $8, 0, $8
+    bne $10, 0, .div64_res_borrow
+    ret
+.div64_res_borrow:
+    sub $8, 1
+    ret
+
+# Divide two 64-bit numbers, returning a 64-bit remainder.
+
+mod64:
+    # $1 = low 32 bits of dividend
+    # $2 = high 32 bits of dividend
+    # $3 = low 32 bits of divisor
+    # $4 = high 32 bits of divisor
+    # returns:
+    # $7 = low 32 bits of remainder
+    # $8 = high 32 bits of remainder
+
+    # Division by zero -> return 0
+    or $6, $3, $4
+    bne $6, 0, .mod64_start
+    ld $7, 0
+    ld $8, 0
+    ret
+
+.mod64_start:
+    # Track dividend sign and take absolute values
+    lsr $9, $2, 31           # $9 = 1 if remainder should be negative
+
+    blt $2, 0, .mod64_a_neg
+    jmp .mod64_check_b
+.mod64_a_neg:
+    ld $10, $1
+    sub $1, 0, $1
+    sub $2, 0, $2
+    bne $10, 0, .mod64_a_borrow
+    jmp .mod64_check_b
+.mod64_a_borrow:
+    sub $2, 1
+
+.mod64_check_b:
+    blt $4, 0, .mod64_b_neg
+    jmp .mod64_unsigned
+.mod64_b_neg:
+    ld $10, $3
+    sub $3, 0, $3
+    sub $4, 0, $4
+    bne $10, 0, .mod64_b_borrow
+    jmp .mod64_unsigned
+.mod64_b_borrow:
+    sub $4, 1
+
+.mod64_unsigned:
+    # remainder ($10,$11) = 0
+    ld $10, 0
+    ld $11, 0
+    ld $6, 64
+
+.mod64_loop:
+    # rem = (rem << 1) | (dividend >> 63)
+    lsr $12, $2, 31
+    lsl $10, 1
+    lsr $13, $11, 31
+    or $10, $13
+    lsl $11, 1
+    or $11, $12
+
+    # dividend <<= 1
+    lsl $2, 1
+    lsr $13, $1, 31
+    or $2, $13
+    lsl $1, 1
+
+    # if rem >= divisor then rem -= divisor
+    cltu $12, $10, $4
+    bne $12, 0, .mod64_no_sub
+    cltu $12, $4, $10
+    bne $12, 0, .mod64_do_sub
+    cltu $12, $11, $3
+    bne $12, 0, .mod64_no_sub
+
+.mod64_do_sub:
+    ld $12, $11
+    sub $11, $11, $3
+    cltu $13, $12, $3
+    sub $10, $10, $4
+    sub $10, $10, $13
+
+.mod64_no_sub:
+    sub $6, 1
+    bne $6, 0, .mod64_loop
+
+    # Apply sign of dividend if needed
+    bne $9, 0, .mod64_neg_result
+    ld $7, $11
+    ld $8, $10
+    ret
+.mod64_neg_result:
+    ld $7, $11
+    ld $8, $10
+    ld $12, $7
+    sub $7, 0, $7
+    sub $8, 0, $8
+    bne $12, 0, .mod64_res_borrow
+    ret
+.mod64_res_borrow:
+    sub $8, 1
+    ret

@@ -10,7 +10,7 @@ fun kprintString(s:String, width:Int, align:Int)
         for j in 0 ..< width-s.length
             uartTx(' ')
 
-fun kprintField(ary:Array<Char>, length:Int, width:Int, align:Int)
+fun kprintField(ary:InlineArray<Char>(16), length:Int, width:Int, align:Int)
     if align=1  # Right
         for j in 0 ..< width-length
             uartTx(' ')
@@ -24,7 +24,7 @@ fun kprintField(ary:Array<Char>, length:Int, width:Int, align:Int)
             uartTx(' ')
 
 fun kprintInt(i:Int, width:Int,align:Int) 
-    val arry = local Array<Char>(16)
+    val arry = InlineArray<Char>(16)
     var index = 0
     var n = i
     if n<0
@@ -39,7 +39,7 @@ fun kprintInt(i:Int, width:Int,align:Int)
     kprintField(arry, index, width, align)
 
 fun kprintHex(i:Int, width:Int, align:Int) 
-    val arry = local Array<Char>(8)
+    val arry = InlineArray<Char>(16)
     var index = 0
     var n = i
     repeat
@@ -54,7 +54,7 @@ fun kprintHex(i:Int, width:Int, align:Int)
     kprintField(arry, index, width,align)
 
 fun kprintFloat(value: Float)
-    val buffer = local InlineArray<Char>(16)
+    val buffer = InlineArray<Char>(16)
     var v = value
 
     # Handle sign
@@ -88,7 +88,7 @@ fun kprintFloat(value: Float)
         uartTx('.')
 
         # Generate up to 6 fractional digits
-        val fracBuf = local InlineArray<Char>(6)
+        val fracBuf = InlineArray<Char>(6)
         var fracIndex = 0
         for i in 0..5
             fracPart = fracPart * 10.0
