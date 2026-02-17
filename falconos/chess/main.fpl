@@ -21,6 +21,9 @@ fun showPalette(gc:GraphicsContext)
     for i in 0..<16
         for j in 0..<16
             gc.drawRect(i*30, j*30, i*30+28, j*30+28, i*16 + j)
+    for i in 0..1000000
+        for j in 0..1000000
+            val dummy = 0
 end fun
 
 fun createImage(width:Int, height:Int, fileAddr:Int, offset:Int) -> Image
@@ -55,65 +58,43 @@ fun waitForVBlank()
     hwregs.ledr = 0 # Turn off LED to indicate we've exited vblank
 end fun
 
-class Piece(var type:PieceType, val color:Int)
-    fun draw(gc:GraphicsContext, x:Int, y:Int)
-        val index = (type as Int) + 6*color
-        gc.drawImage(x,y,pieceImage[index])
+fun drawPiece(gc:GraphicsContext, piece:Int, x:Int, y:Int)
+    val imageIndex : Int
+    when piece
+        PIECE_PAWN | PIECE_WHITE -> imageIndex = 5
+        PIECE_KNIGHT | PIECE_WHITE -> imageIndex = 4
+        PIECE_BISHOP | PIECE_WHITE -> imageIndex = 3
+        PIECE_ROOK | PIECE_WHITE -> imageIndex = 2
+        PIECE_QUEEN | PIECE_WHITE -> imageIndex = 1
+        PIECE_KING | PIECE_WHITE -> imageIndex = 0
+        PIECE_PAWN | PIECE_BLACK -> imageIndex = 11
+        PIECE_KNIGHT | PIECE_BLACK -> imageIndex = 10
+        PIECE_BISHOP | PIECE_BLACK -> imageIndex = 9
+        PIECE_ROOK | PIECE_BLACK -> imageIndex = 8
+        PIECE_QUEEN | PIECE_BLACK -> imageIndex = 7
+        PIECE_KING | PIECE_BLACK -> imageIndex = 6
+        else -> 
+            kprintf("Error: Invalid piece value %d\n", piece)
+            imageIndex = -1 # Invalid piece
+    gc.drawImage(x,y,pieceImage[imageIndex])
+end fun
 
-
-enum PieceType [KING, QUEEN, ROOK, BISHOP, KNIGHT, PAWN]
-
-val board = new Array<Piece?>(64)  # 8x8 board, null for empty squares
-
-fun initializePieces(board:Array<Piece?>)
-    board[0] = new Piece(PieceType.ROOK, 0)
-    board[1] = new Piece(PieceType.KNIGHT, 0)
-    board[2] = new Piece(PieceType.BISHOP, 0)
-    board[3] = new Piece(PieceType.QUEEN, 0)
-    board[4] = new Piece(PieceType.KING, 0)
-    board[5] = new Piece(PieceType.BISHOP, 0)   
-    board[6] = new Piece(PieceType.KNIGHT, 0)
-    board[7] = new Piece(PieceType.ROOK, 0)
-    for i in 0..<8
-        board[8 + i] = new Piece(PieceType.PAWN, 0)
-        board[48 + i] = new Piece(PieceType.PAWN, 1)
-    board[56] = new Piece(PieceType.ROOK, 1)
-    board[57] = new Piece(PieceType.KNIGHT, 1)
-    board[58] = new Piece(PieceType.BISHOP, 1)
-    board[59] = new Piece(PieceType.QUEEN, 1)
-    board[60] = new Piece(PieceType.KING, 1)
-    board[61] = new Piece(PieceType.BISHOP, 1)
-    board[62] = new Piece(PieceType.KNIGHT, 1)
-    board[63] = new Piece(PieceType.ROOK, 1)
-
-fun indexToCoordinates(index:Int) -> (Int, Int)
-    val file = index % 8
-    val rank = 7 - index / 8
-    return (file, rank)
-
-fun indexToScreenCoordinates(index:Int) -> (Int, Int)
-    val (file, rank) = indexToCoordinates(index)
-    val x = BOARD_X + file * SQUARE_WIDTH
-    val y = BOARD_Y + rank * SQUARE_HEIGHT
-    return (x, y)
+var prevMoveFrom = -1
+var prevMoveTo = -1
 
 fun coordinatesToIndex(file:Int, rank:Int) -> Int
-    return (7 - rank) * 8 + file
+    return (7 - rank) * 16 + file
 
 fun screenCoordinatestoIndex(x:Int, y:Int) -> Int
     if x < BOARD_X or x >= BOARD_X + 8*SQUARE_WIDTH or y < BOARD_Y or y >= BOARD_Y + 8*SQUARE_HEIGHT
         return -1
     val file = (x - BOARD_X) / SQUARE_WIDTH
     val rank = 7 - (y - BOARD_Y) / SQUARE_HEIGHT
-    return rank*8 + file
+    return rank*16 + file
 
 
-fun drawSquare(gc:GraphicsContext, index:Int)
-    val (x,y) = indexToCoordinates(index)
-    val color = if ((x + y) % 2 = 0) then COLOR_LIGHT else COLOR_DARK
-    val xx = BOARD_X + x*SQUARE_WIDTH
-    val yy = BOARD_Y + y*SQUARE_HEIGHT
-    gc.drawRect(xx, yy, xx + SQUARE_WIDTH - 1, yy + SQUARE_HEIGHT - 1, color)
+fun drawSquare(gc:GraphicsContext, x:Int, y:Int)
+    val index = x + y * RANK_MULT
 end fun
 
 
@@ -121,14 +102,16 @@ end fun
 
 enum MouseState [IDLE, PRESSED, DRAGGING]
 var mouseState = MouseState.IDLE
-var mouseSquare = -1
 var dragX = 0
 var dragY = 0
-var draggedPiece:Piece? = null
+var draggedPiece = -1
 var currentPlayer = 0
-var capturedPiece:Piece? = null   # The piece that was captured (if any) during the last move
+var capturedPiece = -1      # The piece that was captured (if any) during the last move
 var previousFromIndex = -1  # The source square of the last move (for undo functionality)
 var previousToIndex = -1    # The destination square of the last move (for undo
+var whiteInCheck = false       # Whether the current player's king is in check
+var blackInCheck = false       # Whether the current player's king is in check
+var gameOver = false            # Whether the game has ended (checkmate or stalemate)
 
 fun clearScreen(gc:GraphicsContext)
     gc.setTransparentColor(-1)
@@ -138,53 +121,75 @@ end fun
 
 fun drawBoard(gc:GraphicsContext)
     clearScreen(gc)
-    for i in 0..<64
-        drawSquare(gc, i)
-        val piece = board[i]
-        if piece!=null and piece.type=PieceType.KING and isInCheck(piece.color)
-            # Highlight king in red if in check
-            val (x,y) = indexToScreenCoordinates(i)
-            gc.drawRect(x, y, x+SQUARE_WIDTH-1, y+SQUARE_HEIGHT-1, 9)
+    for y in 0..<8
+        for x in 0..<8
+            #  Calculate screen coordinates and square color
+            val xx = BOARD_X + x*SQUARE_WIDTH
+            val yy = BOARD_Y + (7-y)*SQUARE_HEIGHT
+            var color = if ((x + y) % 2 = 0) then COLOR_LIGHT else COLOR_DARK
+            
+            # Highlight the squares of the last move
+            val index = y*RANK_MULT + x
+            if (index = prevMoveFrom or index = prevMoveTo)
+                color = 0x16
 
-        if piece!=null and piece!=draggedPiece
-            val (x,y) = indexToScreenCoordinates(i)
-            piece.draw(gc, x + PIECE_OFFSET, y + PIECE_OFFSET)
+            # Highlight the king if it's in check
+            val piece = board[index]
+            if (piece=(PIECE_KING|PIECE_WHITE) and whiteInCheck) or (piece=(PIECE_KING|PIECE_BLACK) and blackInCheck)
+                color = 0x09
+            
+            # draw the square
+            gc.drawRect(xx, yy, xx+SQUARE_WIDTH-1, yy+SQUARE_HEIGHT-1, color)
+            
+            # draw the piece on this square
+            if piece!=0 and index!=draggedPiece
+                drawPiece(gc, piece, xx + PIECE_OFFSET, yy + PIECE_OFFSET)
     end for
     
     for i in 0..<8
         gc.drawText(BOARD_X + i*SQUARE_WIDTH + 20, BOARD_Y + 8*SQUARE_HEIGHT + 5, 2, fileNames[i])
         gc.drawText(BOARD_X - 15, BOARD_Y + i*SQUARE_HEIGHT + 20, 2, rankNames[7 - i])
 
-    if draggedPiece != null
-        draggedPiece.draw(gc, dragX - PIECE_WIDTH/2, dragY - PIECE_HEIGHT/2)
+    if draggedPiece != -1
+        drawPiece(gc, board[draggedPiece], dragX - PIECE_WIDTH/2, dragY - PIECE_HEIGHT/2)
     if (currentPlayer=0)
         gc.drawText(230,10,2,"White to move")
     else
         gc.drawText(230,10,2,"Black to move")
+
+    if gameOver
+        if (currentPlayer=0 and whiteInCheck) or (currentPlayer=1 and blackInCheck)
+            gc.drawText(200,200,1,"Checkmate!")
+        else
+            gc.drawText(200,200,1,"Stalemate! It's a draw.")
+
 end fun
 
-fun processMouse(gc:GraphicsContext)
+fun processMouse(gc:GraphicsContext, player:Int, validMoves:MoveList) -> Int
+    # Process mouse input for moving pieces, return move index if a move was made, otherwise -1
     val mouseX = hwregs.mouse_x
+    delay()  # Need small delay here to prevent a hardware lockup. Need to debug this further.
     val mouseY = hwregs.mouse_y
+    delay()  # Need small delay here to prevent a hardware lockup. Need to debug this further.
     val mouseButtons = hwregs.mouse_buttons
+    delay()  # Need small delay here to prevent a hardware lockup. Need to debug this further.
 
     when(mouseState)
         MouseState.IDLE ->
             if mouseButtons=0
-                return # No buttons pressed, stay idle
+                return -1# No buttons pressed, stay idle
 
             # Mouse has just been pressed, check if it's on a square
             val square = screenCoordinatestoIndex(mouseX, mouseY)
             if square = -1
                 # Click outside board, ignore
                 mouseState = MouseState.PRESSED
-                return
+                return -1
             val piece = board[square]
-            if piece != null
+            if piece != 0 and (piece&COLOR_MASK) = player
                 # Start dragging this piece
                 mouseState = MouseState.DRAGGING
-                mouseSquare = square
-                draggedPiece = piece
+                draggedPiece = square
                 dragX = mouseX
                 dragY = mouseY
 
@@ -195,21 +200,16 @@ fun processMouse(gc:GraphicsContext)
         MouseState.DRAGGING ->
             if (mouseButtons=0)
                 # Drop piece
-                if draggedPiece=null then return
+                if draggedPiece=-1 then return -1
                 val targetSquare = screenCoordinatestoIndex(mouseX, mouseY)
-                if isLegalMove(mouseSquare, targetSquare, currentPlayer)
-                    makeMove(mouseSquare, targetSquare)
-                    if (draggedPiece.type = PieceType.PAWN and isPawnPromote(targetSquare, currentPlayer))
-                        draggedPiece.type = PieceType.QUEEN # Auto promote to queen for simplicity
-                    currentPlayer = 1 - currentPlayer # Switch player
-                else
-                    # Not a valid move, snap back to original square
-                    board[mouseSquare] = draggedPiece
-                draggedPiece = null
+                val moveIndex = validMoves.findMove(draggedPiece, targetSquare)
+                draggedPiece=-1
                 mouseState = MouseState.IDLE
+                return moveIndex
             elsif (mouseX != dragX or mouseY != dragY)
                 dragX = mouseX
                 dragY = mouseY
+    return -1
 end fun
 
 fun main() -> Int
@@ -217,21 +217,47 @@ fun main() -> Int
     val gc = new GraphicsContext()
     gc.setup()
     clearScreen(gc)
+    # showPalette(gc)
     loadPieceGraphics()
     initializePieces(board)
     val screenBuffers = new Array<Int>(2)
     screenBuffers[0] = unsafe(new Array<Char>(640*480) as Int)
     screenBuffers[1] = unsafe(new Array<Char>(640*480) as Int)
     var currentBuffer = 0
+    # evaluate(0,5)
+    # kprintf("Number of moves at depth %d\n", totalMoves)
+    # return 0
+    val validMoves = new MoveList()
+    generateLegalMoves(validMoves, currentPlayer)
 
-    while true
+    while not gameOver
         waitForVBlank()
         currentBuffer = 1 - currentBuffer
         gc.setGraphicsBuffer(screenBuffers[currentBuffer])
         hwregsVideo.addr = screenBuffers[1-currentBuffer]
-        if (currentPlayer=0)
-            processMouse(gc)
+        val move : Int
+        if currentPlayer = 0
+            move = processMouse(gc, currentPlayer, validMoves)
         else
-            makeAIMove()
+            move = chooseBestMove(validMoves, currentPlayer)
+        if move != -1
+            makeMove(validMoves.moves[move])
+            prevMoveFrom = validMoves.moves[move].from
+            prevMoveTo = validMoves.moves[move].to
+            kprintf("Player %d moves from %d to %d  score=%d\n", currentPlayer, validMoves.moves[move].from, validMoves.moves[move].to, score)
+            currentPlayer = 1 - currentPlayer
+            generateLegalMoves(validMoves, currentPlayer)
+            whiteInCheck = isInCheck(0)
+            blackInCheck = isInCheck(1)
+            val numValidMoves = validMoves.countMoves()
+            kprintf("Player %d has %d valid moves\n", currentPlayer, numValidMoves)
+            if currentPlayer=0
+                showMovesWithScore(validMoves, 0)
+            if numValidMoves = 0
+                gameOver = true
         drawBoard(gc)
 
+    currentBuffer = 1 - currentBuffer
+    hwregsVideo.addr = screenBuffers[1-currentBuffer]
+    kprintf("Game over\n")
+    return 0

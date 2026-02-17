@@ -1,0 +1,8 @@
+
+
+Add pruning of AI moves to remove those that put you in check
+Add castling
+Add en-passant
+Sort game tree for deeper ply based on earlier ply eval
+Change user move validation to use same validation logic as AI moves
+Enhance GUI to show previous move taken

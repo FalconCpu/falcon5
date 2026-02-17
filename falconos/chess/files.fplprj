@@ -8,5 +8,5 @@
 ../src/list.fpl
 ../modtracker/exceptions.fpl
 ../modtracker/filehandler.fpl
-main.fpl
 moves.fpl
+main.fpl

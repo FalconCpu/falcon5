@@ -1,513 +1,474 @@
-# external to this file
-# - board: array of 64 pieces or null
+# We use the 0x88 board representation for efficient move generation and legality checks.
+# Each square is represented by an index from 0 to 127, where the valid squares are those where (index & 0x88) = 0
 
-var numEvaluations = 0
+const INVALID_MASK = 0x88
+const RANK_MASK = 0x70
+const FILE_MASK = 0x07
+const RANK_MULT = 16
+
+const PIECE_PAWN = 2
+const PIECE_KNIGHT = 4
+const PIECE_BISHOP = 6
+const PIECE_ROOK = 8
+const PIECE_QUEEN = 10
+const PIECE_KING = 12
+const PIECE_MASK = 0xE   # Mask to extract piece type (ignoring color)
+const COLOR_MASK = 1     # Mask to extract color bit
+const PIECE_WHITE = 0
+const PIECE_BLACK = 1
+
 const LEVEL = 3
 
-fun fileOf(index:Int) -> Int
-    return index % 8
 
-fun rankOf(index:Int) -> Int
-    return index / 8
-
-fun isEmpty(index:Int) -> Bool
-    return board[index] = null
-
-fun isEnemy(index:Int, player:Int) -> Bool
-    val p = board[index]
-    if p=null then return false
-    return p.color != player
-
-fun isEmptyOrEnemy(index:Int, player:Int) -> Bool
-    val p = board[index]
-    if p=null or p.color!=player then return true
-    return false
+val board = new Array<Int>(128)  # 16x8 board, only indices where (index & 0x88) = 0 are valid
+var enPassantSquare = -1  # Index of en passant target square, or -1 if none
+var totalMoves = 0
+var score = 0
 
 fun abs(x:Int) -> Int
-    return if x<0 then -x else x
+    return if x < 0 then -x else x
 
-fun isPathClear(fromIndex:Int, toIndex:Int, step:Int) -> Bool
-    var i = fromIndex + step
-    while i != toIndex
-        if board[i] != null
-            return false
-        i += step
-    return true
+fun initializePieces(board:Array<Int>)
+    for i in 0..<128
+        board[i] = 0
+    board[0] = PIECE_ROOK | PIECE_WHITE
+    board[1] = PIECE_KNIGHT | PIECE_WHITE
+    board[2] = PIECE_BISHOP | PIECE_WHITE
+    board[3] = PIECE_QUEEN | PIECE_WHITE
+    board[4] = PIECE_KING | PIECE_WHITE
+    board[5] = PIECE_BISHOP | PIECE_WHITE
+    board[6] = PIECE_KNIGHT | PIECE_WHITE
+    board[7] = PIECE_ROOK | PIECE_WHITE
+    board[112] = PIECE_ROOK | PIECE_BLACK
+    board[113] = PIECE_KNIGHT | PIECE_BLACK
+    board[114] = PIECE_BISHOP | PIECE_BLACK
+    board[115] = PIECE_QUEEN | PIECE_BLACK
+    board[116] = PIECE_KING | PIECE_BLACK
+    board[117] = PIECE_BISHOP | PIECE_BLACK
+    board[118] = PIECE_KNIGHT | PIECE_BLACK
+    board[119] = PIECE_ROOK | PIECE_BLACK
+    for i in 0..<8
+        board[i+16] = PIECE_PAWN | PIECE_WHITE
+        board[i+96] = PIECE_PAWN | PIECE_BLACK
+
+
+# =======================================================================
+#                   Move Structure
+# =======================================================================
+
+fun printSquare(index:Int)
+    val file = index & FILE_MASK
+    val rank = index lsr 4
+    kprintf("%c%d", ('a' as Int) + file, rank + 1)
+
+struct Move(from:Int, to:Int, piece:Int, captured:Int, enPassant:Bool)
+class MoveList
+    var count = 0
+    var moves : InlineArray<Move>(256)
+    fun addMove(from:Int, to:Int)
+        val piece = board[from]
+        val captured = board[to]
+        moves[count] = Move(from, to, piece, captured, false)
+        count += 1
+
+    fun addEnPassantMove(from:Int, to:Int)
+        val piece = board[from]
+        val captured = 0  # En-passant captures an empty square
+        moves[count] = Move(from, to, piece, captured, true)
+        count += 1
+
+    fun clear()
+        count = 0
+
+    fun invalidateMove(index:Int)
+        moves[index] = Move(-1, -1, 0, 0, false)  # Mark move as invalid
+
+    fun printMove(index:Int)
+        val move = moves[index]
+        if move.from = -1
+            kprintf("Invalid move\n")
+            return
+        printSquare(move.from)
+        if move.captured != 0
+            kprintf("x")
+        else
+            kprintf("-")
+        printSquare(move.to)
+
+    fun findMove(from:Int, to:Int) -> Int
+        for i in 0..<count
+            if moves[i].from = from and moves[i].to = to
+                return i
+        return -1
+
+    fun printMoves()
+        for i in 0..<count
+            printMove(i)
+            kprintf("\n")
+
+    fun countMoves() -> Int
+        var validCount = 0
+        for i in 0..<count
+            if moves[i].from != -1
+                validCount += 1
+        return validCount
+
+fun makeMove(move:Move)
+    board[move.to] = move.piece
+    board[move.from] = 0
+    score += getPieceValue(move.piece, move.to) - getPieceValue(move.piece, move.from)
+    if move.captured != 0
+        score -= getPieceValue(move.captured, move.to)
+
+    # Handle en-passant capture
+    if move.enPassant
+        val capturedPawnSquare = if (move.piece&COLOR_MASK)=PIECE_WHITE then move.to - RANK_MULT else move.to + RANK_MULT
+        board[capturedPawnSquare] = 0
+        score -= getPieceValue(board[capturedPawnSquare], capturedPawnSquare)
+
+    # Check for pawn promotion
+    if move.piece&PIECE_MASK=PIECE_PAWN
+        if move.to&RANK_MASK = 7*RANK_MULT
+            board[move.to] = PIECE_QUEEN | PIECE_WHITE
+            score += getPieceValue(PIECE_QUEEN | PIECE_WHITE, move.to) - getPieceValue(move.piece, move.to)
+        elsif move.to&RANK_MASK = 0
+            board[move.to] = PIECE_QUEEN | PIECE_BLACK
+            score += getPieceValue(PIECE_QUEEN | PIECE_BLACK, move.to) - getPieceValue(move.piece, move.to)
+
+    # Check for castling
+    if move.piece&PIECE_MASK=PIECE_KING
+        if move.to = move.from + 2  # Kingside castling
+            val rook = board[move.from + 3]
+            board[move.from + 1] = rook
+            board[move.from + 3] = 0
+            score += getPieceValue(rook, move.from + 1) - getPieceValue(rook, move.from + 3)
+        elsif move.to = move.from - 2  # Queenside castling
+            val rook = board[move.from - 4]
+            board[move.from - 1] = rook
+            board[move.from - 4] = 0
+            score += getPieceValue(rook, move.from - 1) - getPieceValue(rook, move.from - 4)
+
+    # Handle setting en passant square
+    if move.piece&PIECE_MASK=PIECE_PAWN and abs(move.to - move.from) = 2*RANK_MULT
+        enPassantSquare = (move.from + move.to) / 2
+    else
+        enPassantSquare = -1
+
+fun undoMove(move:Move)
+    board[move.from] = move.piece
+    board[move.to] = move.captured
+    
+    # Undo en-passant capture
+    if move.enPassant
+        val capturedPawnSquare = if (move.piece&COLOR_MASK)=PIECE_WHITE then move.to - RANK_MULT else move.to + RANK_MULT
+        val opponentColor = 1 - (move.piece&COLOR_MASK)
+        board[capturedPawnSquare] = PIECE_PAWN | opponentColor
+    
+    # Undo castling
+    if move.piece&PIECE_MASK=PIECE_KING
+        if move.to = move.from + 2  # Kingside castling
+            board[move.from + 3] = board[move.from + 1]  # Move rook back
+            board[move.from + 1] = 0
+        elsif move.to = move.from - 2  # Queenside castling
+            board[move.from - 4] = board[move.from - 1]  # Move rook back
+            board[move.from - 1] = 0
+
+# =======================================================================
+#                   Piece value
+# =======================================================================
+
+fun getPieceValue(piece:Int, square:Int) -> Int
+    val value:Int
+    when piece&PIECE_MASK
+        PIECE_PAWN -> value = 100
+        PIECE_KNIGHT -> value = 320
+        PIECE_BISHOP -> value = 330
+        PIECE_ROOK -> value = 500
+        PIECE_QUEEN -> value = 900
+        PIECE_KING -> value = 20000
+        else -> value = 0
+    if (piece&COLOR_MASK) = PIECE_WHITE
+        return value
+    else
+        return -value
+
+
+# =======================================================================
+#                  Move Generation and Validation
+# =======================================================================
+
+fun isEmptyOrOpponent(index:Int, player:Int) -> Bool
+    return board[index] = 0 or (board[index]&COLOR_MASK) != player
+
+fun isOccupiedByOwnPiece(index:Int, player:Int) -> Bool
+    return board[index] != 0 and (board[index]&COLOR_MASK) = player
+
+const knight_move_offsets = const Array<Int>[31, 33, 14, -14, -31, -33, 18, -18]
+const bishop_move_offsets = const Array<Int>[15, 17, -15, -17]
+const rook_move_offsets = const Array<Int>[16, -16, 1, -1]
+const queen_move_offsets = const Array<Int>[15, 17, -15, -17, 16, -16, 1, -1]
+const king_move_offsets = const Array<Int>[15, 17, -15, -17, 16, -16, 1, -1]
+
+# Find all pseudo-legal moves for the current player (ignoring checks)
+fun generatePseudoLegalMoves(moveList:MoveList, player:Int)
+    moveList.clear()
+    for y in 0..<8
+        for x in 0..<8
+            val index = y*RANK_MULT + x
+            val piece = board[index]
+            if piece != 0 and (piece&COLOR_MASK) = player
+                when piece&PIECE_MASK
+                    PIECE_PAWN -> generatePawnMoves(moveList, index, player)
+                    PIECE_KNIGHT -> generateWalkerMoves(moveList, index, knight_move_offsets, player)
+                    PIECE_BISHOP -> genSliderMoveOffsets(moveList, index, bishop_move_offsets, player)
+                    PIECE_ROOK -> genSliderMoveOffsets(moveList, index, rook_move_offsets, player)
+                    PIECE_QUEEN -> genSliderMoveOffsets(moveList, index, queen_move_offsets, player)
+                    PIECE_KING -> genKingMoves(moveList, index, player)
+
+fun generatePawnMoves(moveList:MoveList, index:Int, player:Int)
+    val direction = if player=PIECE_WHITE then RANK_MULT else -RANK_MULT
+    val startRank = if player=PIECE_WHITE then RANK_MULT else 6*RANK_MULT
+   
+    # Single square forward
+    val forwardIndex = index + direction
+    if (forwardIndex & INVALID_MASK) = 0 and board[forwardIndex] = 0
+        moveList.addMove(index, forwardIndex)
+        
+    # Double square forward from starting position
+    if (index&RANK_MASK) = startRank
+        val doubleForwardIndex = index + 2*direction
+        if board[forwardIndex] = 0 and board[doubleForwardIndex] = 0
+            moveList.addMove(index, doubleForwardIndex)
+    
+    # Captures (including en-passant)
+    val captureLeft = forwardIndex - 1
+    if (captureLeft&INVALID_MASK) = 0
+        if (board[captureLeft] != 0 and (board[captureLeft]&COLOR_MASK) != player)
+            moveList.addMove(index, captureLeft)
+        elsif captureLeft = enPassantSquare
+            moveList.addEnPassantMove(index, captureLeft)        
+    val captureRight = forwardIndex + 1
+    if (captureRight&INVALID_MASK) = 0
+        if (board[captureRight] != 0 and (board[captureRight]&COLOR_MASK) != player)
+            moveList.addMove(index, captureRight)
+        elsif captureRight = enPassantSquare
+            moveList.addEnPassantMove(index, captureRight)
+
+fun genKingMoves(moveList:MoveList, index:Int, player:Int)
+    generateWalkerMoves(moveList, index, king_move_offsets, player)
+
+    # Castling. Only add castling moves if the king is on its original square 
+    # (index 4 for white, 116 for black), and the squares between the king and rook are empty. 
+    if (player=0 and index=4) or (player=1 and index=116)
+        # Kingside castling
+        if (board[index+1]=0 and board[index+2]=0) and (board[index+3] = (PIECE_ROOK | player))
+            moveList.addMove(index, index + 2)
+        # Queenside castling
+        if (board[index-1]=0 and board[index-2]=0 and board[index-3]=0) and (board[index-4] = (PIECE_ROOK | player))
+            moveList.addMove(index, index - 2)
+
+fun generateWalkerMoves(moveList:MoveList, startSquare:Int, offsets:Array<Int>, player:Int)
+    for offset in offsets
+        val targetIndex = startSquare + offset
+        if (targetIndex & INVALID_MASK) = 0 and isEmptyOrOpponent(targetIndex, player)
+            moveList.addMove(startSquare, targetIndex)
+
+fun genSliderMoveOffsets(moveList:MoveList, startSquare:Int, offsets:Array<Int>, player:Int)
+    for offset in offsets
+        for i in 1..7
+            val targetIndex = startSquare + offset*i
+            if (targetIndex&INVALID_MASK)!=0
+                break
+            val targetPiece = board[targetIndex]
+            if targetPiece=0
+                moveList.addMove(startSquare, targetIndex)
+            elsif (targetPiece&COLOR_MASK) != player
+                moveList.addMove(startSquare, targetIndex)
+                break
+            else
+                break
 
 var kingCache = 0
 fun findKing(player:Int) -> Int
-    val p = board[kingCache]
-    if p!=null and p.type=PieceType.KING and p.color=player
+    val king = PIECE_KING | player
+    if board[kingCache] = king
         return kingCache
-    for i in 0..<64
-        val p = board[i]
-        if p!=null and p.type=PieceType.KING and p.color=player
+    for i in 0..<128
+        if board[i]=king
             kingCache = i
             return i
-    return -1
+    return -1  # Should never happen in a valid position
 
-fun isSquareAttacked(index:Int, player:Int) -> Bool
-    val enemy = 1 - player
-    for i in 0..<64
-        val p = board[i]
-        if p!=null and p.color=enemy
-            if p.type=PieceType.PAWN and isPawnAttack(i, index, enemy)
-                return true
-            elsif isValidMove(i, index, enemy)
-                return true
-    return false
 
 fun isInCheck(player:Int) -> Bool
-    val kingIndex = findKing(player)
-    return isSquareAttacked(kingIndex, player)
-
-fun isValidPawnMove(fromIndex:Int, toIndex:Int, player:Int) -> Bool
-    val dir = if player=0 then 8 else -8
-    val fromRank = rankOf(fromIndex)
-    val toRank = rankOf(toIndex)
-    val fromFile = fileOf(fromIndex)
-    val toFile = fileOf(toIndex)
-    val notMoved = if player=0 then fromRank=1 else fromRank=6
-    if toIndex = fromIndex + dir and isEmpty(toIndex) then return true
-    if notMoved and toIndex = fromIndex + 2*dir and isEmpty(toIndex) and isEmpty(fromIndex + dir) then return true
-    if toIndex = fromIndex + dir + 1 and toFile = fromFile + 1 and isEnemy(toIndex, player) then return true
-    if toIndex = fromIndex + dir - 1 and toFile = fromFile - 1 and isEnemy(toIndex, player) then return true    
-    return false
-
-fun isPawnAttack(fromIndex:Int, toIndex:Int, player:Int) -> Bool
-    val dir = if player=0 then 8 else -8
-    val fromRank = rankOf(fromIndex)
-    val toRank = rankOf(toIndex)
-    val fromFile = fileOf(fromIndex)
-    val toFile = fileOf(toIndex)
-    if toIndex = fromIndex + dir + 1 and toFile = fromFile + 1 then return true
-    if toIndex = fromIndex + dir - 1 and toFile = fromFile - 1 then return true    
-    return false
+    val kingSquare = findKing(player)
+    val opponent = 1 - player
+    return isSquareAttacked(kingSquare, opponent)
 
 
-fun isPawnPromote(index:Int, player:Int) -> Bool
-    val rank = rankOf(index)
-    return (player=0 and rank=7) or (player=1 and rank=0)   
-
-fun isValidKnightMove(fromIndex:Int, toIndex:Int, player:Int) -> Bool
-    val df = abs(fileOf(toIndex) - fileOf(fromIndex))
-    val dr = abs(rankOf(toIndex) - rankOf(fromIndex))
-
-    if (df = 1 and dr = 2) or (df = 2 and dr = 1)
-        if isEmptyOrEnemy(toIndex, player)
-            return true
-    return false
-
-fun isValidBishopMove(fromIndex:Int, toIndex:Int, player:Int) -> Bool
-    val df = abs(fileOf(toIndex) - fileOf(fromIndex))
-    val dr = abs(rankOf(toIndex) - rankOf(fromIndex))
-    if df!=dr then return false
-
-    val fileStep = if fileOf(toIndex) > fileOf(fromIndex) then 1 else -1
-    val rankStep = if rankOf(toIndex) > rankOf(fromIndex) then 8 else -8
-    val step = fileStep + rankStep
-    if isEmptyOrEnemy(toIndex,player) and isPathClear(fromIndex, toIndex, step)
+fun isSquareAttacked(square:Int, attackerColor:Int) -> Bool
+    # Check for pawn attacks
+    val pawnDirection = if attackerColor=PIECE_WHITE then -RANK_MULT else RANK_MULT
+    val pawnAttackLeft = square + pawnDirection - 1
+    if (pawnAttackLeft&INVALID_MASK) = 0 and board[pawnAttackLeft] = (PIECE_PAWN | attackerColor)
         return true
-    return false
+    val pawnAttackRight = square + pawnDirection + 1
+    if (pawnAttackRight&INVALID_MASK) = 0 and board[pawnAttackRight] = (PIECE_PAWN | attackerColor)
+        return true
 
-fun isValidRookMove(fromIndex:Int, toIndex:Int, player:Int) -> Bool
-    val fromFile = fileOf(fromIndex)
-    val fromRank = rankOf(fromIndex)
-    val toFile = fileOf(toIndex)
-    val toRank = rankOf(toIndex)
-    if fromFile = toFile
-        val step = if toRank > fromRank then 8 else -8
-        if isEmptyOrEnemy(toIndex, player) and isPathClear(fromIndex, toIndex, step)
+    # Check for knight attacks
+    for offset in knight_move_offsets
+        val knightSquare = square + offset
+        if (knightSquare&INVALID_MASK) = 0 and board[knightSquare] = (PIECE_KNIGHT | attackerColor)
             return true
-    else if fromRank = toRank
-        val step = if toFile > fromFile then 1 else -1
-        if isEmptyOrEnemy(toIndex, player) and isPathClear(fromIndex, toIndex, step)
+
+    # Check for bishop/queen attacks
+    for offset in bishop_move_offsets
+        for i in 1..7
+            val targetIndex = square + offset*i
+            if (targetIndex&INVALID_MASK)!=0
+                break
+            val targetPiece = board[targetIndex]
+            if targetPiece=0
+                continue
+            elsif targetPiece=(PIECE_BISHOP | attackerColor) or targetPiece=(PIECE_QUEEN | attackerColor)
+                return true
+            else
+                break
+
+    # Check for rook/queen attacks
+    for offset in rook_move_offsets
+        for i in 1..7
+            val targetIndex = square + offset*i
+            if (targetIndex&INVALID_MASK)!=0
+                break
+            val targetPiece = board[targetIndex]
+            if targetPiece=0
+                continue
+            elsif targetPiece=(PIECE_ROOK | attackerColor) or targetPiece=(PIECE_QUEEN | attackerColor)
+                return true
+            else
+                break
+
+    # Check for king attacks
+    for offset in king_move_offsets
+        val sq = square + offset
+        if (sq&INVALID_MASK) = 0 and board[sq] = (PIECE_KING | attackerColor)
             return true
     return false
 
-fun isValidQueenMove(fromIndex:Int, toIndex:Int, player:Int) -> Bool
-    return isValidBishopMove(fromIndex, toIndex, player) or isValidRookMove(fromIndex, toIndex, player)
+fun generateLegalMoves(moveList:MoveList, player:Int)
+    val ep = enPassantSquare
+    val sc = score
+    generatePseudoLegalMoves(moveList, player)
+    for i in 0..<moveList.count
+        makeMove(moveList.moves[i])
+        val check = isInCheck(player)
+        undoMove(moveList.moves[i])
+        if check
+            moveList.invalidateMove(i)  # Mark move as invalid if it leaves player in check
+    enPassantSquare = ep
+    score = sc
 
-fun isValidKingMove(fromIndex:Int, toIndex:Int, player:Int) -> Bool
-    val df = abs(fileOf(toIndex) - fileOf(fromIndex))
-    val dr = abs(rankOf(toIndex) - rankOf(fromIndex))
-    if df <= 1 and dr <= 1
-        return isEmptyOrEnemy(toIndex, player)
-    return false
+# fun evaluate(player:Int, depth:Int)
+#     val moveList = new MoveList()
+#     val ep = enPassantSquare
+#     generateLegalMoves(moveList, player)
+#     if depth!=0
+#         for i in 0..<moveList.count
+#             if moveList.moves[i].from != -1
+#                 makeMove(moveList.moves[i])
+#                 evaluate(1-player, depth-1)
+#                 undoMove(moveList.moves[i])
+#                 enPassantSquare = ep
+#     else
+#         for i in 0..<moveList.count
+#             if moveList.moves[i].from != -1
+#                 totalMoves += 1
+#     free(moveList)
 
+fun showMovesWithScore(moveList:MoveList, player:Int)
+    val ep = enPassantSquare
+    val sc = score
+    kprintf("Move list with scores: %d\n", score)
+    for i in 0..<moveList.count
+        if moveList.moves[i].from != -1
+            kprintf("Move: ")
+            moveList.printMove(i)
+            makeMove(moveList.moves[i])
+            val moveScore = minimax(1, 1 - player)
+            kprintf(" Score: %d\n", moveScore)
+            undoMove(moveList.moves[i])
+            enPassantSquare = ep
+            score = sc
 
-# check if a move is valid for the piece, based solely on how the piece moves (not checking for check etc)
-fun isValidMove(fromIndex:Int, toIndex:Int, player:Int) -> Bool
-    if fromIndex<0 or fromIndex>=64 or toIndex<0 or toIndex>=64 or fromIndex=toIndex
-        return false
-    val piece = board[fromIndex]
-    if piece=null or piece.color != player
-        return false
-    when piece.type
-        PieceType.PAWN -> 
-            return isValidPawnMove(fromIndex, toIndex, player)
-        PieceType.KNIGHT ->
-            return isValidKnightMove(fromIndex, toIndex, player)
-        PieceType.BISHOP ->
-            return isValidBishopMove(fromIndex, toIndex, player)
-        PieceType.ROOK ->
-            return isValidRookMove(fromIndex, toIndex, player)
-        PieceType.QUEEN ->
-            return isValidQueenMove(fromIndex, toIndex, player)
-        PieceType.KING ->
-            return isValidKingMove(fromIndex, toIndex, player)
+fun chooseBestMove(moveList:MoveList, player:Int) -> Int
+    val ep = enPassantSquare
+    val sc = score
+    kprintf("Move list with scores: %d\n", score)
+    var bestMoveIndex = -1
+    var bestScore = if player=PIECE_WHITE then -100000 else 100000
 
-# Validate that the destination square is either empty or occupied by an enemy piece,  
-# and add it to the list of moves. 
-fun tryAddMove(fromIndex:Int, toIndex:Int, player:Int, toList:MoveList)
-    if toIndex<0 or toIndex>=64 or fromIndex=toIndex
-        return
-    val dest = board[toIndex]
-    if dest=null or dest.color!=player
-        toList.add(fromIndex, toIndex, dest)
-
-fun getValidPawnMoves(index:Int, player:Int, toList:MoveList)
-    val dir = if player=0 then 1 else -1
-    val startRank = if player=0 then 1 else 6
-    val file = fileOf(index)
-    val rank = rankOf(index)
-
-    val oneForwardIndex = (rank + dir) * 8 + file
-    if oneForwardIndex<0 or oneForwardIndex>=64 then return
-    if isEmpty(oneForwardIndex)
-        toList.add(index, oneForwardIndex, null)
-
-    # captures
-    val leftIndex = oneForwardIndex - 1
-    if file>0 and isEnemy(leftIndex, player)
-        toList.add(index, leftIndex, board[leftIndex])
-
-    val rightIndex = oneForwardIndex + 1
-    if file<7 and isEnemy(rightIndex, player)
-        toList.add(index, rightIndex, board[rightIndex])
-
-    val twoForwardIndex = (rank + 2*dir) * 8 + file
-    if rank = startRank and board[oneForwardIndex]=null and board[twoForwardIndex]=null
-        toList.add(index, twoForwardIndex, null)
-
-    
-# Pairs of (rank offset, file offset) for knight moves
-const knightMoves = const Array<Int>[
-    -1,-2, -1,2, 1, -2, 1, 2,
-    -2,-1, -2,1, 2, -1, 2, 1 ]
-
-const BishopMoves = const Array<Int>[
-    -1,-1,  -1,1,
-    1,-1,   1,1 ]
-
-const RookMoves = const Array<Int>[
-    -1,0,  1,0,
-    0,-1,  0,1 ]
-
-const KingMoves = const Array<Int>[
-    -1,-1, -1,0, -1,1,
-    0,-1,         0,1,
-    1,-1,  1,0,  1,1 ]
-
-fun getValidKnightMoves(index:Int, player:Int, toList:MoveList)
-    # valid knight moves are at offsets: -17, -15, -10, -6, +6, +10, +15, +17
-    val rank = rankOf(index)
-    val file = fileOf(index)
-    for i in 0..<8
-        val destRank = rank + knightMoves[2*i]
-        val destFile = file + knightMoves[2*i + 1]
-        if destRank>=0 and destRank<8 and destFile>=0 and destFile<8
-            val destIndex = destRank*8 + destFile
-            if isEmptyOrEnemy(destIndex, player)
-                toList.add(index, destIndex, board[destIndex])
-
-fun getValidBishopMoves(index:Int, player:Int, toList:MoveList)
-    val rank = rankOf(index)
-    val file = fileOf(index)
-    for i in 0..<4
-        val fileStep = BishopMoves[2*i]
-        val rankStep = BishopMoves[2*i + 1]
-        var destFile = file + fileStep
-        var destRank = rank + rankStep
-        while destFile>=0 and destFile<8 and destRank>=0 and destRank<8
-            val destIndex = destRank*8 + destFile
-            if isEmpty(destIndex)
-                toList.add(index, destIndex, null)
-            else if isEnemy(destIndex, player)
-                toList.add(index, destIndex, board[destIndex])
-                break
-            else
-                break
-            destFile += fileStep
-            destRank += rankStep
-
-fun getValidRookMoves(index:Int, player:Int, toList:MoveList)
-    val rank = rankOf(index)
-    val file = fileOf(index)
-    for i in 0..<4
-        val fileStep = RookMoves[2*i]
-        val rankStep = RookMoves[2*i + 1]
-        var destFile = file + fileStep
-        var destRank = rank + rankStep
-        while destFile>=0 and destFile<8 and destRank>=0 and destRank<8
-            val destIndex = destRank*8 + destFile
-            if isEmpty(destIndex)
-                toList.add(index, destIndex, null)
-            else if isEnemy(destIndex, player)
-                toList.add(index, destIndex, board[destIndex])
-                break
-            else
-                break
-            destFile += fileStep
-            destRank += rankStep
-
-fun getValidQueenMoves(index:Int, player:Int, toList:MoveList)
-    getValidBishopMoves(index, player, toList)
-    getValidRookMoves(index, player, toList)
-
-fun getValidKingMoves(index:Int, player:Int, toList:MoveList)
-    val rank = rankOf(index)
-    val file = fileOf(index)
-    for i in 0..<8
-        val destRank = rank + KingMoves[2*i]
-        val destFile = file + KingMoves[2*i + 1]
-        if destRank>=0 and destRank<8 and destFile>=0 and destFile<8
-            val destIndex = destRank*8 + destFile
-            if isEmptyOrEnemy(destIndex, player)
-                toList.add(index, destIndex, board[destIndex])
-
-
-
-fun getLegalMoves(index:Int, toList:MoveList)
-    val piece = board[index]
-    if piece=null
-        kprintf("ERROR: findAllLegalMoves called on empty square\n")
-        abort(100)
-    val player = piece.color
-    hwregs.ledr = 1 lsl piece.type as Int
-    when piece.type
-        PieceType.PAWN -> getValidPawnMoves(index, player, toList)
-        PieceType.KNIGHT -> getValidKnightMoves(index, player, toList)
-        PieceType.BISHOP -> getValidBishopMoves(index, player, toList)
-        PieceType.ROOK -> getValidRookMoves(index, player, toList)
-        PieceType.QUEEN -> getValidQueenMoves(index, player, toList)
-        PieceType.KING -> getValidKingMoves(index, player, toList)
-    hwregs.ledr = 0
-            
-fun findAllLegalMoves(player:Int) -> MoveList
-    val moves = new MoveList()
-    for fromIndex in 0..<64
-        val piece = board[fromIndex]
-        if piece!=null and piece.color=player
-            getLegalMoves(fromIndex, moves)
-    # TODO: filter moves that leave king in check
-    return moves
-
-
-
-
-fun makeMove(fromIndex:Int, toIndex:Int)
-    capturedPiece = board[toIndex]
-    previousFromIndex = fromIndex
-    previousToIndex = toIndex
-    board[toIndex] = board[fromIndex]
-    board[fromIndex] = null
-end fun
-
-fun undoMove()
-    if previousFromIndex = -1 or previousToIndex = -1 then return
-    board[previousFromIndex] = board[previousToIndex]
-    board[previousToIndex] = capturedPiece
-    capturedPiece = null
-    previousFromIndex = -1
-    previousToIndex = -1
-end fun
-
-# check if a move is legal, meaning it is valid and does not put own king in check
-fun isLegalMove(fromIndex:Int, toIndex:Int, player:Int) -> Bool
-    if not isValidMove(fromIndex, toIndex, player) then return false
-    makeMove(fromIndex, toIndex)
-    if isInCheck(player)
-        undoMove()
-        return false
-    undoMove()
-    return true
-
-fun kprintSquare(index:Int)
-    val file = fileOf(index)
-    val rank = rankOf(index)
-    uartTx((('a' as Int) + file) as Char)
-    uartTx((('1' as Int) + rank) as Char)
-
-fun kprintPiece(piece:Piece)
-    val c : Char
-    when piece.type
-        PieceType.KING -> c='K'
-        PieceType.QUEEN -> c='Q'
-        PieceType.ROOK -> c='R'
-        PieceType.BISHOP -> c='B'
-        PieceType.KNIGHT -> c='N'
-        PieceType.PAWN -> c='P'
-    uartTx(c)
-
-struct Move(fromIndex:Int, toIndex:Int, capturedPiece:Piece?)
-
-class MoveList
-    var length = 0
-    val items : InlineArray<Move>(256)
-
-    fun clear()
-        length = 0
-
-    fun get(index:Int) -> Move
-        # kprintf("MoveList.get: %08x index=%d (%d->%d)\n", this, index, items[index].fromIndex, items[index].toIndex)
-        return items[index]
-
-    fun add(fromIndex:Int, toIndex:Int, capturedPiece:Piece?)
-        # kprintf("MoveList.add: %08x index=%d from=%d to=%d captured=%x\n", unsafe(this as Int), length, fromIndex, toIndex, capturedPiece)
-        items[length] = Move(fromIndex, toIndex, capturedPiece)
-        length += 1
-
-fun print(move:Move)
-    val piece = board[move.fromIndex]
-    if piece=null then return
-    kprintPiece(piece)
-    kprintSquare(move.fromIndex)
-    if move.capturedPiece!=null
-        uartTx('x')
-    else
-        uartTx('-')
-    kprintSquare(move.toIndex)
-
-fun makeMove(move:Move)
-    # kprintf("Making move: %d -> %d\n", move.fromIndex, move.toIndex)
-    board[move.toIndex] = board[move.fromIndex]
-    board[move.fromIndex] = null
-
-fun undoMove(move:Move)
-    board[move.fromIndex] = board[move.toIndex]
-    board[move.toIndex] = move.capturedPiece
-
-
-fun getPieceValue(piece:PieceType) -> Int
-    when piece
-        PieceType.KING -> return 10000
-        PieceType.QUEEN -> return 900
-        PieceType.ROOK -> return 500
-        PieceType.BISHOP -> return 300
-        PieceType.KNIGHT -> return 300
-        PieceType.PAWN -> return 100
-
-fun evaluateBoard() -> Int
-    var score = 0
-    for i in 0..<64
-        val piece = board[i]
-        if piece!=null
-            val value = getPieceValue(piece.type)
-            if piece.color=0
-                score += value
-            else
-                score -= value
-    return score
-
-fun printMovesWithScores(moves:MoveList)
-    kprintf("\n")
-    for move in moves
-        makeMove(move)
-        val score = evaluateBoard()
-        undoMove(move)
-        print(move)
-        kprintf(": %d\n", score)
-
-
-const MATE_SCORE = 100000
+    for i in 0..<moveList.count
+        if moveList.moves[i].from != -1
+            kprintf("Move: ")
+            moveList.printMove(i)
+            makeMove(moveList.moves[i])
+            val moveScore = minimax(LEVEL, 1 - player)
+            kprintf(" Score: %d\n", moveScore)
+            if player=PIECE_WHITE and moveScore > bestScore
+                bestScore = moveScore
+                bestMoveIndex = i
+            if player=PIECE_BLACK and moveScore < bestScore
+                bestScore = moveScore
+                bestMoveIndex = i
+            undoMove(moveList.moves[i])
+            enPassantSquare = ep
+            score = sc
+    return bestMoveIndex
 
 
 fun minimax(depth:Int, player:Int) -> Int
+    # kprintf("Minimax depth %d, player %d, score %d\n", depth, player, score)
+    if depth=0
+        return score
 
-    if depth = 0
-        numEvaluations += 1
-        return evaluateBoard()
-
-    val moves = findAllLegalMoves(player)
-
-    # Terminal node: no moves
-    if moves.length=0
-        if isInCheck(player)
-            # player is checkmated
-            return if player=0 then -MATE_SCORE else MATE_SCORE
-        else
-            # stalemate
-            return 0
-
-    var best = 0
-    if player = 0
-        # White maximizes
-        best = -1000000
-        for i in 0..<moves.length
-            val move = moves.get(i)
-            # kprintf("minimax: here3 %x\n", move)
-            # kprintf("minimax_w: trying move %d -> %d\n", move.fromIndex, move.toIndex)
-            makeMove(move)
-            val score = minimax(depth - 1, 1)
-            undoMove(move)
-            if score > best
-                best = score
-    else
-        # Black minimizes
-        best = 1000000
-        for i in 0..<moves.length
-            val move = moves.get(i)
-            # kprintf("minimax: here3b\n")
-            # kprintf("minimax_b: trying move %d -> %d\n", move.fromIndex, move.toIndex)
-            makeMove(move)
-            val score = minimax(depth - 1, 0)
-            undoMove(move)
-            if score < best
-                best = score
-    free(moves)
-    return best
-
-# returns the index of the best move found, or -1 if no legal moves
-fun findBestMove(moves:MoveList, player:Int) -> Int
-    if moves.length=0 then return -1
-
-    var bestMove = -1
-    var bestScore = if player=0 then -1000000 else 1000000
-
-    for i in 0..<moves.length
-        val move = moves.get(i)
-        makeMove(move)
-        val score = minimax(LEVEL, 1 - player)   # depth 2 total
-        undoMove(move)
-
-        kprintf("Move: ")
-        print(move)
-        kprintf(" Score: %d\n", score)
-
-        if (player=0 and score > bestScore) or
-           (player=1 and score < bestScore)
-            bestScore = score
-            bestMove = i
-
-    return bestMove
+    val moveList = new MoveList()
+    val ep = enPassantSquare
+    val sc = score
+    generatePseudoLegalMoves(moveList, player)
+    var bestScore = if player=PIECE_WHITE then -100000 else 100000
+    for i in 0..<moveList.count
+        if moveList.moves[i].from != -1
+            makeMove(moveList.moves[i])
+            val eval = minimax(depth-1, 1-player)
+            undoMove(moveList.moves[i])
+            enPassantSquare = ep
+            score = sc
+            if player=PIECE_WHITE and eval > bestScore
+                bestScore = eval
+            if player=PIECE_BLACK and eval < bestScore
+                bestScore = eval
+    free(moveList)
+    return bestScore
 
 
-
-fun makeAIMove()
-    numEvaluations = 0
-    val moves = findAllLegalMoves(currentPlayer)
-    val moveIndex = findBestMove(moves, currentPlayer)
-    if moveIndex!=-1
-        val move = moves.get(moveIndex)
-        kprintf("AI chooses move: ")
-        print(move)
-        kprintf(" after %d evaluations\n", numEvaluations)
-        makeMove(move)
-        currentPlayer = 1 - currentPlayer
-    else
-        # No legal moves, game over
-        if isInCheck(currentPlayer)
-            kprintf("Checkmate! Player %d wins\n", 1 - currentPlayer)
-        else
-            kprintf("Stalemate! It's a draw\n")
+# function alphabeta(node, depth, α, β, maximizingPlayer) is
+#     if depth == 0 or node is terminal then
+#         return the heuristic value of node
+#     if maximizingPlayer then
+#         value := −∞
+#         for each child of node do
+#             value := max(value, alphabeta(child, depth − 1, α, β, FALSE))
+#             if value ≥ β then
+#                 break (* β cutoff *)
+#             α := max(α, value)
+#         return value
+#     else
+#         value := +∞
+#         for each child of node do
+#             value := min(value, alphabeta(child, depth − 1, α, β, TRUE))
+#             if value ≤ α then
+#                 break (* α cutoff *)
+#             β := min(β, value)
+#         return value
