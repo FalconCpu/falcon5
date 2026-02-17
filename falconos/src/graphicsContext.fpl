@@ -224,8 +224,8 @@ class GraphicsContext
         hwregs.blit_cmd = unsafe(image.data as Int)  # SRC address
 
         hwregs.blit_cmd = CMD_COPY_RECT     # CMD COPY
-        hwregs.blit_cmd = y lsl 16 | x      # dest x1,y1
-        hwregs.blit_cmd = (y + image.height) lsl 16 | (x + image.width)  # dest x2,y2
+        hwregs.blit_cmd = y lsl 16 | (x & 0xffff)      # dest x1,y1
+        hwregs.blit_cmd = (y + image.height) lsl 16 | ((x + image.width)&0xffff)  # dest x2,y2
         hwregs.blit_cmd = 0                 # src x,y = 0,0
 
     fun drawImage(x:Int, y:Int, image:Image, scaleX:Float, scaleY:Float)

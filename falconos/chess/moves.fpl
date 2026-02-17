@@ -17,7 +17,7 @@ const COLOR_MASK = 1     # Mask to extract color bit
 const PIECE_WHITE = 0
 const PIECE_BLACK = 1
 
-const LEVEL = 3
+const LEVEL = 4
 
 
 val board = new Array<Int>(128)  # 16x8 board, only indices where (index & 0x88) = 0 are valid
@@ -177,15 +177,78 @@ fun undoMove(move:Move)
 #                   Piece value
 # =======================================================================
 
+const pawnTable = const Array<Int>[
+  0,   0,  0,   0,    0,   0,  0,    0,   0,0,0,0,0,0,0,0,
+ 105, 110,  110, 80,   80, 110, 110, 105, 0,0,0,0,0,0,0,0,
+ 105, 95,   90, 100, 100,  90,  95, 105,  0,0,0,0,0,0,0,0,
+ 100, 100, 100, 120, 120, 100, 100, 100,  0,0,0,0,0,0,0,0,
+ 105, 105, 110, 125, 125, 110, 105, 105,  0,0,0,0,0,0,0,0,
+ 110, 110, 120, 130, 130, 120, 110, 110,  0,0,0,0,0,0,0,0,
+ 150, 150, 150, 150, 150, 150, 150, 150,  0,0,0,0,0,0,0,0,
+ 900, 900, 900, 900, 900, 900, 900, 900,  0,0,0,0,0,0,0,0]
+
+const knightTable = const Array<Int>[
+ 250, 260, 270, 270, 270, 270, 260, 250, 0,0,0,0,0,0,0,0,
+ 260, 280, 300, 305, 305, 300, 280, 260, 0,0,0,0,0,0,0,0,
+ 270, 305, 310, 315, 315, 310, 305, 270, 0,0,0,0,0,0,0,0,
+ 270, 300, 315, 320, 320, 315, 300, 270, 0,0,0,0,0,0,0,0,
+ 270, 305, 315, 320, 320, 315, 305, 270, 0,0,0,0,0,0,0,0,
+ 270, 300, 310, 315, 315, 310, 300, 270, 0,0,0,0,0,0,0,0,
+ 260, 280, 300, 300, 300, 300, 280, 260, 0,0,0,0,0,0,0,0,
+ 250, 260, 270, 270, 270, 270, 260, 250, 0,0,0,0,0,0,0,0]
+
+const bishopTable = const Array<Int>[
+ 280, 290, 290, 290, 290, 290, 290, 280, 0,0,0,0,0,0,0,0,
+ 290, 305, 300, 300, 300, 300, 305, 290, 0,0,0,0,0,0,0,0,
+ 290, 310, 310, 310, 310, 310, 310, 290, 0,0,0,0,0,0,0,0,
+ 290, 300, 310, 310, 310, 310, 300, 290, 0,0,0,0,0,0,0,0,
+ 290, 305, 305, 310, 310, 305, 305, 290, 0,0,0,0,0,0,0,0,
+ 290, 300, 305, 310, 310, 305, 300, 290, 0,0,0,0,0,0,0,0,
+ 290, 300, 300, 300, 300, 300, 300, 290, 0,0,0,0,0,0,0,0,
+ 280, 290, 290, 290, 290, 290, 290, 280, 0,0,0,0,0,0,0,0]
+
+const rookTable = const Array<Int>[
+  500,  500, 505, 510, 510, 505, 500, 500, 0,0,0,0,0,0,0,0,
+  495,  500, 500, 500, 500, 500, 500, 495, 0,0,0,0,0,0,0,0,
+  495,  500, 500, 500, 500, 500, 500, 495, 0,0,0,0,0,0,0,0,
+  495,  500, 500, 500, 500, 500, 500, 495, 0,0,0,0,0,0,0,0,
+  495,  500, 500, 500, 500, 500, 500, 495, 0,0,0,0,0,0,0,0,
+  495,  500, 500, 500, 500, 500, 500, 495, 0,0,0,0,0,0,0,0,
+  505,  510, 510, 510, 510, 510, 510, 505, 0,0,0,0,0,0,0,0,
+  500,  500, 500, 500, 500, 500, 500, 500, 0,0,0,0,0,0,0,0]
+
+const queenTable = const Array<Int>[
+ 880, 891, 890, 895, 895, 890, 890, 880,   0,0,0,0,0,0,0,0,
+ 890, 900, 900, 900, 900, 900, 900, 890,   0,0,0,0,0,0,0,0,
+ 890, 900, 905, 905, 905, 905, 900, 890,   0,0,0,0,0,0,0,0,
+ 895, 900, 905, 905, 905, 905, 900, 895,   0,0,0,0,0,0,0,0,
+ 900, 900, 905, 905, 905, 905, 900, 895,   0,0,0,0,0,0,0,0,
+ 890, 905, 905, 905, 905, 905, 900, 890,   0,0,0,0,0,0,0,0,
+ 890, 900, 905, 900, 900, 900, 900, 890,   0,0,0,0,0,0,0,0,
+ 880, 890, 890, 895, 895, 890, 890, 880,   0,0,0,0,0,0,0,0]
+
+const kingTable = const Array<Int>[
+  9970, 9960, 9960, 9950, 9950, 9960, 9960, 9970, 0,0,0,0,0,0,0,0,
+  9970, 9960, 9960, 9950, 9950, 9960, 9960, 9970, 0,0,0,0,0,0,0,0,
+  9970, 9960, 9960, 9950, 9950, 9960, 9960, 9970, 0,0,0,0,0,0,0,0,
+  9970, 9960, 9960, 9950, 9950, 9960, 9960, 9970, 0,0,0,0,0,0,0,0,
+  9980, 9970, 9970, 9960, 9960, 9970, 9970, 9980, 0,0,0,0,0,0,0,0,
+  9990, 9980, 9980, 9980, 9980, 9980, 9980, 9990, 0,0,0,0,0,0,0,0,
+ 10020,10020,10000,10000,10000,10000,10020,10020, 0,0,0,0,0,0,0,0,
+ 10020,10030,10010,10000,10000,10010,10030,10020, 0,0,0,0,0,0,0,0]
+
+
+
 fun getPieceValue(piece:Int, square:Int) -> Int
     val value:Int
-    when piece&PIECE_MASK
-        PIECE_PAWN -> value = 100
-        PIECE_KNIGHT -> value = 320
-        PIECE_BISHOP -> value = 330
-        PIECE_ROOK -> value = 500
-        PIECE_QUEEN -> value = 900
-        PIECE_KING -> value = 20000
+    val sq = if (piece&COLOR_MASK) = PIECE_WHITE then square else 119 - square  # Mirror the board for black pieces
+    when piece & PIECE_MASK
+        PIECE_PAWN -> value = pawnTable[sq]
+        PIECE_KNIGHT -> value = knightTable[sq]
+        PIECE_BISHOP -> value = bishopTable[sq]
+        PIECE_ROOK -> value = rookTable[sq]
+        PIECE_QUEEN -> value = queenTable[sq]
+        PIECE_KING -> value = kingTable[sq]
         else -> value = 0
     if (piece&COLOR_MASK) = PIECE_WHITE
         return value
@@ -396,7 +459,7 @@ fun showMovesWithScore(moveList:MoveList, player:Int)
             kprintf("Move: ")
             moveList.printMove(i)
             makeMove(moveList.moves[i])
-            val moveScore = minimax(1, 1 - player)
+            val moveScore = alphabeta(1, 1 - player, -100000, 100000)
             kprintf(" Score: %d\n", moveScore)
             undoMove(moveList.moves[i])
             enPassantSquare = ep
@@ -408,27 +471,33 @@ fun chooseBestMove(moveList:MoveList, player:Int) -> Int
     kprintf("Move list with scores: %d\n", score)
     var bestMoveIndex = -1
     var bestScore = if player=PIECE_WHITE then -100000 else 100000
+    
+    # Initialize alpha/beta window - will be narrowed as we find better moves
+    var alpha = -100000
+    var beta = 100000
 
     for i in 0..<moveList.count
         if moveList.moves[i].from != -1
             kprintf("Move: ")
             moveList.printMove(i)
             makeMove(moveList.moves[i])
-            val moveScore = minimax(LEVEL, 1 - player)
+            val moveScore = alphabeta(LEVEL, 1 - player, alpha, beta)
             kprintf(" Score: %d\n", moveScore)
             if player=PIECE_WHITE and moveScore > bestScore
                 bestScore = moveScore
                 bestMoveIndex = i
+                alpha = bestScore  # Narrow the window - future moves must beat this
             if player=PIECE_BLACK and moveScore < bestScore
                 bestScore = moveScore
                 bestMoveIndex = i
+                beta = bestScore  # Narrow the window - future moves must beat this
             undoMove(moveList.moves[i])
             enPassantSquare = ep
             score = sc
     return bestMoveIndex
 
 
-fun minimax(depth:Int, player:Int) -> Int
+fun alphabeta(depth:Int, player:Int, alpha:Int, beta:Int) -> Int
     # kprintf("Minimax depth %d, player %d, score %d\n", depth, player, score)
     if depth=0
         return score
@@ -437,18 +506,38 @@ fun minimax(depth:Int, player:Int) -> Int
     val ep = enPassantSquare
     val sc = score
     generatePseudoLegalMoves(moveList, player)
+    
+    var a = alpha
+    var b = beta
     var bestScore = if player=PIECE_WHITE then -100000 else 100000
+    
     for i in 0..<moveList.count
         if moveList.moves[i].from != -1
             makeMove(moveList.moves[i])
-            val eval = minimax(depth-1, 1-player)
+            val eval = alphabeta(depth-1, 1-player, a, b)
             undoMove(moveList.moves[i])
             enPassantSquare = ep
             score = sc
-            if player=PIECE_WHITE and eval > bestScore
-                bestScore = eval
-            if player=PIECE_BLACK and eval < bestScore
-                bestScore = eval
+            
+            if player=PIECE_WHITE
+                if eval > bestScore
+                    bestScore = eval
+                if bestScore >= b
+                    # Beta cutoff
+                    free(moveList)
+                    return bestScore
+                if bestScore > a
+                    a = bestScore
+            else
+                if eval < bestScore
+                    bestScore = eval
+                if bestScore <= a
+                    # Alpha cutoff
+                    free(moveList)
+                    return bestScore
+                if bestScore < b
+                    b = bestScore
+    
     free(moveList)
     return bestScore
 
