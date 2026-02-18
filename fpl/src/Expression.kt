@@ -102,11 +102,3 @@ enum class FpuOp {
     FTOI_F,
     ITOF_F
 }
-
-enum class LongOp {
-    // Integer Operations
-    ADD_L,
-    SUB_L,
-    MUL_L,
-    DIV_L
-}

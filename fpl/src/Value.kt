@@ -26,8 +26,11 @@ class IntValue(val value: Int, type:Type) : Value(type) {
 class LongValue(val value: Long, type:Type) : Value(type) {
     override fun toString(): String = "LongValue:$value"
 
+    @OptIn(ExperimentalStdlibApi::class)
     override fun emitRef(sb:StringBuilder) {
-        sb.append("dcl $value\n")
+        val low = (value and 0xFFFFFFFF).toHexString()
+        val high = ((value ushr 32) and 0xFFFFFFFF).toHexString()
+        sb.append("dcw 0x$low, 0x$high\n")
     }
 }
 

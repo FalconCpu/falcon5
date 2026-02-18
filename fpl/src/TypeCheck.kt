@@ -255,11 +255,15 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
             val tctRhs = rhs.typeCheckRvalue(scope)
             if (tctLhs.type==TypeError || tctRhs.type==TypeError)
                 return TctErrorExpr(location, "")
+            // Type promotions
+            val lhsType = if (tctLhs.type is TypeChar) TypeInt else tctLhs.type
+            val rhsType = if (tctRhs.type is TypeChar) TypeInt else tctRhs.type
+
             if (tctLhs.type is TypeReal || tctRhs.type is TypeReal)
                 return binopRealTypeCheck(location, op, tctLhs, tctRhs)
             if (tctLhs.type is TypeLong || tctRhs.type is TypeLong)
                 return binopLongTypeCheck(location, op, tctLhs, tctRhs)
-            val match = operatorTable.find{it.tokenKind==op && it.lhsType==tctLhs.type && it.rhsType==tctRhs.type}
+            val match = operatorTable.find{it.tokenKind==op && it.lhsType==lhsType && it.rhsType==rhsType}
             if (match==null)
                 return TctErrorExpr(location, "Invalid operator '${op}' for types '${tctLhs.type}' and '${tctRhs.type}'")
             if (tctLhs is TctConstant && tctRhs is TctConstant) {
@@ -601,6 +605,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
             val aluOp = op.toCompareOp()
             when(tcLhs.type) {
                 TypeString -> TctStringCompareExpr(location, aluOp, tcLhs, tcRhs)
+                TypeLong -> TctLongCompareExpr(location, aluOp, tcLhs, tcRhs)
                 else -> TctIntCompareExpr(location, aluOp, tcLhs, tcRhs)
             }
         }
@@ -615,6 +620,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
             val aluOp = op.toCompareOp()
             when(tcLhs.type) {
                 TypeInt, TypeChar, TypeBool -> TctIntCompareExpr(location, aluOp, tcLhs, tcRhs)
+                TypeLong -> TctLongCompareExpr(location, aluOp, tcLhs, tcRhs)
                 TypeString -> TctStringCompareExpr(location, aluOp, tcLhs, tcRhs)
                 TypeReal -> TctRealCompareExpr(location, aluOp, tcLhs, tcRhs)
                 else -> TctErrorExpr(location, "Cannot compare type '${tcLhs.type}' with operator '${op}'")
@@ -673,7 +679,7 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
                 return TctConstant(location, entry.value)
             }
 
-             if ( (tctExpr.type is TypeEnum && typeR is TypeInt) ||
+            if ( (tctExpr.type is TypeEnum && typeR is TypeInt) ||
                 (tctExpr.type is TypeInt && typeR is TypeEnum) ||
                 (tctExpr.type is TypeChar && typeR is TypeInt) ||
                 (tctExpr.type is TypeInt && typeR is TypeChar) ||
@@ -683,6 +689,10 @@ private fun AstExpr.typeCheckExpr(scope: AstBlock, isLvalue:Boolean=false) : Tct
                 TctIntToRealExpr(location, tctExpr)
             } else if (tctExpr.type is TypeReal && typeR is TypeInt) {
                 TctRealToIntExpr(location, tctExpr)
+            } else if (tctExpr.type is TypeLong && typeR is TypeInt) {
+                TctLongToIntExpr(location, tctExpr)
+            } else if (tctExpr.type is TypeInt && typeR is TypeLong) {
+                TctIntToLongExpr(location, tctExpr)
             } else if (insideUnsafe) {
                 if (tctExpr is TctConstant && tctExpr.value is IntValue)
                     TctConstant(location, IntValue(tctExpr.value.value, typeR))
@@ -782,24 +792,36 @@ private fun binopRealTypeCheck(location: Location, op: TokenKind, lhs: TctExpr, 
     return TctFpuExpr(location, fpuOp, tctLhs, tctRhs, TypeReal)
 }
 
-private fun binopLongTypeCheck(location: Location, op: TokenKind, lhs: TctExpr, rhs: TctExpr): TctExpr {
-//    val tctLhs = if (lhs.type == TypeInt) TctIntToLongExpr(lhs.location, lhs) else lhs
-//    val tctRhs = if (rhs.type == TypeInt) TctIntToLongExpr(rhs.location, rhs) else rhs
-    val tctLhs = lhs
-    val tctRhs = rhs
+private fun binopLongTypeCheck(location: Location, inOp: TokenKind, lhs: TctExpr, rhs: TctExpr): TctExpr {
+    // By the time code reaches this function, we have already determined that neither operand is type Error and at least
+    // one of the operands is of type Long
 
-    if (tctLhs.type != TypeLong || tctRhs.type != TypeLong)
-        return TctErrorExpr(location, "Invalid operator '${op}' for types '${lhs.type}' and '${rhs.type}'")
+    val lhsIsLong = lhs.type == TypeLong
+    val rhsIsLong = rhs.type == TypeLong
+    val rhsIsInt = rhs.type == TypeInt
 
-    val longOp = when(op) {
-        TokenKind.PLUS -> LongOp.ADD_L
-        TokenKind.MINUS -> LongOp.SUB_L
-        TokenKind.STAR -> LongOp.MUL_L
-        TokenKind.SLASH -> LongOp.DIV_L
-        else -> return TctErrorExpr(location, "Invalid operator '${op}' for types '${lhs.type}' and '${rhs.type}'")
+    val ok : Boolean
+    val op : BinOp
+    val type : Type
+
+    when(inOp) {
+        TokenKind.PLUS ->  { op = BinOp.ADD_I; ok = lhsIsLong && rhsIsLong ; type = TypeLong }
+        TokenKind.MINUS -> { op = BinOp.SUB_I; ok = lhsIsLong && rhsIsLong ; type = TypeLong }
+        TokenKind.STAR ->  { op = BinOp.MUL_I; ok = lhsIsLong && rhsIsLong ; type = TypeLong }
+        TokenKind.SLASH -> { op = BinOp.DIV_I; ok = lhsIsLong && rhsIsLong ; type = TypeLong }
+        TokenKind.LSR ->   { op = BinOp.LSR_I; ok = lhsIsLong && rhsIsInt  ; type = TypeLong }
+        TokenKind.LSL ->   { op = BinOp.LSL_I; ok = lhsIsLong && rhsIsInt  ; type = TypeLong }
+        TokenKind.ASR ->   { op = BinOp.ASR_I; ok = lhsIsLong && rhsIsInt  ; type = TypeLong }
+        TokenKind.AMPERSAND -> {op = BinOp.AND_I; ok = lhsIsLong && rhsIsLong ; type = TypeLong }
+        TokenKind.BAR   -> {op = BinOp.OR_I;  ok = lhsIsLong && rhsIsLong ; type = TypeLong }
+        TokenKind.CARET -> { op = BinOp.XOR_I; ok = lhsIsLong && rhsIsLong ; type = TypeLong }
+        else -> { ok = false; op = BinOp.ADD_I; type = TypeLong }  // Dummy values to satisfy compiler
     }
 
-    return TctLongExpr(location, longOp, tctLhs, tctRhs, TypeLong)
+    return if (ok)
+        TctLongExpr(location, op, lhs, rhs, TypeLong)
+    else
+        TctErrorExpr(location, "Invalid operator '${inOp}' for types '${lhs.type}' and '${rhs.type}'")
 }
 
 

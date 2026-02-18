@@ -19,11 +19,228 @@ const PIECE_BLACK = 1
 
 const LEVEL = 4
 
+# Transposition table bound types
+const TT_EXACT = 0       # Exact score (PV node)
+const TT_LOWER_BOUND = 1 # Beta cutoff (score >= beta)
+const TT_UPPER_BOUND = 2 # Alpha cutoff (score <= alpha)
+
+# Transposition table entry
+struct TTEntry(hash:Int, score:Int, depth:Int, boundType:Int)
+
+const TT_SIZE = 2000000
+val transpositionTable = new Array<TTEntry>(TT_SIZE)
+var ttHits = 0
+var ttStores = 0
+var ttProbes = 0
+var ttHashMatches = 0
+var ttDepthFailures = 0
+var ttBoundRejections = 0
+
 
 val board = new Array<Int>(128)  # 16x8 board, only indices where (index & 0x88) = 0 are valid
 var enPassantSquare = -1  # Index of en passant target square, or -1 if none
 var totalMoves = 0
 var score = 0
+
+# Zobrist hashing for position detection
+val zobristPieces = new Array<Int>(128 * 14)  # 128 squares * 14 piece types (7 pieces * 2 colors)
+val zobristEnPassant = new Array<Int>(8)      # En-passant file (0-7)
+var zobristSideToMove = 0                     # XOR this when switching sides
+var currentHash = 0                           # Current position hash
+
+# Statistics for measuring transposition table performance
+var totalPositionsEvaluated = 0
+
+# Killer move heuristic - store moves that caused beta cutoffs
+const MAX_PLY = 20
+val killerMoves1 = new Array<Int>(MAX_PLY)  # Store as (from << 8) | to
+val killerMoves2 = new Array<Int>(MAX_PLY)  # Second killer per ply
+var killerHits = 0
+var killerStores = 0
+
+fun initializeKillerMoves()
+    for i in 0..<MAX_PLY
+        killerMoves1[i] = -1
+        killerMoves2[i] = -1
+    killerHits = 0
+    killerStores = 0
+
+fun storeKiller(from:Int, to:Int, ply:Int)
+    if ply >= MAX_PLY
+        return
+    val moveKey = (from lsl 8) | to
+    # Don't store duplicates
+    if killerMoves1[ply] = moveKey
+        return
+    # Shift killers: killer1 becomes killer2, new move becomes killer1
+    killerMoves2[ply] = killerMoves1[ply]
+    killerMoves1[ply] = moveKey
+    killerStores += 1
+
+fun isKillerMove(from:Int, to:Int, ply:Int) -> Bool
+    if ply >= MAX_PLY
+        return false
+    val moveKey = (from lsl 8) | to
+    return killerMoves1[ply] = moveKey or killerMoves2[ply] = moveKey
+
+fun simpleRandom(seed:Int) -> Int
+    # Simple LCG random number generator
+    val temp = seed * 1103515245 + 12345
+    return if temp < 0 then -temp else temp
+
+fun initializeZobrist()
+    var seed = 0x12345678
+    # Initialize piece-square zobrist values
+    for i in 0..<(128*14)
+        seed = simpleRandom(seed)
+        zobristPieces[i] = seed
+    
+    # Initialize en-passant zobrist values
+    for i in 0..<8
+        seed = simpleRandom(seed)
+        zobristEnPassant[i] = seed
+    
+    # Initialize side-to-move zobrist value
+    seed = simpleRandom(seed)
+    zobristSideToMove = seed
+    
+    kprintf("Zobrist hashing initialized\n")
+
+fun getPieceZobristIndex(piece:Int) -> Int
+    # Map piece value to zobrist index (0-13)
+    # PIECE_PAWN=2, KNIGHT=4, BISHOP=6, ROOK=8, QUEEN=10, KING=12
+    # Color bit is 0 or 1
+    val pieceType = (piece & PIECE_MASK) lsr 1  # 1-6
+    val color = piece & COLOR_MASK              # 0-1
+    return (pieceType - 1) * 2 + color
+
+fun getZobristPiece(piece:Int, square:Int) -> Int
+    # Get zobrist value for a piece at a square
+    val pieceIndex = getPieceZobristIndex(piece)
+    return zobristPieces[square * 14 + pieceIndex]
+
+fun getZobristEnPassant(file:Int) -> Int
+    # Get zobrist value for en-passant on a file
+    return zobristEnPassant[file]
+
+fun computeHash() -> Int
+    # Compute hash from scratch for current board position using XOR
+    var hash = 0
+    for i in 0..<128
+        val piece = board[i]
+        if piece != 0
+            hash = hash ^ getZobristPiece(piece, i)
+    
+    # Include en-passant in hash
+    if enPassantSquare != -1
+        val file = enPassantSquare & FILE_MASK
+        hash = hash ^ getZobristEnPassant(file)
+    
+    return hash
+
+fun hashTogglePiece(piece:Int, square:Int)
+    # Toggle a piece in the hash (XOR is its own inverse, so same for add/remove)
+    currentHash = currentHash ^ getZobristPiece(piece, square)
+
+fun hashToggleEnPassant(square:Int)
+    # Toggle en-passant in hash (XOR is its own inverse)
+    if square != -1
+        val file = square & FILE_MASK
+        currentHash = currentHash ^ getZobristEnPassant(file)
+
+fun initializeTranspositionTable()
+    # Initialize all TT entries to empty
+    for i in 0..<TT_SIZE
+        transpositionTable[i] = TTEntry(0, 0, -1, TT_EXACT)
+    ttHits = 0
+    ttStores = 0
+    kprintf("Transposition table initialized (%d entries)\n", TT_SIZE)
+
+fun probeTranspositionTable(hash:Int, depth:Int, alpha:Int, beta:Int) -> Int
+    # Probe the transposition table. Returns score if usable, otherwise returns -999999
+    ttProbes += 1  # Count every probe attempt
+    
+    val absHash = if hash < 0 then -hash else hash
+    val index = absHash % TT_SIZE
+    val entry = transpositionTable[index]
+    
+    # Check if hash matches
+    if entry.hash = hash
+        # Hash matches - now check depth
+        if entry.depth >= depth
+            ttHashMatches += 1  # Hash and depth both good
+            ttHits += 1  # Keep original hit counter
+            
+            # Check if we can use this cached result
+            if entry.boundType = TT_EXACT
+                return entry.score
+            elsif entry.boundType = TT_LOWER_BOUND
+                if entry.score >= beta
+                    return entry.score
+            elsif entry.boundType = TT_UPPER_BOUND
+                if entry.score <= alpha
+                    return entry.score
+            
+            # We had a match but bounds didn't let us use it
+            ttBoundRejections += 1
+        else
+            # Hash matches but depth is insufficient
+            ttDepthFailures += 1
+    
+    return -999999  # Sentinel value meaning "not usable"
+
+fun storeTranspositionTable(hash:Int, score:Int, depth:Int, originalAlpha:Int, beta:Int)
+    # Store a position in the transposition table
+    val absHash = if hash < 0 then -hash else hash
+    val index = absHash % TT_SIZE
+    
+    # Determine bound type based on how the search ended
+    var boundType = TT_EXACT
+    if score <= originalAlpha
+        boundType = TT_UPPER_BOUND  # Failed low
+    elsif score >= beta
+        boundType = TT_LOWER_BOUND  # Failed high (beta cutoff)
+    
+    # Depth-preferred replacement: only replace if new depth is deeper or hashes match
+    val existingEntry = transpositionTable[index]
+    if existingEntry.hash = hash or depth >= existingEntry.depth
+        transpositionTable[index] = TTEntry(hash, score, depth, boundType)
+        ttStores += 1
+
+fun recordPosition(hash:Int)
+    # Just count total positions - tracking unique positions is not feasible with current memory
+    totalPositionsEvaluated += 1
+
+fun printHashStatistics()
+    val ttHitRate = if totalPositionsEvaluated > 0 then (ttHits * 100) / totalPositionsEvaluated else 0
+    val hashMatchRate = if ttProbes > 0 then (ttHashMatches * 100) / ttProbes else 0
+    val depthFailureRate = if ttProbes > 0 then (ttDepthFailures * 100) / ttProbes else 0
+    val boundRejectionRate = if ttProbes > 0 then (ttBoundRejections * 100) / ttProbes else 0
+    val avgOverwrites = if TT_SIZE > 0 then ttStores / TT_SIZE else 0
+    
+    kprintf("\n=== Transposition Table Statistics ===\n")
+    kprintf("Total positions evaluated: %d\n", totalPositionsEvaluated)
+    kprintf("TT size: %d entries\n", TT_SIZE)
+    kprintf("TT stores: %d (~%dx overwrites per slot)\n", ttStores, avgOverwrites)
+    kprintf("TT probes: %d\n", ttProbes)
+    kprintf("TT hash matches: %d (%d%% of probes)\n", ttHashMatches, hashMatchRate)
+    kprintf("TT depth failures: %d (%d%% of probes)\n", ttDepthFailures, depthFailureRate)
+    kprintf("TT bound rejections: %d (%d%% of probes)\n", ttBoundRejections, boundRejectionRate)
+    kprintf("TT hits (usable): %d (%d%% of positions)\n", ttHits, ttHitRate)
+    kprintf("\n=== Killer Move Statistics ===\n")
+    kprintf("Killer stores: %d\n", killerStores)
+    kprintf("Killer hits: %d\n", killerHits)
+    kprintf("===================================================\n\n")
+
+fun resetHashStatistics()
+    totalPositionsEvaluated = 0
+    ttHits = 0
+    ttStores = 0
+    ttProbes = 0
+    ttHashMatches = 0
+    ttDepthFailures = 0
+    ttBoundRejections = 0
+    initializeKillerMoves()
 
 fun abs(x:Int) -> Int
     return if x < 0 then -x else x
@@ -113,7 +330,23 @@ class MoveList
                 validCount += 1
         return validCount
 
+    fun swapMoves(i:Int, j:Int)
+        val temp = moves[i]
+        moves[i] = moves[j]
+        moves[j] = temp
+
 fun makeMove(move:Move)
+    # Update hash - remove old en-passant
+    hashToggleEnPassant(enPassantSquare)
+    
+    # Update hash - remove piece from 'from' square
+    hashTogglePiece(move.piece, move.from)
+    
+    # Update hash - remove captured piece from 'to' square (if any)
+    if move.captured != 0
+        hashTogglePiece(move.captured, move.to)
+    
+    # Update board
     board[move.to] = move.piece
     board[move.from] = 0
     score += getPieceValue(move.piece, move.to) - getPieceValue(move.piece, move.from)
@@ -123,34 +356,50 @@ fun makeMove(move:Move)
     # Handle en-passant capture
     if move.enPassant
         val capturedPawnSquare = if (move.piece&COLOR_MASK)=PIECE_WHITE then move.to - RANK_MULT else move.to + RANK_MULT
+        val opponentColor = 1 - (move.piece&COLOR_MASK)
+        val capturedPawn = PIECE_PAWN | opponentColor
+        hashTogglePiece(capturedPawn, capturedPawnSquare)
         board[capturedPawnSquare] = 0
-        score -= getPieceValue(board[capturedPawnSquare], capturedPawnSquare)
+        score -= getPieceValue(capturedPawn, capturedPawnSquare)
 
+    # Update hash - add piece to 'to' square (before promotion check)
+    var finalPiece = move.piece
+    
     # Check for pawn promotion
     if move.piece&PIECE_MASK=PIECE_PAWN
         if move.to&RANK_MASK = 7*RANK_MULT
-            board[move.to] = PIECE_QUEEN | PIECE_WHITE
-            score += getPieceValue(PIECE_QUEEN | PIECE_WHITE, move.to) - getPieceValue(move.piece, move.to)
+            finalPiece = PIECE_QUEEN | PIECE_WHITE
+            board[move.to] = finalPiece
+            score += getPieceValue(finalPiece, move.to) - getPieceValue(move.piece, move.to)
         elsif move.to&RANK_MASK = 0
-            board[move.to] = PIECE_QUEEN | PIECE_BLACK
-            score += getPieceValue(PIECE_QUEEN | PIECE_BLACK, move.to) - getPieceValue(move.piece, move.to)
+            finalPiece = PIECE_QUEEN | PIECE_BLACK
+            board[move.to] = finalPiece
+            score += getPieceValue(finalPiece, move.to) - getPieceValue(move.piece, move.to)
+    
+    # Update hash with final piece (after promotion)
+    hashTogglePiece(finalPiece, move.to)
 
     # Check for castling
     if move.piece&PIECE_MASK=PIECE_KING
         if move.to = move.from + 2  # Kingside castling
             val rook = board[move.from + 3]
+            hashTogglePiece(rook, move.from + 3)
             board[move.from + 1] = rook
             board[move.from + 3] = 0
+            hashTogglePiece(rook, move.from + 1)
             score += getPieceValue(rook, move.from + 1) - getPieceValue(rook, move.from + 3)
         elsif move.to = move.from - 2  # Queenside castling
             val rook = board[move.from - 4]
+            hashTogglePiece(rook, move.from - 4)
             board[move.from - 1] = rook
             board[move.from - 4] = 0
+            hashTogglePiece(rook, move.from - 1)
             score += getPieceValue(rook, move.from - 1) - getPieceValue(rook, move.from - 4)
 
     # Handle setting en passant square
     if move.piece&PIECE_MASK=PIECE_PAWN and abs(move.to - move.from) = 2*RANK_MULT
         enPassantSquare = (move.from + move.to) / 2
+        hashToggleEnPassant(enPassantSquare)
     else
         enPassantSquare = -1
 
@@ -423,6 +672,7 @@ fun isSquareAttacked(square:Int, attackerColor:Int) -> Bool
 fun generateLegalMoves(moveList:MoveList, player:Int)
     val ep = enPassantSquare
     val sc = score
+    val hc = currentHash
     generatePseudoLegalMoves(moveList, player)
     for i in 0..<moveList.count
         makeMove(moveList.moves[i])
@@ -432,6 +682,7 @@ fun generateLegalMoves(moveList:MoveList, player:Int)
             moveList.invalidateMove(i)  # Mark move as invalid if it leaves player in check
     enPassantSquare = ep
     score = sc
+    currentHash = hc
 
 # fun evaluate(player:Int, depth:Int)
 #     val moveList = new MoveList()
@@ -453,59 +704,127 @@ fun generateLegalMoves(moveList:MoveList, player:Int)
 fun showMovesWithScore(moveList:MoveList, player:Int)
     val ep = enPassantSquare
     val sc = score
+    val hc = currentHash
     kprintf("Move list with scores: %d\n", score)
     for i in 0..<moveList.count
         if moveList.moves[i].from != -1
             kprintf("Move: ")
             moveList.printMove(i)
             makeMove(moveList.moves[i])
-            val moveScore = alphabeta(1, 1 - player, -100000, 100000)
+            val moveScore = alphabeta(1, 1 - player, -100000, 100000, 1)
             kprintf(" Score: %d\n", moveScore)
             undoMove(moveList.moves[i])
             enPassantSquare = ep
             score = sc
+            currentHash = hc
+
+fun orderMoves(moveList:MoveList, ply:Int)
+    # Simple move ordering: captures first, then killers, then quiet moves
+    # For now, just move killer moves to front
+    for i in 0..<moveList.count
+        if moveList.moves[i].from != -1
+            val move = moveList.moves[i]
+            if isKillerMove(move.from, move.to, ply)
+                # Move killer to position i by swapping with first non-killer
+                for j in 0..<i
+                    val prevMove = moveList.moves[j]
+                    if prevMove.from != -1 and not isKillerMove(prevMove.from, prevMove.to, ply)
+                        moveList.swapMoves(i, j)
+                        killerHits += 1
+                        break
 
 fun chooseBestMove(moveList:MoveList, player:Int) -> Int
+    # Reset hash statistics for this move search
+    resetHashStatistics()
+    
     val ep = enPassantSquare
     val sc = score
+    val hc = currentHash
     kprintf("Move list with scores: %d\n", score)
+    
+    # First pass: Quick evaluation at depth 3 to order moves
+    val moveScores = new Array<Int>(256)
     var bestMoveIndex = -1
     var bestScore = if player=PIECE_WHITE then -100000 else 100000
     
-    # Initialize alpha/beta window - will be narrowed as we find better moves
-    var alpha = -100000
-    var beta = 100000
-
-    for i in 0..<moveList.count
-        if moveList.moves[i].from != -1
-            kprintf("Move: ")
-            moveList.printMove(i)
-            makeMove(moveList.moves[i])
-            val moveScore = alphabeta(LEVEL, 1 - player, alpha, beta)
-            kprintf(" Score: %d\n", moveScore)
-            if player=PIECE_WHITE and moveScore > bestScore
-                bestScore = moveScore
-                bestMoveIndex = i
-                alpha = bestScore  # Narrow the window - future moves must beat this
-            if player=PIECE_BLACK and moveScore < bestScore
-                bestScore = moveScore
-                bestMoveIndex = i
-                beta = bestScore  # Narrow the window - future moves must beat this
-            undoMove(moveList.moves[i])
-            enPassantSquare = ep
-            score = sc
+    # Iterative deepening: search at increasing depths, reusing TT results from previous iterations
+    for currentDepth in 1..LEVEL
+        kprintf("\n=== Iterative deepening: depth %d ===\n", currentDepth)
+        
+        # If we have a best move from the previous iteration, move it to the front for better pruning
+        if bestMoveIndex > 0
+            moveList.swapMoves(0, bestMoveIndex)
+            val tempScore = moveScores[0]
+            moveScores[0] = moveScores[bestMoveIndex]
+            moveScores[bestMoveIndex] = tempScore
+            bestMoveIndex = 0
+        
+        # Reset best move tracking for this depth
+        bestScore = if player=PIECE_WHITE then -100000 else 100000
+        bestMoveIndex = -1
+        
+        # Initialize alpha/beta window - will be narrowed as we find better moves
+        var alpha = -100000
+        var beta = 100000
+        
+        for i in 0..<moveList.count
+            if moveList.moves[i].from != -1
+                kprintf("Move: ")
+                moveList.printMove(i)
+                makeMove(moveList.moves[i])
+                val moveScore = alphabeta(currentDepth, 1 - player, alpha, beta, 1)
+                kprintf(" Score: %d\n", moveScore)
+                moveScores[i] = moveScore
+                
+                if player=PIECE_WHITE and moveScore > bestScore
+                    bestScore = moveScore
+                    bestMoveIndex = i
+                    alpha = bestScore  # Narrow the window - future moves must beat this
+                if player=PIECE_BLACK and moveScore < bestScore
+                    bestScore = moveScore
+                    bestMoveIndex = i
+                    beta = bestScore  # Narrow the window - future moves must beat this
+                
+                undoMove(moveList.moves[i])
+                enPassantSquare = ep
+                score = sc
+                currentHash = hc
+            else
+                moveScores[i] = if player=PIECE_WHITE then -100000 else 100000
+        
+        kprintf("Best move at depth %d: index %d, score %d\n", currentDepth, bestMoveIndex, bestScore)
+    
+    # Print hash statistics for this move search
+    printHashStatistics()
+    
+    free(moveScores)
     return bestMoveIndex
 
 
-fun alphabeta(depth:Int, player:Int, alpha:Int, beta:Int) -> Int
-    # kprintf("Minimax depth %d, player %d, score %d\n", depth, player, score)
-    if depth=0
-        return score
+fun alphabeta(depth:Int, player:Int, alpha:Int, beta:Int, ply:Int) -> Int
+    # Only record positions at depth >= 1 for statistics
+    # (depth 0 positions are leaves - we've already computed their score, so no point caching)
+    if depth >= 1
+        recordPosition(currentHash)
+        
+        # Probe transposition table
+        val ttScore = probeTranspositionTable(currentHash, depth, alpha, beta)
+        if ttScore != -999999
+            return ttScore
+    
+    # kprintf("Alphabeta depth %d, player %d, score %d\n", depth, player, score)
+    # if depth=0
+    #     return score
 
+    val originalAlpha = alpha
     val moveList = new MoveList()
     val ep = enPassantSquare
     val sc = score
+    val hc = currentHash
     generatePseudoLegalMoves(moveList, player)
+    
+    # Order moves: killers first for better pruning
+    orderMoves(moveList, ply)
     
     var a = alpha
     var b = beta
@@ -513,18 +832,27 @@ fun alphabeta(depth:Int, player:Int, alpha:Int, beta:Int) -> Int
     
     for i in 0..<moveList.count
         if moveList.moves[i].from != -1
-            makeMove(moveList.moves[i])
-            val eval = alphabeta(depth-1, 1-player, a, b)
-            undoMove(moveList.moves[i])
+            val currentMove = moveList.moves[i]
+            makeMove(currentMove)
+            val nextDepth = if depth=1 and currentMove.captured != 0 then 1 else depth - 1  # Quiescence search for captures at depth 1
+            # val nextDepth = depth - 1
+            val eval = if nextDepth=0 then score else alphabeta(nextDepth, 1-player, a, b, ply+1)
+            undoMove(currentMove)
             enPassantSquare = ep
             score = sc
+            currentHash = hc
             
             if player=PIECE_WHITE
                 if eval > bestScore
                     bestScore = eval
                 if bestScore >= b
-                    # Beta cutoff
+                    # Beta cutoff - store killer move if it's a quiet move
+                    # if currentMove.captured = 0
+                    storeKiller(currentMove.from, currentMove.to, ply)
                     free(moveList)
+                    # Store in transposition table before returning
+                    if depth >= 1
+                        storeTranspositionTable(hc, bestScore, depth, originalAlpha, b)
                     return bestScore
                 if bestScore > a
                     a = bestScore
@@ -532,13 +860,23 @@ fun alphabeta(depth:Int, player:Int, alpha:Int, beta:Int) -> Int
                 if eval < bestScore
                     bestScore = eval
                 if bestScore <= a
-                    # Alpha cutoff
+                    # Alpha cutoff - store killer move if it's a quiet move
+                    # if currentMove.captured = 0
+                    storeKiller(currentMove.from, currentMove.to, ply)
                     free(moveList)
+                    # Store in transposition table before returning
+                    if depth >= 1
+                        storeTranspositionTable(hc, bestScore, depth, originalAlpha, b)
                     return bestScore
                 if bestScore < b
                     b = bestScore
     
     free(moveList)
+    
+    # Store result in transposition table
+    if depth >= 1
+        storeTranspositionTable(hc, bestScore, depth, originalAlpha, beta)
+    
     return bestScore
 
 

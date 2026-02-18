@@ -34,26 +34,24 @@ fun TctExpr.codeGenRvalue() : Reg {
         }
 
         is TctLongExpr -> {
-            val regLhs = lhs.codeGenRvalue()
-            val regRhs = rhs.codeGenRvalue()
-            require(regLhs is CompoundReg && regRhs is CompoundReg)
-            when(op) {
-                LongOp.ADD_L -> {
-                    val l1 = currentFunc.addAlu(BinOp.ADD_I, regLhs.regs[0], regRhs.regs[0]) // Add low parts
-                    val carry = currentFunc.addAlu(BinOp.LTU_I, l1, regLhs.regs[0]) // Check for carry from low part
-                    val l2 = currentFunc.addAlu(BinOp.ADD_I, regLhs.regs[1], regRhs.regs[1]) // Add high parts
-                    val h = currentFunc.addAlu(BinOp.ADD_I, l2, carry) // Add carry to high part
-                    currentFunc.newCompoundReg(listOf(l1, h))
-                }
-                LongOp.SUB_L -> TODO()
-                LongOp.MUL_L -> TODO()
-                LongOp.DIV_L -> TODO()
-            }
+            codeGenLongOp(op, lhs, rhs)
         }
 
         is TctIntToRealExpr -> {
             val reg = expr.codeGenRvalue()
             currentFunc.addFpu(FpuOp.ITOF_F, zeroReg, reg)
+        }
+
+        is TctIntToLongExpr -> {
+            val reg = expr.codeGenRvalue()
+            val signBit = currentFunc.addAlu(BinOp.ASR_I, reg, 31) // Shift sign bit to all bits
+            currentFunc.newCompoundReg(listOf(reg, signBit))
+        }
+
+        is TctLongToIntExpr -> {
+            val reg = expr.codeGenRvalue()
+            require(reg is CompoundReg)
+            currentFunc.addCopy(reg.regs[0])  // Just return the low 32 bits
         }
 
         is TctCallExpr -> {
@@ -186,6 +184,10 @@ fun TctExpr.codeGenRvalue() : Reg {
             val lhsReg = lhs.codeGenRvalue()
             val rhsReg = rhs.codeGenRvalue()
             currentFunc.addAlu(op, lhsReg, rhsReg)
+        }
+
+        is TctLongCompareExpr -> {
+            codeGenLongCompare(op, lhs, rhs)
         }
 
         is TctNegateExpr -> {
@@ -560,6 +562,30 @@ fun TctExpr.codeGenBool(trueLabel: Label, falseLabel: Label) {
             } else {
                 currentFunc.addBranch(BinOp.NE_I, reg.regs[0], zeroReg, trueLabel)
                 currentFunc.addJump(falseLabel)
+            }
+        }
+
+        is TctLongCompareExpr -> {
+            val regLhs = lhs.codeGenRvalue()
+            val regRhs = rhs.codeGenRvalue()
+            require (regLhs is CompoundReg)
+            require (regRhs is CompoundReg)
+
+            when(op) {
+                BinOp.EQ_I -> {
+                    currentFunc.addBranch(BinOp.NE_I, regLhs.regs[0], regRhs.regs[0], falseLabel)
+                    currentFunc.addBranch(BinOp.NE_I, regLhs.regs[1], regRhs.regs[1], falseLabel)
+                    currentFunc.addJump(trueLabel)
+                }
+                BinOp.NE_I -> {
+                    currentFunc.addBranch(BinOp.NE_I, regLhs.regs[0], regRhs.regs[0], trueLabel)
+                    currentFunc.addBranch(BinOp.NE_I, regLhs.regs[1], regRhs.regs[1], trueLabel)
+                    currentFunc.addJump(falseLabel)
+                }
+                BinOp.LT_I, BinOp.LE_I, BinOp.GT_I, BinOp.GE_I -> {
+                    TODO("Long comparison operators other than == and != not implemented yet")
+                }
+                else -> error("Unsupported long comparison operator $op")
             }
         }
 

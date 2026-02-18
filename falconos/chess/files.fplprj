@@ -9,4 +9,5 @@
 ../modtracker/exceptions.fpl
 ../modtracker/filehandler.fpl
 moves.fpl
+openings.fpl
 main.fpl
