@@ -1,0 +1,65 @@
+# PolyGlot 64-bit Zobrist hashing
+# Based on the PolyGlot opening book specification
+
+# PolyGlot piece order: WP, WN, WB, WR, WQ, WK, BP, BN, BB, BR, BQ, BK (indices 0-11)
+# PolyGlot squares: a1=0, b1=1... h1=7, a2=8... h8=63 (rank-major order)
+
+fun getPiecePolyGlotIndex(piece:Int) -> Int
+    # Map our piece representation to PolyGlot piece index (0-11)
+    # Our pieces: PAWN=2, KNIGHT=4, BISHOP=6, ROOK=8, QUEEN=10, KING=12
+    # Color: WHITE=0, BLACK=1
+    
+    val pieceType = (piece & PIECE_MASK) lsr 1  # 1-6
+    val color = piece & COLOR_MASK               # 0-1
+    
+    # PolyGlot: White pieces 0-5, Black pieces 6-11
+    return (color * 6) + (pieceType - 1)
+
+fun square0x88ToPolyGlot(square0x88:Int) -> Int
+    # Convert our 0x88 square to PolyGlot 0-63 square
+    # 0x88: rank*16 + file
+    # PolyGlot: rank*8 + file
+    val rank = square0x88 lsr 4
+    val file = square0x88 & FILE_MASK
+    return rank * 8 + file
+
+fun computePolyGlotHash(sideToMove:Int, castlingRights:Int) -> Long
+    # Compute 64-bit PolyGlot hash for current position
+    # Parameters:
+    #   sideToMove: PIECE_WHITE (0) or PIECE_BLACK (1)
+    #   castlingRights: bit flags (0x1=WK, 0x2=WQ, 0x4=BK, 0x8=BQ)
+    
+    var hash = 0L
+    
+    # Hash all pieces on board
+    for square0x88 in 0..127
+        if (square0x88 & INVALID_MASK) != 0
+            continue  # Skip invalid 0x88 squares
+        
+        val piece = board[square0x88]
+        if piece != 0
+            val pieceIdx = getPiecePolyGlotIndex(piece)
+            val square64 = square0x88ToPolyGlot(square0x88)
+            val keyIndex = pieceIdx * 64 + square64  # Indices 0-767
+            hash = hash ^ polyGlotRandom[keyIndex]
+    
+    # Hash castling rights (indices 768-771)
+    if (castlingRights & 0x1) != 0  # White kingside
+        hash = hash ^ polyGlotRandom[768]
+    if (castlingRights & 0x2) != 0  # White queenside
+        hash = hash ^ polyGlotRandom[769]
+    if (castlingRights & 0x4) != 0  # Black kingside
+        hash = hash ^ polyGlotRandom[770]
+    if (castlingRights & 0x8) != 0  # Black queenside
+        hash = hash ^ polyGlotRandom[771]
+    
+    # Hash en-passant if available (indices 772-779)
+    if enPassantSquare != -1
+        val file = enPassantSquare & FILE_MASK
+        hash = hash ^ polyGlotRandom[772 + file]
+    
+    # Hash side to move - only if BLACK (index 780)
+    if sideToMove = PIECE_BLACK
+        hash = hash ^ polyGlotRandom[780]
+    
+    return hash

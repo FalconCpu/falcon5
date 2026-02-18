@@ -2,7 +2,7 @@ import struct
 
 # Read all entries first to count them
 entries = []
-with open('../../../Downloads/komodo.bin', 'rb') as f_in:
+with open('../../../Downloads/rodent.bin', 'rb') as f_in:
     while True:
         entry = f_in.read(16)  # PolyGlot entry
         if not entry: break

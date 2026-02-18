@@ -129,8 +129,8 @@ class RegisterAllocator(private val func: Function, private val livemap: LiveMap
             is InstrLea -> InstrLea(replace(dest), src)
             is InstrLoad -> InstrLoad(size, replace(dest), replace(addr), offset)
             is InstrStore -> InstrStore(size, replace(src), replace(addr), offset)
-            is InstrLoadField -> InstrLoadField(size, replace(dest), replace(addr), offset)
-            is InstrStoreField -> InstrStoreField(size, replace(src), replace(addr), offset)
+            is InstrLoadField -> InstrLoadField(size, replace(dest), replace(addr), offset, offset2)
+            is InstrStoreField -> InstrStoreField(size, replace(src), replace(addr), offset, offset2)
             is InstrIndex -> InstrIndex(size, replace(dest), replace(src), replace(bounds))
             is InstrNullCheck -> InstrNullCheck(replace(src))
             is InstrSyscall -> this

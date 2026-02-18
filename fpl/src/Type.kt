@@ -310,7 +310,7 @@ fun Type.isAggregate() : Boolean = when(this) {
     is TypeTuple -> true
     is TypeErrable -> true
     is TypeStruct -> true
-    is TypeLong -> true
+    is TypeLong -> false
     else -> false
 }
 

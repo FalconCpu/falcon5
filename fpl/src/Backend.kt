@@ -135,13 +135,13 @@ private fun inlineFuncCall(callSite:Instr) : List<Instr> {
             is InstrLea -> ret += InstrLea(regMap.inlineMap(instr.dest), instr.src)
             is InstrLineNo -> error("LineNumbers should not be present at inlining")
             is InstrLoad -> ret += InstrLoad(instr.size, regMap.inlineMap(instr.dest), regMap.inlineMap(instr.addr), instr.offset)
-            is InstrLoadField -> ret += InstrLoadField(instr.size, regMap.inlineMap(instr.dest), regMap.inlineMap(instr.addr), instr.offset)
+            is InstrLoadField -> ret += InstrLoadField(instr.size, regMap.inlineMap(instr.dest), regMap.inlineMap(instr.addr), instr.offset, instr.offset2)
             is InstrMovLit -> ret += InstrMovLit(regMap.inlineMap(instr.dest), instr.lit)
             is InstrNop -> ret += InstrNop()
             is InstrNullCheck -> ret += InstrNullCheck(regMap.inlineMap(instr.src))
             is InstrStart -> {}
             is InstrStore -> ret += InstrStore(instr.size, regMap.inlineMap(instr.src), regMap.inlineMap(instr.addr), instr.offset)
-            is InstrStoreField -> ret += InstrStoreField(instr.size, regMap.inlineMap(instr.src), regMap.inlineMap(instr.addr), instr.offset)
+            is InstrStoreField -> ret += InstrStoreField(instr.size, regMap.inlineMap(instr.src), regMap.inlineMap(instr.addr), instr.offset, instr.offset2)
             is InstrSyscall -> ret += InstrSyscall(instr.num, regMap.inlineMap(instr.dest), instr.args.map { regMap.inlineMap(it) })
             is InstrVCall -> ret += InstrVCall(instr.func, regMap.inlineMap(instr.dest), instr.args.map { regMap.inlineMap(it) })
         }
@@ -410,7 +410,7 @@ fun Instr.peephole() {
             // Look for a sequence 'add t1, x, imm; ld t2, [t1+offset]' and replace it with 'ld t2, [x+offset+imm]' val srcInstr = addr.def
             val (addrReg,addrOffset) = isOffsetFromReg(addr)
             if (addrReg!=null) {
-                val newOffset = addrOffset + offset.offset
+                val newOffset = addrOffset + offset.offset + offset2
                 if (newOffset in -0x800..0x7FF)
                     return replace(InstrLoad(size, dest, addrReg, newOffset))
             }
@@ -438,7 +438,7 @@ fun Instr.peephole() {
             // Look for a sequence 'add t1, x, imm; st t2, [t1+offset]' and replace it with 'st t2, [x+offset+imm]'
             val (addrReg,addrOffset) = isOffsetFromReg(addr)
             if (addrReg!=null) {
-                val newOffset = addrOffset + offset.offset
+                val newOffset = addrOffset + offset.offset + offset2
                 if (newOffset in -0x800..0x7FF)
                     return replace(InstrStore(size, src, addrReg, newOffset))
             }
@@ -565,7 +565,7 @@ fun Function.runBackend() {
     runPeephole()
     CommonSubexpr(this).run()
     runPeephole()
-    InstrScheduler.runScheduler(this)
+    // InstrScheduler.runScheduler(this)   // Disable for now as it is generating incorrect code in some cases, needs to be fixed
     this.rebuildIndex()
     val liveMap = LiveMap(this)
     RegisterAllocator(this, liveMap).run()

@@ -1,5 +1,5 @@
 
-const random = const Array<Long> [
+const polyGlotRandom = const Array<Long> [
    0x9D39247E33776D41L, 0x2AF7398005AAA5C7L, 0x44DB015024623547L, 0x9C15F73E62A76AE2L,
    0x75834465489C0C89L, 0x3290AC3A203001BFL, 0x0FBBAD1F61042279L, 0xE83A908FF2FB60CAL,
    0x0D7E765D58755C10L, 0x1A083822CEAFE02DL, 0x9605D5F0E25EC3B0L, 0xD021FF5CD13A2ED5L,
@@ -196,3 +196,122 @@ const random = const Array<Long> [
    0x70CC73D90BC26E24L, 0xE21A6B35DF0C3AD7L, 0x003A93D8B2806962L, 0x1C99DED33CB890A1L,
    0xCF3145DE0ADD4289L, 0xD0E4427A5514FB72L, 0x77C621CC9FB3A483L, 0x67A34DAC4356550BL,
    0xF8D626AAAF278509L ]
+
+struct PolyGlot(hash:Long, move:Int, learn:Int)
+
+fun kprintHex(x:Long)
+   var v = x
+   for i in 0..15
+      val c = ((v lsr 60) as Int) & 0xF
+      kprintf("%c", if c < 10 then '0' + c else 'A' + (c-10))
+      v = v lsl 4
+
+var openings : Array<PolyGlot>
+
+fun printElemnt(i:Int)
+   val hash = openings[i].hash
+   val move = openings[i].move
+   kprintHex(hash)
+   kprintf(" %x\n", move)
+
+fun readOpeningBook()
+   val x = readFile("book_le.bin")
+   if x is Error
+      kprintf("Failed to read openings: ${x.message}")
+      abort(1)
+   openings = unsafe(((x as Int)+4) as Array<PolyGlot>)
+
+# PolyGlot 64-bit Zobrist hashing
+# Based on the PolyGlot opening book specification
+
+# PolyGlot piece order: BP WP BN WN BB WB BR WR BQ WQ BK WK (0-11)
+# PolyGlot squares: a1=0, b1=1... h1=7, a2=8... h8=63 (rank-major order)
+
+fun getPiecePolyGlotIndex(piece:Int) -> Int
+    # Map our piece representation to PolyGlot piece index (0-11)
+    # PolyGlot piece order: BP WP BN WN BB WB BR WR BQ WQ BK WK (0-11)
+    # Our order: unk unk WP BP WN BN WB BB WR BR WQ BQ WK BK (0-11)
+    return (piece^1)-2
+
+fun square0x88ToPolyGlot(square0x88:Int) -> Int
+    # Convert our 0x88 square to PolyGlot 0-63 square
+    # 0x88: rank*16 + file
+    # PolyGlot: rank*8 + file
+    val rank = square0x88 lsr 4
+    val file = square0x88 & FILE_MASK
+    return rank * 8 + file
+
+fun computePolyGlotHash(sideToMove:Int, castlingRights:Int) -> Long
+    # Compute 64-bit PolyGlot hash for current position
+    # Parameters:
+    #   sideToMove: PIECE_WHITE (0) or PIECE_BLACK (1)
+    #   castlingRights: bit flags (0x1=WK, 0x2=WQ, 0x4=BK, 0x8=BQ)
+    
+    var hash = 0L
+
+    # Hash all pieces on board
+    for square0x88 in 0..127
+        if (square0x88 & INVALID_MASK) != 0
+            continue  # Skip invalid 0x88 squares
+        
+        val piece = board[square0x88]
+        if piece != 0
+            val pieceIdx = getPiecePolyGlotIndex(piece)
+            val square64 = square0x88ToPolyGlot(square0x88)
+            val keyIndex = square64 + 64 * pieceIdx  # Indices 0-767 (square-major: sq×12 + piece)
+            val zobristKey = polyGlotRandom[keyIndex]
+            hash = hash ^ zobristKey
+            
+    # Hash castling rights (indices 768-771)
+    if (castlingRights & 0x1) != 0  # White kingside
+        hash = hash ^ polyGlotRandom[768]
+    if (castlingRights & 0x2) != 0  # White queenside
+        hash = hash ^ polyGlotRandom[769]
+    if (castlingRights & 0x4) != 0  # Black kingside
+        hash = hash ^ polyGlotRandom[770]
+    if (castlingRights & 0x8) != 0  # Black queenside
+        hash = hash ^ polyGlotRandom[771]
+    
+    # Hash en-passant if available (indices 772-779)
+   #  if enPassantSquare != -1
+   #      val file = enPassantSquare & FILE_MASK
+   #      kprintf("Adding en-passant file %d, key=", file)
+   #      kprintHex(polyGlotRandom[772 + file])
+   #      kprintf("\n")
+   #      hash = hash ^ polyGlotRandom[772 + file]
+   #      kprintf("Hash after EP: ")
+   #      kprintHex(hash)
+   #      kprintf("\n")
+    
+    # Hash side to move - only if BLACK (index 780)
+    if sideToMove = PIECE_WHITE
+        hash = hash ^ polyGlotRandom[780]
+    
+    kprintf("Final hash: ")
+    kprintHex(hash)
+    kprintf("\n")
+    return hash
+
+fun lookupOpeningMove(sideToMove:Int, castlingRights:Int) -> (Int,Int)
+   val hash = computePolyGlotHash(sideToMove, castlingRights)
+   kprintf("Looking up hash: ")
+   kprintHex(hash)
+   kprintf("\n")
+   for i in 0..<openings.length
+      if openings[i].hash = hash
+         val move = openings[i].move
+         val toFile = move & 0x7
+         val toRank = (move lsr 3) & 0x7
+         val fromFile = (move lsr 6) & 0x7
+         val fromRank = (move lsr 9) & 0x7
+         val fromSquare = fromRank * 16 + fromFile
+         val toSquare = toRank * 16 + toFile
+         val weight = (move lsr 16) & 0xFFFF
+         kprintf(" From ")
+         printSquare(fromSquare)
+         kprintf(" to ")
+         printSquare(toSquare)
+         kprintf(" weight=%d\n", weight)
+         return (fromSquare, toSquare)
+   kprintf("No opening move found for this position\n")
+   return (-1, -1)  # No opening move found

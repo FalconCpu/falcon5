@@ -19,7 +19,9 @@ class Function (
     val regAllocComments = mutableListOf<String>()
     var maxRegister = 0
     var stackVarSize = 0
-    val returnRegister = if (returnType.isAggregate()) newCompoundReg(returnType.getNumElements()) else newUserTemp()
+    val returnRegister = if (returnType.isAggregate()) newCompoundReg(returnType.getNumElements()) else
+                         if (returnType is TypeLong) newCompoundReg(2) else
+                         newUserTemp()
 
     // For an aggregate return type, the caller allocates memory return value
     val returnDestAddr = if (returnType is TypeStruct) newTemp() else null
@@ -191,30 +193,60 @@ class Function (
 
 
 
-    fun addLoad(size: Int, addr: Reg, offset: Int): TempReg {
-        assert(size in listOf(1, 2, 4))
-        val dest = newTemp()
-        prog += InstrLoad(size, dest, addr, offset)
-        return dest
+    fun addLoad(size: Int, addr: Reg, offset: Int): Reg {
+        assert(size in listOf(1, 2, 4, 8))
+        if (size == 8) {
+            // Load a 64-bit value as two 32-bit loads
+            val low = addLoad(4, addr, offset)
+            val high = addLoad(4, addr, offset + 4)
+            return newCompoundReg(listOf(low, high))
+        } else {
+            val dest = newTemp()
+            prog += InstrLoad(size, dest, addr, offset)
+            return dest
+        }
     }
 
     fun addStore(size: Int, src: Reg, addr: Reg, offset: Int) {
-        assert(size in listOf(1, 2, 4))
-        prog += InstrStore(size, src, addr, offset)
+        assert(size in listOf(1, 2, 4, 8))
+        if (size == 8) {
+            // Store a 64-bit value as two 32-bit stores
+            require(src is CompoundReg)
+            val low = src.regs[0] as? TempReg ?: addCopy(src.regs[0])
+            val high = src.regs[1] as? TempReg ?: addCopy(src.regs[1])
+            addStore(4, low, addr, offset)
+            addStore(4, high, addr, offset + 4)
+        } else
+            prog += InstrStore(size, src, addr, offset)
     }
 
-    fun addLoad(addr: Reg, field: FieldSymbol): TempReg {
+    fun addLoad(addr: Reg, field: FieldSymbol): Reg {
         val size = field.type.getSize()
-        assert(size in listOf(1, 2, 4))
-        val dest = newTemp()
-        prog += InstrLoadField(size, dest, addr, field)
-        return dest
+        assert(size in listOf(1, 2, 4, 8))
+        if (size == 8) {
+            // Load a 64-bit value as two 32-bit loads
+            val low = addLoad(4, addr, field.offset)
+            val high = addLoad(4, addr, field.offset + 4)
+            return newCompoundReg(listOf(low, high))
+        } else {
+            val dest = newTemp()
+            prog += InstrLoadField(size, dest, addr, field, 0)
+            return dest
+        }
     }
 
     fun addStore(src: Reg, addr: Reg, field: FieldSymbol) {
         val size = field.type.getSize()
-        assert(size in listOf(1, 2, 4))
-        prog += InstrStoreField(size, src, addr, field)
+        assert(size in listOf(1, 2, 4, 8))
+        if (size == 8) {
+            // Store a 64-bit value as two 32-bit stores
+            require(src is CompoundReg)
+            val low = src.regs[0] as? TempReg ?: addCopy(src.regs[0])
+            val high = src.regs[1] as? TempReg ?: addCopy(src.regs[1])
+            prog += InstrStoreField(4, low, addr, field, 0)
+            prog += InstrStoreField(4, high, addr, field, 4)
+        } else
+        prog += InstrStoreField(size, src, addr, field, 0)
     }
 
     fun addIndex(size: Int, src: Reg, bounds: Reg): TempReg {
@@ -256,6 +288,7 @@ class Function (
     fun addCall(func: Function, args:List<Reg>) : Reg {
         val dest = when (func.returnType) {
             is TypeErrable -> newAggregateTemp(2)
+            is TypeLong -> newAggregateTemp(2)
             is TypeTuple -> newAggregateTemp(func.returnType.elementTypes.size)
             else -> newTemp()
         }

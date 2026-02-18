@@ -57,3 +57,4 @@ syscalls
 BUG:
 function calls which return a struct, if that struct aliases one of the function arguments, the aliasing is not detected - results in incorrect codegen.
 Iteration when the iteration variable is a struct - things get corrupted - looks like it messes up the reference to the struct with its first element
+Sequencer is occasionally creating incorrect code for array writes. Needs debugging.

@@ -65,7 +65,7 @@ object InstrScheduler {
                 }
             }
 
-            // --- RAW edges (producer -> this use) and update lastUse ---
+            // --- RAW edges (producer -> this use) ---
             for (r in instrUses) {
                 val pred = lastDef[r]
                 if (pred != null) {
@@ -73,8 +73,6 @@ object InstrScheduler {
                     pred.succs.add(edge)
                     n.preds.add(edge)
                 }
-                // record this node as the most recent use of r
-                lastUse[r] = n
             }
 
             // --- For each def: add WAW (prevDef -> thisDef) and WAR (lastUse -> thisDef) edges ---
@@ -94,6 +92,7 @@ object InstrScheduler {
                         val edge = Edge(prevUse, n, 0)
                         prevUse.succs.add(edge)
                         n.preds.add(edge)
+                        if (debug) println("WAR edge: ${prevUse.instr} -> ${n.instr} (reg $d)")
                     }
                 }
 
@@ -102,6 +101,11 @@ object InstrScheduler {
 
                 // Optionally clear lastUse[d] because later defs shouldn't care about older uses:
                 // lastUse.remove(d)
+            }
+
+            // --- Update lastUse AFTER processing defs to avoid self-dependencies ---
+            for (r in instrUses) {
+                lastUse[r] = n
             }
         }
 

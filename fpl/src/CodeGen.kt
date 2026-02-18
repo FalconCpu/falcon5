@@ -131,8 +131,8 @@ fun TctExpr.codeGenRvalue() : Reg {
             val elementSize = elementType.getSize()
             for(index in elements.indices)
                 if (elementType.isAggregate()) {
-                    elements[index].codeGenAggregateRvalue(
-                        currentFunc.addAlu(BinOp.ADD_I, ret, index * elementSize))
+                    val addr = currentFunc.addAlu(BinOp.ADD_I, ret, index * elementSize)
+                    elements[index].codeGenAggregateRvalue(addr)
                 } else
                     currentFunc.addStore(elementSize, elements[index].codeGenRvalue(), ret, index*elementSize)
             ret

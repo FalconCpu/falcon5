@@ -27,7 +27,7 @@ const TT_UPPER_BOUND = 2 # Alpha cutoff (score <= alpha)
 # Transposition table entry
 struct TTEntry(hash:Int, score:Int, depth:Int, boundType:Int)
 
-const TT_SIZE = 2000000
+const TT_SIZE = 65536
 val transpositionTable = new Array<TTEntry>(TT_SIZE)
 var ttHits = 0
 var ttStores = 0
@@ -41,6 +41,7 @@ val board = new Array<Int>(128)  # 16x8 board, only indices where (index & 0x88)
 var enPassantSquare = -1  # Index of en passant target square, or -1 if none
 var totalMoves = 0
 var score = 0
+var useBook = true
 
 # Zobrist hashing for position detection
 val zobristPieces = new Array<Int>(128 * 14)  # 128 squares * 14 piece types (7 pieces * 2 colors)
@@ -742,6 +743,18 @@ fun chooseBestMove(moveList:MoveList, player:Int) -> Int
     val hc = currentHash
     kprintf("Move list with scores: %d\n", score)
     
+    # Check to see if there is a book move available in the opening book
+    if useBook
+        kprintf("Checking for book move... %d\n", player)
+        val (book_from,book_to) = lookupOpeningMove(player,0xf)
+        for i in 0..<moveList.count
+            if moveList.moves[i].from = book_from and moveList.moves[i].to = book_to
+                kprintf("Found book move: ")
+                moveList.printMove(i)
+                kprintf("\n")
+                return i
+    useBook = false  # No book move found, disable book for future moves in this game
+
     # First pass: Quick evaluation at depth 3 to order moves
     val moveScores = new Array<Int>(256)
     var bestMoveIndex = -1
@@ -834,8 +847,8 @@ fun alphabeta(depth:Int, player:Int, alpha:Int, beta:Int, ply:Int) -> Int
         if moveList.moves[i].from != -1
             val currentMove = moveList.moves[i]
             makeMove(currentMove)
-            val nextDepth = if depth=1 and currentMove.captured != 0 then 1 else depth - 1  # Quiescence search for captures at depth 1
-            # val nextDepth = depth - 1
+            # val nextDepth = if depth=1 and currentMove.captured != 0 then 1 else depth - 1  # Quiescence search for captures at depth 1
+            val nextDepth = depth - 1
             val eval = if nextDepth=0 then score else alphabeta(nextDepth, 1-player, a, b, ply+1)
             undoMove(currentMove)
             enPassantSquare = ep

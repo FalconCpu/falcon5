@@ -223,7 +223,11 @@ fun main() -> Int
     initializeZobrist()
     initializeTranspositionTable()
     initializeKillerMoves()
+    readOpeningBook()
     currentHash = computeHash()
+
+    lookupOpeningMove(0,15)
+
     val screenBuffers = new Array<Int>(2)
     screenBuffers[0] = unsafe(new Array<Char>(640*480) as Int)
     screenBuffers[1] = unsafe(new Array<Char>(640*480) as Int)
@@ -255,6 +259,7 @@ fun main() -> Int
             blackInCheck = isInCheck(1)
             val numValidMoves = validMoves.countMoves()
             kprintf("Player %d has %d valid moves\n", currentPlayer, numValidMoves)
+            lookupOpeningMove(currentPlayer,0xf)
             # if currentPlayer=0
             #     showMovesWithScore(validMoves, 0)
             if numValidMoves = 0
